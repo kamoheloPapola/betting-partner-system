@@ -1,4 +1,4 @@
-﻿name: Daily Pipeline
+name: Daily Pipeline
 
 on:
   schedule:
@@ -49,3 +49,7 @@ jobs:
 
       - name: Run daily pipeline (PD)
         run: python -m src.cli run-daily-pipeline --league PD
+
+      - name: Trigger API health check
+        run: |
+          curl -f https://football-intelligence-api.onrender.com/api/v1/model-health || echo "API health check skipped"
