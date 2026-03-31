@@ -1,0 +1,40 @@
+{
+  "_meta": {
+    "frozen_at": "2026-01-10T12:15:00Z",
+    "model_state": "LOCKED_v13.2",
+    "league": "PL",
+    "description": "Golden output for Premier League predictions regression test"
+  },
+  "fixture_count": 10,
+  "markets": [
+    "home_win",
+    "draw", 
+    "away_win",
+    "over_2_5",
+    "under_2_5",
+    "btts_yes",
+    "btts_no",
+    "dc_1x",
+    "dc_x2",
+    "dc_12"
+  ],
+  "suggested_slip": [
+    {
+      "match": "Example Home vs Example Away",
+      "market": "over_2_5",
+      "probability": 0.65,
+      "edge": 0.08
+    }
+  ],
+  "predictions": [
+    {
+      "home_win": 0.45,
+      "draw": 0.28,
+      "away_win": 0.27,
+      "over_2_5": 0.55,
+      "under_2_5": 0.45,
+      "btts_yes": 0.52,
+      "btts_no": 0.48
+    }
+  ]
+}

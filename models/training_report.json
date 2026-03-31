@@ -1,0 +1,23 @@
+{
+  "match_outcome": {
+    "accuracy": 0.5358,
+    "log_loss": 0.9869,
+    "brier_score": 0.5879
+  },
+  "home_goals": {
+    "mae": 0.9509,
+    "rmse": 1.1902
+  },
+  "away_goals": {
+    "mae": 0.8659,
+    "rmse": 1.1067
+  },
+  "corners": {
+    "mae": 2.687,
+    "rmse": 3.365
+  },
+  "cards": {
+    "mae": 1.7416,
+    "rmse": 2.2275
+  }
+}

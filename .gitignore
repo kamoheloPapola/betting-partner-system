@@ -1,0 +1,74 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Env
+venv/
+.venv/
+
+# Environment Variables
+.env
+
+# VS Code
+.vscode/
+
+# Project Data & Logs
+/data/
+!/data/fbref/raw/
+/logs/
+*.log
+*.sqlite
+
+# Models
+*.pkl
+*.joblib
+*.model
+
+# IDE
+.idea/
+# Hypothesis test artifacts
+.hypothesis/
+
+# Temporary files
+.tmp/
+tmp_*.py
+apply_edits.py
+run_b.py
+
+# Debug/investigation artifacts
+failed_matches_features_*.csv
+investigation_context_*.txt
+match_events.jsonl
+audit_results/
+
+# Archive scripts
+_archive/
+
+# Manifest backups
+src/ml/models/manifest.json.bak*
+
+# Loose output/scratch text files
+*.txt
+
+# OS
+.DS_Store
+Thumbs.db

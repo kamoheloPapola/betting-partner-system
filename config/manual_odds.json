@@ -1,0 +1,46 @@
+{
+    "_meta": {
+        "last_updated": "2026-01-14T00:00:00Z",
+        "source": "manual",
+        "notes": "Phase 1 paper trading - update daily"
+    },
+    "fixtures": {
+        "LIVERPOOL vs CHELSEA": {
+            "match_date": "2026-01-15",
+            "league": "PL",
+            "bookmaker": "avg",
+            "markets": {
+                "goals_u25": 1.75,
+                "goals_o25": 2.10,
+                "btts_yes": 1.85,
+                "btts_no": 1.95,
+                "home_win": 1.80,
+                "draw": 3.60,
+                "away_win": 4.20
+            }
+        },
+        "REAL MADRID vs BARCELONA": {
+            "match_date": "2026-01-15",
+            "league": "PD",
+            "bookmaker": "avg",
+            "markets": {
+                "goals_u25": 2.05,
+                "goals_o25": 1.75,
+                "btts_yes": 1.70,
+                "btts_no": 2.15,
+                "home_win": 2.20,
+                "draw": 3.40,
+                "away_win": 3.20
+            }
+        }
+    },
+    "default_odds": {
+        "goals_u25": 1.90,
+        "goals_o25": 1.90,
+        "btts_yes": 1.85,
+        "btts_no": 1.95,
+        "home_win": 2.50,
+        "draw": 3.30,
+        "away_win": 2.80
+    }
+}

@@ -1,0 +1,4 @@
+match_id,date,home_team,away_team,home_score,away_score,home_xg,away_xg,home_corners,away_corners,match_total_cards,league,season,status
+test_1,2024-05-15,Arsenal,Everton,2,1,1.8,0.9,6,3,2,PL,2024,FT
+test_2,2024-05-15,Real Madrid,Alavés,5,0,3.2,0.4,8,1,1,PD,2024,FT
+test_3,2024-05-15,Inter,Lazio,1,1,1.0,1.1,5,5,4,SA,2024,FT

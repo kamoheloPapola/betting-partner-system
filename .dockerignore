@@ -1,0 +1,11 @@
+data/raw
+data/historical
+.git
+__pycache__/
+**/__pycache__/
+
+# Keep image context lean.
+venv/
+.pytest_cache/
+.mypy_cache/
+.cache/

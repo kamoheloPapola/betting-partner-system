@@ -1,0 +1,21 @@
+# Market Kill Switch Configuration
+# Human override beats automation in regime shifts.
+# 
+# ACTIVE: Market is enabled for betting
+# DISABLED: Market is manually disabled (rule changes, VAR shifts, etc.)
+# FROZEN: Market was auto-frozen by drift monitor (will auto-recover)
+
+market_status:
+  goals_u25: DISABLED    # Overconfident per OOS audit
+  goals_o25: ACTIVE
+  btts_yes: DISABLED     # Overconfident + spiky distribution
+  btts_no: ACTIVE
+  corners_u11: ACTIVE
+  corners_o75: ACTIVE
+  cards_u55: ACTIVE
+  cards_o25: ACTIVE
+
+# Notes on each market
+market_notes:
+  goals_u25: "Disabled 2026-01-14: OOS audit showed 55.6% hit rate at 65.9% confidence"
+  btts_yes: "Disabled 2026-01-14: OOS audit showed 42.9% hit rate at 65% confidence"
