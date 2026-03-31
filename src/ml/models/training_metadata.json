@@ -1,0 +1,19 @@
+{
+  "training_seasons": {
+    "train_and_val": "<=2022",
+    "test": ">=2023"
+  },
+  "feature_count": 287,
+  "models_trained": [
+    "match_outcome",
+    "home_goals",
+    "home_goals_xgb",
+    "away_goals",
+    "away_goals_xgb",
+    "corners",
+    "corners_xgb",
+    "cards",
+    "cards_xgb"
+  ],
+  "dataset_rows": 12187
+}

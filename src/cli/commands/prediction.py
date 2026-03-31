@@ -1101,9 +1101,11 @@ def _run_predict_loop(df: pd.DataFrame, use_simulator: bool = True) -> List[Dict
                         # Calculation Logic with consolidated warnings
                         p, attr = _calculate_probabilities_v2(match, suite, lg, is_intensity, warning_collector, use_simulator=use_simulator)
                         
-                        # Inject drift state into attributions
-                        for key in attr:
-                            attr[key]['drift_state'] = drift_state
+                        # Inject drift state into nested attribution dicts only.
+                        # Some attribution keys (e.g. ensemble_divergence) are scalars.
+                        for key, value in attr.items():
+                            if isinstance(value, dict):
+                                value["drift_state"] = drift_state
 
                         # Traceability Snapshots
                         import hashlib

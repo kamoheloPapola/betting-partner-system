@@ -1,0 +1,39 @@
+{
+  "match_outcome": {
+    "accuracy": 0.5344,
+    "log_loss": 0.9873,
+    "brier_score": 0.588
+  },
+  "home_goals": {
+    "mae": 0.9518,
+    "rmse": 1.1911
+  },
+  "home_goals_xgb": {
+    "mae": 1.1487,
+    "rmse": 1.3619
+  },
+  "away_goals": {
+    "mae": 0.8651,
+    "rmse": 1.1071
+  },
+  "away_goals_xgb": {
+    "mae": 1.0674,
+    "rmse": 1.2597
+  },
+  "corners": {
+    "mae": 2.6866,
+    "rmse": 3.365
+  },
+  "corners_xgb": {
+    "mae": 4.6917,
+    "rmse": 5.4553
+  },
+  "cards": {
+    "mae": 1.7435,
+    "rmse": 2.2311
+  },
+  "cards_xgb": {
+    "mae": 3.3804,
+    "rmse": 3.8556
+  }
+}
