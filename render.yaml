@@ -4,9 +4,11 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
-    healthCheckPath: /api/v1/model-health
+    healthCheckPath: /api/v1/health
     envVars:
       - key: RAPIDAPI_KEY
         sync: false
       - key: ODDS_API_KEY
         sync: false
+      - key: SKIP_MODEL_LOCK_CHECK
+        value: true

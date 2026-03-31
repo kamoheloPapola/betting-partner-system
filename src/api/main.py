@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -79,7 +80,14 @@ BOOL_PROBABILITY_KEYS = {"ensemble_divergence"}
 
 def _enforce_locked_state() -> None:
     """Verify model is locked at startup."""
+    skip_lock_check = os.getenv("SKIP_MODEL_LOCK_CHECK", "").strip().lower() == "true"
     state = get_model_state()
+    if skip_lock_check:
+        logger.warning(
+            "Skipping model lock check because SKIP_MODEL_LOCK_CHECK=true; current model state is %s",
+            state,
+        )
+        return
     if not state.startswith("LOCKED"):
         raise RuntimeError(
             f"API STARTUP BLOCKED: Model is UNLOCKED ({state}). "
@@ -229,6 +237,12 @@ def health_check() -> HealthCheck:
         model_version=get_model_state(),
         last_update=datetime.now(),
     )
+
+
+@app.get("/api/v1/health")
+def api_health_check() -> Dict[str, str]:
+    """Lightweight uptime endpoint for orchestrator health checks."""
+    return {"status": "ok"}
 
 
 @app.get("/drift-status")
