@@ -24,7 +24,6 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile.scheduler
     schedule: "0 6 * * *"
-    plan: free
     envVars:
       - key: RAPIDAPI_KEY
         sync: false
