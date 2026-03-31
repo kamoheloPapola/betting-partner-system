@@ -67,7 +67,14 @@ _archive/
 src/ml/models/manifest.json.bak*
 
 # Loose output/scratch text files
-*.txt
+out.txt
+full_preds.txt
+output_preds.txt
+help.txt
+tmp_audit_out.txt
+failed_matches_features_raw.txt
+investigation_context_audit_tail.txt
+investigation_context_model_state.txt
 
 # OS
 .DS_Store
