@@ -54,6 +54,9 @@ class PredictionTriggerResponse(BaseModel):
     league: str
     total_predictions: int
     predictions: List[TriggerPrediction]
+    drift_status: Optional[str] = None
+    blocked: bool = False
+    message: Optional[str] = None
 
 
 class ForbiddenFruitSlipLeg(BaseModel):
@@ -82,6 +85,9 @@ class ForbiddenFruitSlipResponse(BaseModel):
     generated_at: datetime
     model_state: str
     slip: List[ForbiddenFruitSlipLeg]
+    drift_status: Optional[str] = None
+    blocked: bool = False
+    message: Optional[str] = None
 
 
 class HealthCheck(BaseModel):

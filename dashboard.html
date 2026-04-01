@@ -276,6 +276,7 @@
         .badge.go { background: var(--success-bg); color: var(--success); }
         .badge.watch { background: var(--warning-bg); color: var(--warning); }
         .badge.stop { background: var(--danger-bg); color: var(--danger); }
+        .badge.unknown { background: var(--bg-hover); color: var(--text-secondary); }
 
         .progress-bar {
             height: 6px;
@@ -323,6 +324,56 @@
             color: var(--text-secondary);
         }
 
+        .info-banner {
+            padding: 0.875rem 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border);
+            background: var(--accent-dim);
+            color: var(--text-primary);
+            display: none;
+        }
+
+        .info-banner.watch {
+            background: var(--warning-bg);
+            border-color: var(--warning);
+            color: var(--warning);
+        }
+
+        .info-banner.stop {
+            background: var(--danger-bg);
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .info-banner.unknown {
+            background: var(--bg-hover);
+            border-color: var(--border);
+            color: var(--text-secondary);
+        }
+
+        .card-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        .summary-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+
+        .summary-pill {
+            padding: 0.4rem 0.65rem;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--bg-hover);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
         .divergence-icon {
             color: var(--warning);
             margin-left: 0.5rem;
@@ -341,6 +392,7 @@
         .big-status.go { color: var(--success); background: var(--success-bg); border: 2px solid var(--success); }
         .big-status.watch { color: var(--warning); background: var(--warning-bg); border: 2px solid var(--warning); }
         .big-status.stop { color: var(--danger); background: var(--danger-bg); border: 2px solid var(--danger); }
+        .big-status.unknown { color: var(--text-secondary); background: rgba(136, 136, 136, 0.08); border: 2px solid var(--border); }
         
         .flex-between { display: flex; justify-content: space-between; align-items: center; }
         .text-sm { font-size: 0.75rem; color: var(--text-secondary); }
@@ -429,12 +481,26 @@
         <!-- HEALTH SECTION -->
         <section id="health" class="section">
             <div id="health-error" class="error-msg"></div>
-            <div class="flex-between" style="margin-bottom: 1.5rem;">
-                <h2 style="font-size: 1.25rem; font-weight: 600;">System Health Metrics</h2>
-                <button onclick="fetchHealth()" style="background: transparent; border: 1px solid var(--border);">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.28l5.67-4.14"/></svg>
-                </button>
+            <div class="flex-between" style="margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap;">
+                <div>
+                    <h2 style="font-size: 1.25rem; font-weight: 600;">System Health Metrics</h2>
+                    <div class="text-sm" id="health-scope-caption">Viewing serving scope: Premier League (PL)</div>
+                </div>
+                <div class="controls" style="margin-bottom: 0;">
+                    <select id="health-scope" onchange="onMonitorLeagueChange(this.value)">
+                        <option value="PL">Premier League (PL)</option>
+                        <option value="BL1">Bundesliga (BL1)</option>
+                        <option value="FL1">Ligue 1 (FL1)</option>
+                        <option value="SA">Serie A (SA)</option>
+                        <option value="PD">La Liga (PD)</option>
+                        <option value="Global">Global</option>
+                    </select>
+                    <button onclick="fetchHealth()" style="background: transparent; border: 1px solid var(--border);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.28l5.67-4.14"/></svg>
+                    </button>
+                </div>
             </div>
+            <div id="health-banner" class="info-banner"></div>
             <div id="health-grid" class="grid">
                 <div class="empty-state" style="grid-column: 1 / -1;">Loading health data...</div>
             </div>
@@ -444,10 +510,24 @@
         <section id="drift" class="section">
             <div id="drift-error" class="error-msg"></div>
             
-            <div class="flex-between" style="margin-bottom: 1rem;">
-                <h2 style="font-size: 1.25rem; font-weight: 600;">Live Drift Monitor</h2>
-                <div class="text-sm">Auto-refresh: 60s <span id="next-refresh" style="color:var(--accent); font-weight:bold;"></span></div>
+            <div class="flex-between" style="margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap;">
+                <div>
+                    <h2 style="font-size: 1.25rem; font-weight: 600;">Live Drift Monitor</h2>
+                    <div class="text-sm" id="drift-scope-caption">Viewing serving scope: Premier League (PL)</div>
+                </div>
+                <div class="controls" style="margin-bottom: 0; align-items: center;">
+                    <select id="drift-scope" onchange="onMonitorLeagueChange(this.value)">
+                        <option value="PL">Premier League (PL)</option>
+                        <option value="BL1">Bundesliga (BL1)</option>
+                        <option value="FL1">Ligue 1 (FL1)</option>
+                        <option value="SA">Serie A (SA)</option>
+                        <option value="PD">La Liga (PD)</option>
+                        <option value="Global">Global</option>
+                    </select>
+                    <div class="text-sm">Auto-refresh: 60s <span id="next-refresh" style="color:var(--accent); font-weight:bold;"></span></div>
+                </div>
             </div>
+            <div id="drift-banner" class="info-banner"></div>
 
             <div id="overall-drift" class="big-status go">
                 SYSTEM GO
@@ -472,11 +552,133 @@
     </main>
 
     <script>
-        // CORE CONFIG
-        const API_BASE_URL = 'http://localhost:8000';
+        const API_BASE_URL = window.location.origin;
         const API_STATUS_POLL_MS = 10000;
+        const DRIFT_REFRESH_MS = 60000;
+        const MONITOR_SCOPES = Object.freeze({
+            PL: 'Premier League (PL)',
+            BL1: 'Bundesliga (BL1)',
+            FL1: 'Ligue 1 (FL1)',
+            SA: 'Serie A (SA)',
+            PD: 'La Liga (PD)',
+            Global: 'Global fallback'
+        });
+
+        let lastHealthPayload = null;
 
         const apiUrl = (path) => `${API_BASE_URL}${path}`;
+
+        const escapeHtml = (value) => String(value ?? '-').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        }[char]));
+
+        const asNumber = (value) => {
+            if (value === null || value === undefined || value === '') {
+                return null;
+            }
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : null;
+        };
+
+        const normalizeStatus = (value) => {
+            const status = String(value || 'UNKNOWN').trim().toUpperCase();
+            if (status === 'OK') return 'GO';
+            if (['GO', 'WATCH', 'STOP'].includes(status)) return status;
+            return 'UNKNOWN';
+        };
+
+        const statusClassName = (value) => normalizeStatus(value).toLowerCase();
+
+        const fmtPct = (value) => {
+            const num = asNumber(value);
+            return num == null ? '-' : `${(num * 100).toFixed(1)}%`;
+        };
+
+        const fmtScore = (value, digits = 3) => {
+            const num = asNumber(value);
+            return num == null ? '-' : num.toFixed(digits);
+        };
+
+        const fmtDate = (value) => {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '-';
+            return date.toLocaleString([], {
+                year: 'numeric',
+                month: 'short',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        };
+
+        const fmtTime = (value) => {
+            if (!value) return '-';
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return '-';
+            return date.toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        };
+
+        const confidencePercent = (value) => {
+            const num = asNumber(value);
+            if (num == null) return null;
+            return num <= 1 ? num * 100 : num;
+        };
+
+        const getBrierColor = (score) => {
+            const numericScore = asNumber(score);
+            if (numericScore == null) return 'var(--text-secondary)';
+            if (numericScore < 0.20) return 'var(--success)';
+            if (numericScore <= 0.25) return 'var(--warning)';
+            return 'var(--danger)';
+        };
+
+        const getScopeLabel = (scope) => MONITOR_SCOPES[scope] || scope || 'Unknown scope';
+
+        const scopeDescription = (entry, scope) => {
+            const servingLeague = String(entry?.league || '').toUpperCase();
+            const modelLeague = String(entry?.model_league || '').toUpperCase();
+
+            if (scope === 'Global') {
+                if (modelLeague === 'GLOBAL') return 'Global fallback model source';
+                if (modelLeague) return `Model source: ${modelLeague}`;
+                return 'Model source unavailable';
+            }
+
+            if (servingLeague && modelLeague && servingLeague !== modelLeague) {
+                return `${getScopeLabel(servingLeague)} served by ${modelLeague} model`;
+            }
+
+            if (servingLeague) {
+                return `Serving scope: ${getScopeLabel(servingLeague)}`;
+            }
+
+            return 'Serving scope unavailable';
+        };
+
+        const responseJson = async (response) => {
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (err) {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                const detail = payload && (payload.detail || payload.message);
+                throw new Error(detail || `API Error: ${response.status}`);
+            }
+
+            return payload;
+        };
 
         const setApiStatus = (state) => {
             const dot = document.getElementById('api-status-dot');
@@ -498,16 +700,127 @@
             label.textContent = 'API checking';
         };
 
+        const showError = (containerId, message) => {
+            const element = document.getElementById(containerId);
+            if (!element) return;
+            element.textContent = message;
+            element.style.display = 'block';
+            window.setTimeout(() => {
+                element.style.display = 'none';
+            }, 5000);
+        };
+
+        const clearError = (containerId) => {
+            const element = document.getElementById(containerId);
+            if (!element) return;
+            element.textContent = '';
+            element.style.display = 'none';
+        };
+
+        const setBanner = (elementId, status, message) => {
+            const banner = document.getElementById(elementId);
+            if (!banner) return;
+
+            if (!message) {
+                banner.style.display = 'none';
+                banner.textContent = '';
+                banner.className = 'info-banner';
+                return;
+            }
+
+            banner.className = `info-banner ${statusClassName(status)}`;
+            banner.textContent = message;
+            banner.style.display = 'block';
+        };
+
+        const setOverallDriftStatus = (status) => {
+            const element = document.getElementById('overall-drift');
+            if (!element) return;
+
+            const normalized = normalizeStatus(status);
+            const textByStatus = {
+                GO: 'SYSTEM GO',
+                WATCH: 'SYSTEM WATCH',
+                STOP: 'SYSTEM STOP',
+                UNKNOWN: 'STATUS UNKNOWN'
+            };
+
+            element.className = `big-status ${statusClassName(normalized)}`;
+            element.textContent = textByStatus[normalized] || textByStatus.UNKNOWN;
+        };
+
+        const normalizeMarketEntries = (entries) => {
+            if (Array.isArray(entries)) return entries;
+            if (entries && typeof entries === 'object') return [entries];
+            return [];
+        };
+
+        const pickMarketEntry = (entries, scope) => {
+            if (!entries.length) return null;
+
+            if (scope === 'Global') {
+                return entries.find((entry) => String(entry?.model_league || '').toUpperCase() === 'GLOBAL') || entries[0];
+            }
+
+            return (
+                entries.find((entry) => String(entry?.league || '').toUpperCase() === scope) ||
+                entries.find((entry) => String(entry?.model_league || '').toUpperCase() === scope) ||
+                entries.find((entry) => String(entry?.model_league || '').toUpperCase() === 'GLOBAL') ||
+                entries[0]
+            );
+        };
+
+        const summarizeStatuses = (statuses) => {
+            const normalized = statuses.map((status) => normalizeStatus(status));
+            if (normalized.includes('STOP')) return 'STOP';
+            if (normalized.includes('WATCH')) return 'WATCH';
+            if (normalized.includes('GO')) return 'GO';
+            return 'UNKNOWN';
+        };
+
+        function updateMonitorCaptions(scope) {
+            const healthCaption = document.getElementById('health-scope-caption');
+            const driftCaption = document.getElementById('drift-scope-caption');
+
+            const label = scope === 'Global'
+                ? 'Viewing global fallback model source where available'
+                : `Viewing serving scope: ${getScopeLabel(scope)}`;
+
+            if (healthCaption) healthCaption.textContent = label;
+            if (driftCaption) driftCaption.textContent = label;
+        }
+
+        function syncMonitorScopeControls(scope) {
+            const healthScope = document.getElementById('health-scope');
+            const driftScope = document.getElementById('drift-scope');
+
+            if (healthScope) healthScope.value = scope;
+            if (driftScope) driftScope.value = scope;
+            updateMonitorCaptions(scope);
+        }
+
+        function onMonitorLeagueChange(scope) {
+            syncMonitorScopeControls(scope);
+
+            if (lastHealthPayload) {
+                renderHealth(lastHealthPayload);
+                renderDrift(lastHealthPayload);
+                return;
+            }
+
+            fetchHealth();
+        }
+
         async function checkApiStatus() {
             const controller = new AbortController();
             const timeoutId = window.setTimeout(() => controller.abort(), 4000);
 
             try {
-                const res = await fetch(apiUrl('/api/v1/health'), {
+                const response = await fetch(apiUrl('/api/v1/health'), {
                     cache: 'no-store',
                     signal: controller.signal
                 });
-                setApiStatus(res.ok ? 'online' : 'offline');
+                setApiStatus(response.ok ? 'online' : 'offline');
             } catch (err) {
                 setApiStatus('offline');
             } finally {
@@ -515,285 +828,396 @@
             }
         }
 
-        const showError = (containerId, msg) => {
-            const el = document.getElementById(containerId);
-            if (el) {
-                el.innerText = msg;
-                el.style.display = 'block';
-                setTimeout(() => el.style.display = 'none', 5000);
-            }
-        };
-
-        // TAB NAVIGATION
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-                
-                tab.classList.add('active');
-                const target = tab.getAttribute('data-target');
-                document.getElementById(target).classList.add('active');
-
-                if (target === 'health') fetchHealth();
-                if (target === 'drift') fetchHealth(); // Drift uses same endpoint conceptually
-            });
-        });
-
-        // FORMATTERS
-        const fmtPct = (val) => val != null ? (val * 100).toFixed(1) + '%' : '-';
-        const getBrierColor = (score) => {
-            if (score == null) return 'var(--text-secondary)';
-            if (score < 0.20) return 'var(--success)';
-            if (score <= 0.25) return 'var(--warning)';
-            return 'var(--danger)';
-        };
-
         // API: PREDICTIONS
         async function fetchPredictions() {
-            const btn = document.getElementById('btn-fetch-pred');
+            const button = document.getElementById('btn-fetch-pred');
             const tbody = document.getElementById('pred-tbody');
             const league = document.getElementById('pred-league').value;
-            
-            btn.classList.add('loading');
-            
+
+            clearError('pred-error');
+            button.classList.add('loading');
+
             try {
-                const res = await fetch(apiUrl('/api/v1/predictions/trigger'), {
+                const data = await responseJson(await fetch(apiUrl('/api/v1/predictions/trigger'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ league })
-                });
+                }));
 
-                if (!res.ok) throw new Error(`API Error: ${res.status}`);
-                
-                const data = await res.json();
-                const predictions = data.predictions || data; 
+                const predictions = Array.isArray(data?.predictions)
+                    ? data.predictions
+                    : Array.isArray(data)
+                        ? data
+                        : [];
 
-                if (!Array.isArray(predictions) || predictions.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No predictions found for ${league}</td></tr>`;
+                if (!predictions.length) {
+                    const message = data?.message || `No predictions available for ${getScopeLabel(league)} right now.`;
+                    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${escapeHtml(message)}</td></tr>`;
                     return;
                 }
 
-                tbody.innerHTML = predictions.map(p => {
-                    const hConf = p.confidence > 70 || p.confidence > 0.7; 
-                    const confVal = p.confidence <= 1 ? p.confidence * 100 : p.confidence;
+                const advisoryRow = data?.message
+                    ? `<tr><td colspan="8" style="padding: 0.85rem 1rem; color: ${normalizeStatus(data.drift_status) === 'WATCH' ? 'var(--warning)' : 'var(--text-secondary)'}; background: ${normalizeStatus(data.drift_status) === 'WATCH' ? 'var(--warning-bg)' : 'var(--bg-hover)'};">${escapeHtml(data.message)}</td></tr>`
+                    : '';
+
+                const rows = predictions.map((prediction) => {
+                    const confidence = confidencePercent(prediction.confidence);
+                    const highConfidence = confidence != null && confidence >= 70;
                     
-                    const divWarning = p.ensemble_divergence 
-                        ? `<span class="divergence-icon" title="Ensemble Divergence Detected">⚠️</span>` 
+                    const divergenceWarning = prediction.ensemble_divergence
+                        ? '<span class="divergence-icon" title="Ensemble divergence detected">&#9888;</span>'
                         : '';
 
                     return `
                         <tr>
-                            <td style="font-weight: 500;">${p.home_team || 'Home'}</td>
-                            <td style="font-weight: 500;">${p.away_team || 'Away'}</td>
-                            <td>${fmtPct(p.home_win_prob || p.prob_1)}</td>
-                            <td>${fmtPct(p.draw_prob || p.prob_x)}</td>
-                            <td>${fmtPct(p.away_win_prob || p.prob_2)}</td>
-                            <td>${fmtPct(p.btts_prob)}</td>
-                            <td>${fmtPct(p.over_25_prob)}</td>
-                            <td class="${hConf ? 'high-confidence' : ''}">
-                                ${confVal ? confVal.toFixed(1) + '%' : '-'}
-                                ${divWarning}
+                            <td style="font-weight: 500;">${escapeHtml(prediction.home_team || 'Home')}</td>
+                            <td style="font-weight: 500;">${escapeHtml(prediction.away_team || 'Away')}</td>
+                            <td>${fmtPct(prediction.home_win_prob)}</td>
+                            <td>${fmtPct(prediction.draw_prob)}</td>
+                            <td>${fmtPct(prediction.away_win_prob)}</td>
+                            <td>${fmtPct(prediction.btts_prob)}</td>
+                            <td>${fmtPct(prediction.over_25_prob)}</td>
+                            <td class="${highConfidence ? 'high-confidence' : ''}">
+                                ${confidence == null ? '-' : `${confidence.toFixed(1)}%`}
+                                ${divergenceWarning}
                             </td>
                         </tr>
                     `;
                 }).join('');
+                tbody.innerHTML = `${advisoryRow}${rows}`;
 
             } catch (err) {
                 showError('pred-error', err.message);
             } finally {
-                btn.classList.remove('loading');
+                button.classList.remove('loading');
             }
         }
 
-        // API: SLIPS
         async function fetchSlips() {
-            const btn = document.getElementById('btn-fetch-slip');
+            const button = document.getElementById('btn-fetch-slip');
             const container = document.getElementById('slip-container');
             const league = document.getElementById('slip-league').value;
-            
-            btn.classList.add('loading');
-            
-            try {
-                const res = await fetch(apiUrl(`/api/v1/slips/${league}`));
-                if (!res.ok) throw new Error(`API Error: ${res.status}`);
-                
-                const data = await res.json();
-                const slip = data.slip || data;
 
-                if (!slip || !slip.legs || slip.legs.length === 0) {
-                     container.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1;">No slip available for ${league}</div>`;
-                     return;
+            clearError('slip-error');
+            button.classList.add('loading');
+
+            try {
+                const data = await responseJson(await fetch(apiUrl(`/api/v1/slips/${league}`), {
+                    cache: 'no-store'
+                }));
+
+                const legs = Array.isArray(data?.slip)
+                    ? data.slip
+                    : Array.isArray(data)
+                        ? data
+                        : [];
+
+                if (!legs.length) {
+                    const status = normalizeStatus(data?.drift_status);
+                    const message = data?.message || `No qualifying slip is available for ${getScopeLabel(league)} right now.`;
+                    container.innerHTML = `
+                        <div class="card" style="grid-column: 1 / -1;">
+                            <div class="card-header">
+                                <span>No slip available</span>
+                                <span class="badge ${statusClassName(status)}">${escapeHtml(status)}</span>
+                            </div>
+                            <div class="card-subtitle">${escapeHtml(getScopeLabel(league))}</div>
+                            <div class="text-sm" style="font-size: 0.875rem;">${escapeHtml(message)}</div>
+                        </div>
+                    `;
+                    return;
                 }
 
-                const confPct = slip.confidence <= 1 ? slip.confidence * 100 : slip.confidence;
-                
-                let html = `
+                const confidenceValues = legs
+                    .map((leg) => confidencePercent(leg.confidence))
+                    .filter((value) => value != null);
+                const averageConfidence = confidenceValues.length
+                    ? confidenceValues.reduce((total, value) => total + value, 0) / confidenceValues.length
+                    : null;
+                const driftStatus = normalizeStatus(data?.drift_status);
+
+                const rows = legs.map((leg) => `
+                    <tr>
+                        <td style="padding: 0.75rem 0; font-weight: 500;">${escapeHtml(leg.match)}</td>
+                        <td style="padding: 0.75rem 0;">
+                            <span style="background: var(--bg-hover); padding: 0.25rem 0.5rem; border-radius: 4px; font-family: monospace;">
+                                ${escapeHtml(leg.market)}
+                            </span>
+                        </td>
+                        <td style="padding: 0.75rem 0; text-align: right; font-weight: bold; color: var(--accent);">
+                            ${fmtPct(leg.probability)}
+                        </td>
+                        <td style="padding: 0.75rem 0; text-align: right;">
+                            ${confidencePercent(leg.confidence) == null ? '-' : `${confidencePercent(leg.confidence).toFixed(1)}%`}
+                        </td>
+                    </tr>
+                `).join('');
+
+                container.innerHTML = `
                     <div class="card" style="grid-column: 1 / -1; border-color: var(--accent);">
-                        <div class="card-header" style="border-bottom:none; padding-bottom:0;">
+                        <div class="card-header" style="border-bottom: none; padding-bottom: 0;">
                             <div>
                                 <h3 style="color: var(--accent); margin-bottom: 0.25rem;">Recommended Edge Slip</h3>
-                                <div class="text-sm">CSS Score: ${slip.css_score || '-'}</div>
+                                <div class="card-subtitle">${escapeHtml(getScopeLabel(league))}</div>
                             </div>
-                            <div style="text-align: right; width: 150px;">
-                                <div class="text-sm">Overall Confidence</div>
-                                <div style="font-weight:bold;">${confPct ? confPct.toFixed(1) + '%' : '-'}</div>
-                                <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${confPct || 0}%"></div>
-                                </div>
-                            </div>
+                            <span class="badge ${statusClassName(driftStatus)}">${escapeHtml(driftStatus)}</span>
                         </div>
-                        <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+                        <div class="summary-strip">
+                            <span class="summary-pill">Model state: ${escapeHtml(data?.model_state || 'unknown')}</span>
+                            <span class="summary-pill">Selections: ${legs.length}</span>
+                            <span class="summary-pill">Avg confidence: ${averageConfidence == null ? '-' : `${averageConfidence.toFixed(1)}%`}</span>
+                        </div>
+                        ${data?.message ? `<div class="text-sm" style="font-size: 0.875rem;">${escapeHtml(data.message)}</div>` : ''}
+                        <div style="border-top: 1px solid var(--border); padding-top: 1rem;">
                             <table style="width: 100%;">
                                 <thead>
                                     <tr>
                                         <th style="padding: 0.5rem 0;">Match</th>
                                         <th style="padding: 0.5rem 0;">Market</th>
-                                        <th style="padding: 0.5rem 0; text-align:right;">Probability</th>
+                                        <th style="padding: 0.5rem 0; text-align: right;">Probability</th>
+                                        <th style="padding: 0.5rem 0; text-align: right;">Confidence</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody>${rows}</tbody>
+                            </table>
+                        </div>
+                    </div>
                 `;
-
-                slip.legs.forEach(leg => {
-                    html += `
-                        <tr>
-                            <td style="padding: 0.75rem 0; font-weight:500;">${leg.match}</td>
-                            <td style="padding: 0.75rem 0;">
-                                <span style="background: var(--bg-hover); padding: 0.25rem 0.5rem; border-radius: 4px; font-family: monospace;">
-                                    ${leg.market}
-                                </span>
-                            </td>
-                            <td style="padding: 0.75rem 0; text-align:right; font-weight:bold; color: var(--accent);">
-                                ${fmtPct(leg.probability)}
-                            </td>
-                        </tr>
-                    `;
-                });
-
-                html += `</tbody></table></div></div>`;
-                container.innerHTML = html;
-
             } catch (err) {
                 showError('slip-error', err.message);
             } finally {
-                btn.classList.remove('loading');
+                button.classList.remove('loading');
             }
         }
 
-        // API: HEALTH & DRIFT
-        async function fetchHealth() {
-            try {
-                const res = await fetch(apiUrl('/api/v1/model-health'));
-                if (!res.ok) throw new Error(`API Error: ${res.status}`);
-                const data = await res.json();
-                
-                const markets = data.markets || data; 
-                
-                // --- UPDATE HEALTH TAB ---
-                const hGrid = document.getElementById('health-grid');
-                if (!markets || Object.keys(markets).length === 0) {
-                    hGrid.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1;">No health data available</div>`;
-                } else {
-                    let hHtml = '';
-                    Object.entries(markets).forEach(([marketName, metrics]) => {
-                        const bColor = getBrierColor(metrics.brier_score);
-                        const statusClass = (metrics.drift_status || 'watch').toLowerCase();
-                        
-                        hHtml += `
-                            <div class="card">
-                                <div class="card-header">
-                                    <span>${marketName.toUpperCase()}</span>
-                                    <span class="badge ${statusClass}">${metrics.drift_status || 'UNKNOWN'}</span>
-                                </div>
-                                <div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
-                                    <div class="flex-between">
-                                        <span class="text-sm">Model version</span>
-                                        <span style="font-family:monospace;">${metrics.model_name || 'v1.0'}</span>
-                                    </div>
-                                    <div class="flex-between">
-                                        <span class="text-sm">Brier Score</span>
-                                        <span style="font-weight:bold; color:${bColor};">${metrics.brier_score ? metrics.brier_score.toFixed(4) : '-'}</span>
-                                    </div>
-                                    <div class="flex-between">
-                                        <span class="text-sm">Last Trained</span>
-                                        <span>${metrics.last_trained ? new Date(metrics.last_trained).toLocaleDateString() : '-'}</span>
-                                    </div>
-                                </div>
+        function renderHealth(data) {
+            const grid = document.getElementById('health-grid');
+            const scope = document.getElementById('health-scope')?.value || 'PL';
+            const markets = data?.markets && typeof data.markets === 'object' ? data.markets : {};
+            const cards = [];
+            let fallbackCount = 0;
+
+            Object.entries(markets).forEach(([marketName, rawEntries]) => {
+                const entry = pickMarketEntry(normalizeMarketEntries(rawEntries), scope);
+                if (!entry) return;
+
+                const servingLeague = String(entry.league || '').toUpperCase();
+                const modelLeague = String(entry.model_league || '').toUpperCase();
+                if (
+                    scope !== 'Global' &&
+                    servingLeague &&
+                    modelLeague &&
+                    servingLeague !== modelLeague
+                ) {
+                    fallbackCount += 1;
+                }
+
+                const status = normalizeStatus(entry.drift_status);
+                cards.push(`
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <div>${escapeHtml(marketName.toUpperCase())}</div>
+                                <div class="card-subtitle">${escapeHtml(scopeDescription(entry, scope))}</div>
                             </div>
-                        `;
-                    });
-                    hGrid.innerHTML = hHtml;
+                            <span class="badge ${statusClassName(status)}">${escapeHtml(status)}</span>
+                        </div>
+                        <div class="summary-strip">
+                            <span class="summary-pill">Version ${escapeHtml(entry.version || '-')}</span>
+                            <span class="summary-pill">Brier ${escapeHtml(fmtScore(entry.brier_score, 4))}</span>
+                            <span class="summary-pill">Drift ${escapeHtml(fmtScore(entry.drift_score, 3))}</span>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.65rem;">
+                            <div class="flex-between">
+                                <span class="text-sm">Sample size</span>
+                                <span>${escapeHtml(entry.sample_size ?? '-')}</span>
+                            </div>
+                            <div class="flex-between">
+                                <span class="text-sm">Bet count</span>
+                                <span>${escapeHtml(entry.bet_count ?? '-')}</span>
+                            </div>
+                            <div class="flex-between">
+                                <span class="text-sm">Brier score</span>
+                                <span style="font-weight: 600; color: ${getBrierColor(entry.brier_score)};">${fmtScore(entry.brier_score, 4)}</span>
+                            </div>
+                            <div class="flex-between">
+                                <span class="text-sm">Last trained</span>
+                                <span>${escapeHtml(fmtDate(entry.last_trained))}</span>
+                            </div>
+                            <div class="flex-between">
+                                <span class="text-sm">Cooldown until</span>
+                                <span>${escapeHtml(fmtDate(entry.cooldown_until))}</span>
+                            </div>
+                        </div>
+                    </div>
+                `);
+            });
+
+            if (!cards.length) {
+                grid.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1;">No health data available for ${escapeHtml(getScopeLabel(scope))}</div>`;
+            } else {
+                grid.innerHTML = cards.join('');
+            }
+
+            const globalStatus = normalizeStatus(data?.global_drift_status);
+            let bannerMessage = '';
+
+            if (globalStatus === 'STOP') {
+                bannerMessage = `Global drift status is STOP. Prediction and slip generation may be blocked for ${getScopeLabel(scope)}.`;
+            } else if (globalStatus === 'WATCH') {
+                bannerMessage = `Global drift status is WATCH. Review market scores before acting on ${getScopeLabel(scope)} outputs.`;
+            } else if (globalStatus === 'UNKNOWN') {
+                bannerMessage = `Live drift status is unavailable. Showing the latest registry metadata for ${getScopeLabel(scope)}.`;
+            } else if (scope === 'Global') {
+                bannerMessage = 'Viewing global fallback model metadata where available.';
+            } else if (fallbackCount > 0) {
+                bannerMessage = `Some ${getScopeLabel(scope)} markets are currently served by fallback models. Review the model source label on each card.`;
+            }
+
+            setBanner('health-banner', globalStatus, bannerMessage);
+        }
+
+        function renderDrift(data) {
+            const tbody = document.getElementById('drift-tbody');
+            const scope = document.getElementById('drift-scope')?.value || 'PL';
+            const markets = data?.markets && typeof data.markets === 'object' ? data.markets : {};
+            const rows = [];
+            const marketStatuses = [];
+            let fallbackCount = 0;
+
+            Object.entries(markets).forEach(([marketName, rawEntries]) => {
+                const entry = pickMarketEntry(normalizeMarketEntries(rawEntries), scope);
+                if (!entry) return;
+
+                const servingLeague = String(entry.league || '').toUpperCase();
+                const modelLeague = String(entry.model_league || '').toUpperCase();
+                if (
+                    scope !== 'Global' &&
+                    servingLeague &&
+                    modelLeague &&
+                    servingLeague !== modelLeague
+                ) {
+                    fallbackCount += 1;
                 }
 
-                // --- UPDATE DRIFT TAB ---
-                const dTbody = document.getElementById('drift-tbody');
-                const dStatus = document.getElementById('overall-drift');
-                
-                let hasStop = false;
-                let hasWatch = false;
-                let dHtml = '';
+                const status = normalizeStatus(entry.drift_status || data?.global_drift_status);
+                marketStatuses.push(status);
 
-                Object.entries(markets).forEach(([marketName, metrics]) => {
-                    const statusClass = (metrics.drift_status || '').toLowerCase();
-                    if (statusClass === 'stop') hasStop = true;
-                    else if (statusClass === 'watch') hasWatch = true;
+                rows.push(`
+                    <tr>
+                        <td style="font-weight: 500;">
+                            <div>${escapeHtml(marketName.toUpperCase())}</div>
+                            <div class="card-subtitle">${escapeHtml(scopeDescription(entry, scope))}</div>
+                        </td>
+                        <td><span class="badge ${statusClassName(status)}">${escapeHtml(status)}</span></td>
+                        <td>${escapeHtml(fmtScore(entry.drift_score, 3))}</td>
+                        <td class="text-sm">${escapeHtml(fmtTime(data?.global_drift_evaluated_at))}</td>
+                    </tr>
+                `);
+            });
 
-                    dHtml += `
-                        <tr>
-                            <td style="font-weight:500;">${marketName.toUpperCase()}</td>
-                            <td><span class="badge ${statusClass}">${metrics.drift_status || 'UNKNOWN'}</span></td>
-                            <td>${metrics.drift_score ? metrics.drift_score.toFixed(3) : '-'}</td>
-                            <td class="text-sm">${new Date().toLocaleTimeString()}</td>
-                        </tr>
-                    `;
-                });
-                
-                if (dHtml) dTbody.innerHTML = dHtml;
+            if (!rows.length) {
+                tbody.innerHTML = `<tr><td colspan="4" class="empty-state">No drift metrics available for ${escapeHtml(getScopeLabel(scope))}</td></tr>`;
+            } else {
+                tbody.innerHTML = rows.join('');
+            }
 
-                if (hasStop) {
-                    dStatus.className = 'big-status stop';
-                    dStatus.innerText = 'SYSTEM STOP - DRIFT DETECTED';
-                } else if (hasWatch) {
-                    dStatus.className = 'big-status watch';
-                    dStatus.innerText = 'WATCH - MINOR DRIFT';
-                } else {
-                    dStatus.className = 'big-status go';
-                    dStatus.innerText = 'SYSTEM GO';
-                }
+            const effectiveStatus = summarizeStatuses([
+                data?.global_drift_status,
+                ...marketStatuses
+            ]);
+            setOverallDriftStatus(effectiveStatus);
 
+            const evaluatedAt = fmtDate(data?.global_drift_evaluated_at);
+            let bannerMessage = '';
+
+            if (effectiveStatus === 'STOP') {
+                bannerMessage = `Drift status is STOP for ${getScopeLabel(scope)}. Predictions and slips may be blocked until the guardrail clears.`;
+            } else if (effectiveStatus === 'WATCH') {
+                bannerMessage = `Drift is under WATCH for ${getScopeLabel(scope)}. Last evaluation: ${evaluatedAt}.`;
+            } else if (effectiveStatus === 'UNKNOWN') {
+                bannerMessage = `Drift status is currently unavailable. Last evaluation: ${evaluatedAt}.`;
+            } else if (scope === 'Global') {
+                bannerMessage = `Viewing global fallback drift coverage where available. Last evaluation: ${evaluatedAt}.`;
+            } else if (fallbackCount > 0) {
+                bannerMessage = `Some ${getScopeLabel(scope)} markets are served by fallback models. Last evaluation: ${evaluatedAt}.`;
+            }
+
+            setBanner('drift-banner', effectiveStatus, bannerMessage);
+        }
+
+        async function fetchHealth() {
+            clearError('health-error');
+            clearError('drift-error');
+
+            try {
+                const data = await responseJson(await fetch(apiUrl('/api/v1/model-health'), {
+                    cache: 'no-store'
+                }));
+
+                lastHealthPayload = data;
+                renderHealth(data);
+                renderDrift(data);
+                resetDriftCountdown();
             } catch (err) {
                 showError('health-error', `Failed to load health: ${err.message}`);
                 showError('drift-error', `Failed to load monitor: ${err.message}`);
+                setBanner('health-banner', 'UNKNOWN', null);
+                setBanner('drift-banner', 'UNKNOWN', null);
+                setOverallDriftStatus('UNKNOWN');
             }
         }
 
-        // AUTO-LOAD HEALTH
+        function resetDriftCountdown() {
+            const countdown = document.getElementById('next-refresh');
+            if (!countdown) return;
+            countdown.textContent = 'in 60s';
+            countdown.setAttribute('data-count', '60');
+        }
+
+        document.querySelectorAll('.tab').forEach((tab) => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach((candidate) => candidate.classList.remove('active'));
+                document.querySelectorAll('.section').forEach((section) => section.classList.remove('active'));
+
+                tab.classList.add('active');
+                const target = tab.getAttribute('data-target');
+                document.getElementById(target).classList.add('active');
+
+                if (target === 'health' || target === 'drift') {
+                    fetchHealth();
+                }
+            });
+        });
+
         window.addEventListener('DOMContentLoaded', () => {
+            syncMonitorScopeControls('PL');
+            resetDriftCountdown();
             checkApiStatus();
             fetchHealth();
         });
 
-        // POLL API STATUS (10s)
-        setInterval(() => {
+        window.setInterval(() => {
             checkApiStatus();
         }, API_STATUS_POLL_MS);
 
-        // AUTO-REFRESH DRIFT (60s)
-        setInterval(() => {
-            if (document.getElementById('drift').classList.contains('active')) {
+        window.setInterval(() => {
+            const healthActive = document.getElementById('health').classList.contains('active');
+            const driftActive = document.getElementById('drift').classList.contains('active');
+
+            if (healthActive || driftActive) {
                 fetchHealth();
             }
-        }, 60000);
+        }, DRIFT_REFRESH_MS);
 
-        setInterval(() => {
-            if (document.getElementById('drift').classList.contains('active')) {
-                const el = document.getElementById('next-refresh');
-                let count = parseInt(el.getAttribute('data-count') || 60);
-                count--;
-                if(count < 0) count = 59;
-                el.innerText = `in ${count}s`;
-                el.setAttribute('data-count', count);
-            }
+        window.setInterval(() => {
+            if (!document.getElementById('drift').classList.contains('active')) return;
+
+            const countdown = document.getElementById('next-refresh');
+            const current = Number(countdown.getAttribute('data-count') || '60');
+            const next = current <= 0 ? 0 : current - 1;
+            countdown.textContent = `in ${next}s`;
+            countdown.setAttribute('data-count', String(next));
         }, 1000);
 
     </script>

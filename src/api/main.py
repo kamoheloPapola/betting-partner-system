@@ -33,6 +33,7 @@ from src.ml.training.model_configs import MODEL_CONFIGS
 from src.monitoring.drift_orchestrator import DriftOrchestrator
 from src.monitoring.telemetry import capture_alert, capture_exception, init_sentry
 from src.predictions.predictor import Predictor
+from src.strategies.drift_guard import DriftGuardrail
 from src.strategies.slip_builder import ForbiddenFruitSlipBuilder
 
 logger = logging.getLogger(__name__)
@@ -191,6 +192,43 @@ def _resolve_drift_status(
     return global_status
 
 
+def _normalize_guard_status(status: Any) -> str:
+    normalized = str(status or "UNKNOWN").strip().upper()
+    if normalized == "OK":
+        return DriftOrchestrator.GO
+    if normalized in {DriftOrchestrator.GO, DriftOrchestrator.WATCH, DriftOrchestrator.STOP}:
+        return normalized
+    return "UNKNOWN"
+
+
+def _read_prediction_guard_status() -> str:
+    try:
+        return _normalize_guard_status(DriftGuardrail().check_drift())
+    except Exception as exc:
+        logger.warning("Prediction drift guard status unavailable: %s", exc)
+        return "UNKNOWN"
+
+
+def _empty_predictions_message(*, league: str, drift_status: str, total_predictions: int) -> Optional[str]:
+    if total_predictions > 0:
+        if drift_status == DriftOrchestrator.WATCH:
+            return f"Predictions generated under WATCH drift status for {league}. Use caution."
+        return None
+    if drift_status == DriftOrchestrator.STOP:
+        return f"Predictions are currently blocked by the drift guardrail for {league}."
+    return f"No predictions available for {league} right now."
+
+
+def _empty_slip_message(*, league: str, drift_status: str, total_legs: int) -> Optional[str]:
+    if total_legs > 0:
+        if drift_status == DriftOrchestrator.WATCH:
+            return f"Slip built under WATCH drift status for {league}. Review carefully."
+        return None
+    if drift_status == DriftOrchestrator.STOP:
+        return f"Slip generation is currently blocked by the drift guardrail for {league}."
+    return f"No qualifying slip is available for {league} right now."
+
+
 def _serialize_trigger_prediction(prediction: Dict[str, Any]) -> TriggerPrediction:
     home_prob = _first_valid_float(prediction.get("home"), prediction.get("home_win")) or 0.0
     draw_prob = _first_valid_float(prediction.get("draw")) or 0.0
@@ -272,6 +310,22 @@ def _generate_forbidden_fruit_slip(
     min_prob: float,
     max_selections: int,
 ) -> ForbiddenFruitSlipResponse:
+    drift_status = _read_prediction_guard_status()
+    league_label = str(league or "ALL").upper()
+    if drift_status == DriftOrchestrator.STOP:
+        return ForbiddenFruitSlipResponse(
+            generated_at=datetime.now(),
+            model_state=get_model_state(),
+            slip=[],
+            drift_status=drift_status,
+            blocked=True,
+            message=_empty_slip_message(
+                league=league_label,
+                drift_status=drift_status,
+                total_legs=0,
+            ),
+        )
+
     predictor = Predictor()
     raw_predictions = predictor.predict_upcoming(league=league)
     builder = ForbiddenFruitSlipBuilder()
@@ -284,6 +338,13 @@ def _generate_forbidden_fruit_slip(
         generated_at=datetime.now(),
         model_state=get_model_state(),
         slip=[_serialize_slip_leg(leg) for leg in slip],
+        drift_status=drift_status,
+        blocked=False,
+        message=_empty_slip_message(
+            league=league_label,
+            drift_status=drift_status,
+            total_legs=len(slip),
+        ),
     )
 
 
@@ -442,6 +503,14 @@ def get_model_health() -> Dict[str, Any]:
 
     markets: Dict[str, List[Dict[str, Any]]] = {}
     for market in model_names:
+        market_health = drift.get_market_health(market)
+        drift_score = _first_valid_float(
+            market_health.get("drift"),
+            default=None,
+        )
+        bet_count = market_health.get("bet_count")
+        sample_size = market_health.get("n")
+        cooldown_until = market_health.get("cooldown_until")
         entries: List[Dict[str, Any]] = []
         for serving_league in serving_leagues:
             meta = registry.get_production_model_for_league(serving_league, market)
@@ -471,11 +540,15 @@ def get_model_health() -> Dict[str, Any]:
                     "model_league": model_league,
                     "version": version,
                     "brier_score": brier_score,
+                    "drift_score": drift_score,
                     "drift_status": _resolve_drift_status(
                         drift,
                         market=market,
                         global_status=global_status,
                     ),
+                    "sample_size": sample_size,
+                    "bet_count": bet_count,
+                    "cooldown_until": cooldown_until,
                     "last_trained": last_trained,
                 }
             )
@@ -518,6 +591,22 @@ def trigger_predictions(request: PredictionTriggerRequest) -> PredictionTriggerR
         raise HTTPException(status_code=400, detail="limit must be >= 1")
 
     try:
+        drift_status = _read_prediction_guard_status()
+        if drift_status == DriftOrchestrator.STOP:
+            return PredictionTriggerResponse(
+                generated_at=datetime.now(),
+                league=str(request.league).upper(),
+                total_predictions=0,
+                predictions=[],
+                drift_status=drift_status,
+                blocked=True,
+                message=_empty_predictions_message(
+                    league=str(request.league).upper(),
+                    drift_status=drift_status,
+                    total_predictions=0,
+                ),
+            )
+
         predictor = Predictor()
         raw_predictions = predictor.predict_for_show_predictions(
             league=request.league,
@@ -533,6 +622,13 @@ def trigger_predictions(request: PredictionTriggerRequest) -> PredictionTriggerR
             league=str(request.league).upper(),
             total_predictions=len(serialized),
             predictions=serialized,
+            drift_status=drift_status,
+            blocked=False,
+            message=_empty_predictions_message(
+                league=str(request.league).upper(),
+                drift_status=drift_status,
+                total_predictions=len(serialized),
+            ),
         )
     except ConfigurationError as exc:
         logger.error("Prediction trigger environment mismatch for %s: %s", request.league, exc)
