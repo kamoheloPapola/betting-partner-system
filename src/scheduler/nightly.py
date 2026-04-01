@@ -7,6 +7,8 @@ Sequence:
 3. Retrain stale production models (older than N days).
 4. Promote retrained models if they improved.
 5. Generate performance report.
+6. Auto-retrain underperforming productive models.
+7. Clean up old model artifacts.
 
 Run:
     python -m src.scheduler.nightly
@@ -23,6 +25,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, cast
 
 import pandas as pd
 
+from scripts.cleanup_old_models import cleanup_models
 from src.config import DATA_DIR
 from src.features.build_feature_matrix import FeatureMatrixBuilder
 from src.fetch.fetch_latest_season_csvs import SeasonFetcher
@@ -198,12 +201,12 @@ def find_stale_models(
 
 
 def fetch_latest_data(season: str, force: bool = False) -> None:
-    logger.info("Step 1/5: fetching latest data for season=%s force=%s", season, force)
+    logger.info("Step 1/7: fetching latest data for season=%s force=%s", season, force)
     SeasonFetcher().fetch_season(season=season, force=force)
 
 
 def build_feature_matrix() -> Dict[str, Any]:
-    logger.info("Step 2/5: building feature matrix")
+    logger.info("Step 2/7: building feature matrix")
     result = FeatureMatrixBuilder().build()
     if result.get("status") != "success":
         raise RuntimeError(f"Feature matrix build failed: {result}")
@@ -469,7 +472,7 @@ def auto_retrain_underperforming_models(
         logger.info("No auto-retrain targets found from rolling-Brier checks.")
         return []
 
-    logger.info("Step 6/6: auto-retraining %d underperforming model scopes", len(targets))
+    logger.info("Step 6/7: auto-retraining %d underperforming model scopes", len(targets))
     config_by_name = _config_map()
     notifier = alerter or Alerter()
     outcomes: List[AutoRetrainOutcome] = []
@@ -711,7 +714,7 @@ def retrain_stale_models(
     stale_targets: List[StaleModelTarget],
     feature_df: pd.DataFrame,
 ) -> List[RetrainOutcome]:
-    logger.info("Step 3/5: retraining %d stale model scopes", len(stale_targets))
+    logger.info("Step 3/7: retraining %d stale model scopes", len(stale_targets))
     config_by_name = _config_map()
     outcomes: List[RetrainOutcome] = []
 
@@ -771,7 +774,7 @@ def retrain_stale_models(
 
 
 def promote_if_improved(registry: ModelRegistry, outcomes: List[RetrainOutcome]) -> int:
-    logger.info("Step 4/5: evaluating promotions for retrained models")
+    logger.info("Step 4/7: evaluating promotions for retrained models")
     promotions = 0
     for outcome in outcomes:
         if not outcome.after_key:
@@ -800,8 +803,24 @@ def promote_if_improved(registry: ModelRegistry, outcomes: List[RetrainOutcome])
 
 
 def generate_performance_report() -> Dict[str, Any]:
-    logger.info("Step 5/5: generating performance report")
+    logger.info("Step 5/7: generating performance report")
     return PerformanceTracker().generate_report()
+
+
+def run_model_cleanup(*, keep_versions: int = 3) -> Dict[str, int]:
+    logger.info("Step 7/7: cleaning up old model artifacts (keep_versions=%s)", keep_versions)
+    result = cleanup_models(keep_versions=keep_versions, confirm=True)
+    deleted_count = len(result.deleted_files)
+    freed_bytes = int(result.deleted_bytes)
+    logger.info(
+        "Model cleanup completed: deleted_files=%s freed_bytes=%s",
+        deleted_count,
+        freed_bytes,
+    )
+    return {
+        "deleted_files": deleted_count,
+        "freed_bytes": freed_bytes,
+    }
 
 
 def run_nightly(
@@ -880,6 +899,11 @@ def run_nightly(
         auto_outcomes = []
         logger.info("No auto-retrain triggers detected from rolling-Brier checks.")
     auto_promotions = sum(1 for outcome in auto_outcomes if outcome.promoted)
+    cleanup_summary = _run_pipeline_step(
+        "run_model_cleanup",
+        run_model_cleanup,
+        keep_versions=3,
+    )
 
     summary = {
         "status": "ok",
@@ -891,6 +915,8 @@ def run_nightly(
         "auto_retrain_triggered": len(auto_targets),
         "auto_retrained": len(auto_outcomes),
         "auto_promoted": auto_promotions,
+        "cleanup_deleted": int(cleanup_summary.get("deleted_files", 0)),
+        "cleanup_freed_bytes": int(cleanup_summary.get("freed_bytes", 0)),
         "report_status": report.get("status", "OK") if isinstance(report, dict) else "OK",
     }
     logger.info("Nightly pipeline completed: %s", summary)

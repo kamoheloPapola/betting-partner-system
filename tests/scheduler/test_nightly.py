@@ -133,6 +133,12 @@ def test_run_nightly_executes_expected_sequence(monkeypatch):
         lambda registry, trainer, feature_df, evals_df: calls.append(("auto-retrain", len(feature_df), len(evals_df)))
         or [auto_outcome],
     )
+    monkeypatch.setattr(
+        nightly,
+        "run_model_cleanup",
+        lambda keep_versions=3: calls.append(("cleanup", keep_versions))
+        or {"deleted_files": 4, "freed_bytes": 2048},
+    )
 
     summary = nightly.run_nightly(season="2526", force_fetch=True, stale_days=7)
 
@@ -147,12 +153,15 @@ def test_run_nightly_executes_expected_sequence(monkeypatch):
         "evals",
         "auto-find",
         "auto-retrain",
+        "cleanup",
     ]
     assert summary["retrained"] == 1
     assert summary["promoted"] == 1
     assert summary["auto_retrain_triggered"] == 1
     assert summary["auto_retrained"] == 1
     assert summary["auto_promoted"] == 1
+    assert summary["cleanup_deleted"] == 4
+    assert summary["cleanup_freed_bytes"] == 2048
 
 
 def test_find_auto_retrain_targets_detects_rolling_brier_breach():
