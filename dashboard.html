@@ -66,12 +66,42 @@
             box-shadow: 0 0 10px var(--accent);
         }
 
-        .env-toggle {
+        .header-status {
             display: flex;
             align-items: center;
-            gap: 1rem;
+            gap: 0.5rem;
             font-size: 0.875rem;
             color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--text-secondary);
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .status-dot.checking {
+            color: var(--warning);
+            background-color: var(--warning);
+        }
+
+        .status-dot.online {
+            color: var(--success);
+            background-color: var(--success);
+        }
+
+        .status-dot.offline {
+            color: var(--danger);
+            background-color: var(--danger);
+        }
+
+        .status-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
         }
 
         /* TABS */
@@ -261,36 +291,6 @@
             transition: width 0.5s ease;
         }
 
-        /* SWITCH */
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 44px;
-            height: 24px;
-        }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: var(--border);
-            transition: .4s;
-            border-radius: 24px;
-        }
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 16px;
-            width: 16px;
-            left: 4px;
-            bottom: 4px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        input:checked + .slider { background-color: var(--accent); }
-        input:checked + .slider:before { transform: translateX(20px); background-color: var(--bg-dark); }
-
         /* SPINNER */
         .spinner {
             border: 2px solid var(--border);
@@ -353,13 +353,9 @@
             <div class="logo-dot"></div>
             FI ENGINE TERMINAL
         </div>
-        <div class="env-toggle">
-            <span>PROD</span>
-            <label class="switch">
-                <input type="checkbox" id="envSwitch">
-                <span class="slider"></span>
-            </label>
-            <span>LOCAL</span>
+        <div class="header-status" id="api-status" role="status" aria-live="polite">
+            <span class="status-dot checking" id="api-status-dot"></span>
+            <span class="status-label" id="api-status-label">API checking</span>
         </div>
     </header>
 
@@ -477,14 +473,47 @@
 
     <script>
         // CORE CONFIG
-        const APIS = {
-            PROD: 'https://football-intelligence-api-yyb3.onrender.com',
-            LOCAL: 'http://localhost:8000'
+        const API_BASE_URL = 'http://localhost:8000';
+        const API_STATUS_POLL_MS = 10000;
+
+        const apiUrl = (path) => `${API_BASE_URL}${path}`;
+
+        const setApiStatus = (state) => {
+            const dot = document.getElementById('api-status-dot');
+            const label = document.getElementById('api-status-label');
+            if (!dot || !label) return;
+
+            dot.className = `status-dot ${state}`;
+
+            if (state === 'online') {
+                label.textContent = 'API online';
+                return;
+            }
+
+            if (state === 'offline') {
+                label.textContent = 'API offline';
+                return;
+            }
+
+            label.textContent = 'API checking';
         };
 
-        const getBaseUrl = () => {
-            return document.getElementById('envSwitch').checked ? APIS.LOCAL : APIS.PROD;
-        };
+        async function checkApiStatus() {
+            const controller = new AbortController();
+            const timeoutId = window.setTimeout(() => controller.abort(), 4000);
+
+            try {
+                const res = await fetch(apiUrl('/api/v1/health'), {
+                    cache: 'no-store',
+                    signal: controller.signal
+                });
+                setApiStatus(res.ok ? 'online' : 'offline');
+            } catch (err) {
+                setApiStatus('offline');
+            } finally {
+                window.clearTimeout(timeoutId);
+            }
+        }
 
         const showError = (containerId, msg) => {
             const el = document.getElementById(containerId);
@@ -528,7 +557,7 @@
             btn.classList.add('loading');
             
             try {
-                const res = await fetch(`${getBaseUrl()}/api/v1/predictions/trigger`, {
+                const res = await fetch(apiUrl('/api/v1/predictions/trigger'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ league })
@@ -585,7 +614,7 @@
             btn.classList.add('loading');
             
             try {
-                const res = await fetch(`${getBaseUrl()}/api/v1/slips/${league}`);
+                const res = await fetch(apiUrl(`/api/v1/slips/${league}`));
                 if (!res.ok) throw new Error(`API Error: ${res.status}`);
                 
                 const data = await res.json();
@@ -654,7 +683,7 @@
         // API: HEALTH & DRIFT
         async function fetchHealth() {
             try {
-                const res = await fetch(`${getBaseUrl()}/api/v1/model-health`);
+                const res = await fetch(apiUrl('/api/v1/model-health'));
                 if (!res.ok) throw new Error(`API Error: ${res.status}`);
                 const data = await res.json();
                 
@@ -740,8 +769,14 @@
 
         // AUTO-LOAD HEALTH
         window.addEventListener('DOMContentLoaded', () => {
-             fetchHealth();
+            checkApiStatus();
+            fetchHealth();
         });
+
+        // POLL API STATUS (10s)
+        setInterval(() => {
+            checkApiStatus();
+        }, API_STATUS_POLL_MS);
 
         // AUTO-REFRESH DRIFT (60s)
         setInterval(() => {
