@@ -84,3 +84,34 @@ class Predictor:
         if limit is not None:
             matches = matches[:limit]
         return self.predict_all(matches)
+
+    def predict_for_show_predictions(
+        self,
+        *,
+        league: Optional[str],
+        date: str | DateFilter = DateFilter.TODAY,
+        show_all: bool = False,
+        timezone: str = "LOCAL",
+        simulate: bool = True,
+        limit: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Reuse the exact core data/prediction path used by CLI `show-predictions`.
+        """
+        league_code = self._resolve_league(league)
+        df = self.container.pipeline.run(league=league_code)
+        validate_match_dataframe(df, context="predictor.predict_for_show_predictions")
+
+        df_target = filter_matches_by_date(
+            df,
+            date,
+            show_all=show_all,
+            user_timezone=timezone,
+        )
+        if df_target.empty:
+            return []
+
+        predictions = _run_predict_loop(df_target.sort_values("date"), use_simulator=simulate)
+        if limit is not None:
+            return predictions[:limit]
+        return predictions

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.schemas import (
@@ -21,10 +22,12 @@ from src.api.schemas import (
     MatchPrediction,
     PredictionTriggerRequest,
     PredictionTriggerResponse,
+    TriggerPrediction,
 )
 from src.config import DATA_DIR, DEFAULT_TRAINING_LEAGUES
 from src.config.model_state import get_model_state, is_locked
 from src.core.exceptions import ConfigurationError, DataValidationError
+from src.ml.model_db import ModelHistoryDB
 from src.ml.registry import ModelRegistry
 from src.ml.training.model_configs import MODEL_CONFIGS
 from src.monitoring.drift_orchestrator import DriftOrchestrator
@@ -107,6 +110,108 @@ def _coerce_float(value: Any) -> Optional[float]:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _first_valid_float(*values: Any, default: Optional[float] = 0.0) -> Optional[float]:
+    for candidate in values:
+        parsed = _coerce_float(candidate)
+        if parsed is not None:
+            return parsed
+    return default
+
+
+def _extract_manifest_brier(meta: Dict[str, Any]) -> Optional[float]:
+    metrics = meta.get("metrics", {}) if isinstance(meta.get("metrics"), dict) else {}
+    return _first_valid_float(
+        metrics.get("brier_score"),
+        meta.get("brier_score"),
+        default=None,
+    )
+
+
+def _resolve_history_brier(
+    model_db: Optional[ModelHistoryDB],
+    *,
+    model_name: str,
+    preferred_leagues: List[str],
+    version: str,
+) -> Optional[float]:
+    if model_db is None:
+        return None
+
+    seen: set[str] = set()
+    for league in preferred_leagues:
+        normalized_league = str(league).strip()
+        if not normalized_league or normalized_league in seen:
+            continue
+        seen.add(normalized_league)
+
+        try:
+            events = model_db.fetch_events(
+                model_name=model_name,
+                league=normalized_league,
+                limit=50,
+            )
+        except Exception:
+            continue
+
+        for event in events:
+            if version and str(event.get("version", "")) != version:
+                continue
+            brier = _coerce_float(event.get("brier_score"))
+            if brier is not None:
+                return brier
+
+        for event in events:
+            brier = _coerce_float(event.get("brier_score"))
+            if brier is not None:
+                return brier
+
+    return None
+
+
+def _resolve_drift_status(
+    drift: Any,
+    *,
+    market: str,
+    global_status: str,
+) -> str:
+    status_getter = getattr(drift, "get_status", None)
+    if callable(status_getter):
+        try:
+            status = status_getter(market)
+        except TypeError:
+            status = status_getter()
+        if status is not None:
+            return str(status)
+
+    market_drift = getattr(drift, "market_status", {})
+    if isinstance(market_drift, dict):
+        return str(market_drift.get(market, global_status))
+    return global_status
+
+
+def _serialize_trigger_prediction(prediction: Dict[str, Any]) -> TriggerPrediction:
+    home_prob = _first_valid_float(prediction.get("home"), prediction.get("home_win")) or 0.0
+    draw_prob = _first_valid_float(prediction.get("draw")) or 0.0
+    away_prob = _first_valid_float(prediction.get("away"), prediction.get("away_win")) or 0.0
+    btts_prob = _first_valid_float(prediction.get("btts"), prediction.get("btts_yes")) or 0.0
+    over_25_prob = _first_valid_float(prediction.get("o25"), prediction.get("over_2_5")) or 0.0
+    confidence = _first_valid_float(
+        prediction.get("confidence"),
+        max(home_prob, draw_prob, away_prob),
+    )
+    return TriggerPrediction(
+        home_team=str(prediction.get("home_team", "")),
+        away_team=str(prediction.get("away_team", "")),
+        home_win_prob=home_prob,
+        draw_prob=draw_prob,
+        away_win_prob=away_prob,
+        btts_prob=btts_prob,
+        over_25_prob=over_25_prob,
+        confidence=confidence,
+        ensemble_divergence=bool(prediction.get("ensemble_divergence", False)),
+    )
 
 
 def _extract_probabilities(prediction: Dict[str, Any]) -> Dict[str, Any]:
@@ -262,6 +367,12 @@ app.add_middleware(
 )
 
 
+@app.get("/dashboard")
+def get_dashboard() -> FileResponse:
+    """Serve the terminal dashboard UI."""
+    return FileResponse("dashboard.html")
+
+
 @app.get("/health", response_model=HealthCheck)
 def health_check() -> HealthCheck:
     return HealthCheck(
@@ -310,13 +421,18 @@ def get_drift_status() -> Dict[str, Any]:
 def get_model_health() -> Dict[str, Any]:
     """Current productive model health by market and serving scope."""
     registry = ModelRegistry()
+    model_db: Optional[ModelHistoryDB] = None
+    try:
+        model_db = ModelHistoryDB()
+    except Exception as exc:
+        logger.warning("Model history DB unavailable for model-health brier fallback: %s", exc)
+
     drift = DriftOrchestrator()
     global_drift = drift.inspect_global_state()
     drift.load_confidence_state()
     _report_drift_stop_transition(global_drift)
 
     global_status = str(global_drift.get("status", DriftOrchestrator.STOP))
-    market_drift = drift.market_status if isinstance(drift.market_status, dict) else {}
     model_names = [
         str(cfg["name"])
         for cfg in MODEL_CONFIGS
@@ -332,16 +448,34 @@ def get_model_health() -> Dict[str, Any]:
             if not isinstance(meta, dict):
                 continue
 
-            metrics = meta.get("metrics", {}) if isinstance(meta.get("metrics"), dict) else {}
-            brier_score = _coerce_float(metrics.get("brier_score") if "brier_score" in metrics else meta.get("brier_score"))
-            last_trained = meta.get("trained_at") or meta.get("registered_at")
+            model_name = str(meta.get("name") or market)
+            model_league = str(meta.get("league") or "Global")
+            version = str(meta.get("version", "unknown"))
+            brier_score = _extract_manifest_brier(meta)
+            if brier_score is None:
+                brier_score = _resolve_history_brier(
+                    model_db,
+                    model_name=model_name,
+                    preferred_leagues=[model_league, str(serving_league), "Global"],
+                    version=version,
+                )
+
+            last_trained = (
+                meta.get("training_date")
+                or meta.get("trained_at")
+                or meta.get("registered_at")
+            )
             entries.append(
                 {
                     "league": serving_league,
-                    "model_league": str(meta.get("league") or "Global"),
-                    "version": str(meta.get("version", "unknown")),
+                    "model_league": model_league,
+                    "version": version,
                     "brier_score": brier_score,
-                    "drift_status": str(market_drift.get(market, global_status)),
+                    "drift_status": _resolve_drift_status(
+                        drift,
+                        market=market,
+                        global_status=global_status,
+                    ),
                     "last_trained": last_trained,
                 }
             )
@@ -385,8 +519,15 @@ def trigger_predictions(request: PredictionTriggerRequest) -> PredictionTriggerR
 
     try:
         predictor = Predictor()
-        raw_predictions = predictor.predict_upcoming(league=request.league, limit=request.limit)
-        serialized = [_serialize_prediction(prediction) for prediction in raw_predictions]
+        raw_predictions = predictor.predict_for_show_predictions(
+            league=request.league,
+            date="today",
+            show_all=False,
+            timezone="LOCAL",
+            simulate=True,
+            limit=request.limit,
+        )
+        serialized = [_serialize_trigger_prediction(prediction) for prediction in raw_predictions]
         return PredictionTriggerResponse(
             generated_at=datetime.now(),
             league=str(request.league).upper(),

@@ -407,6 +407,23 @@ class DriftOrchestrator:
             ),
         }
 
+    def get_status(self, market: Optional[str] = None) -> str:
+        """
+        Return canonical STOP/WATCH/GO status for global or market scope.
+
+        Args:
+            market:
+                Optional market key. When provided, returns the latest market
+                status if available, otherwise falls back to global status.
+        """
+        self.load_global_state()
+        if market:
+            self.load_confidence_state()
+            market_status = self.market_status.get(str(market))
+            if market_status is not None:
+                return self._normalize_state(market_status)
+        return self._normalize_state(self.global_status)
+
     def persist_confidence_state(self) -> None:
         state = {
             "market_status": self.market_status,

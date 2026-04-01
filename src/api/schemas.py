@@ -33,13 +33,27 @@ class PredictionTriggerRequest(BaseModel):
     limit: Optional[int] = None
 
 
+class TriggerPrediction(BaseModel):
+    """Flat prediction payload returned by manual trigger endpoint."""
+
+    home_team: str
+    away_team: str
+    home_win_prob: float
+    draw_prob: float
+    away_win_prob: float
+    btts_prob: float
+    over_25_prob: float
+    confidence: float
+    ensemble_divergence: bool
+
+
 class PredictionTriggerResponse(BaseModel):
     """Manual prediction trigger response payload."""
 
     generated_at: datetime
     league: str
     total_predictions: int
-    predictions: List[MatchPrediction]
+    predictions: List[TriggerPrediction]
 
 
 class ForbiddenFruitSlipLeg(BaseModel):
