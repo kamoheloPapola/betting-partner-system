@@ -9,6 +9,7 @@ System maintenance and monitoring commands:
 """
 import typer
 import pandas as pd
+import numpy as np
 import logging
 from datetime import datetime, timezone
 from typing import TypedDict, Optional
@@ -28,6 +29,42 @@ class DriftMetrics(TypedDict):
     hist_goals_avg: float
     recent_goals_avg: float
     sample_size: int
+
+
+def _calculate_binned_ece(
+    probabilities: pd.Series,
+    outcomes: pd.Series,
+    n_bins: int = 10,
+) -> float:
+    """
+    Calculate Expected Calibration Error (ECE) with equal-width bins.
+    """
+    probs = pd.to_numeric(probabilities, errors="coerce").to_numpy(dtype=float)
+    hits = pd.to_numeric(outcomes, errors="coerce").to_numpy(dtype=float)
+
+    mask = np.isfinite(probs) & np.isfinite(hits)
+    probs = probs[mask]
+    hits = hits[mask]
+    if probs.size == 0:
+        return 0.0
+
+    probs = np.clip(probs, 0.0, 1.0)
+    bin_edges = np.linspace(0.0, 1.0, n_bins + 1)
+    bin_ids = np.digitize(probs, bin_edges, right=True) - 1
+    bin_ids = np.clip(bin_ids, 0, n_bins - 1)
+
+    ece = 0.0
+    total = float(probs.size)
+    for idx in range(n_bins):
+        in_bin = bin_ids == idx
+        count = int(in_bin.sum())
+        if count == 0:
+            continue
+        bin_conf = float(probs[in_bin].mean())
+        bin_acc = float(hits[in_bin].mean())
+        ece += (count / total) * abs(bin_conf - bin_acc)
+
+    return float(ece)
 
 
 def _default_season_token(now: Optional[datetime] = None) -> str:
@@ -409,7 +446,7 @@ def check_drift(
                     hits = scored["hit"]
                     metrics = {
                         "hit_rate": float(hits.mean()),
-                        "ece": float((probs - hits).abs().mean()),
+                        "ece": _calculate_binned_ece(probs, hits),
                         "mean_conf": float(probs.mean()),
                     }
                     status = monitor.evaluate_global_drift(metrics)

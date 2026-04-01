@@ -1,0 +1,11 @@
+{
+  "baseline_hit_rate": 0.45,
+  "baseline_ece": 0.15,
+  "ece_baseline": 0.15,
+  "baseline_mean_conf": 0.4182754134887634,
+  "baseline_selection_rate": 0.03,
+  "training_date": null,
+  "source": "legacy-tier9-audit",
+  "migrated_at": "2026-03-06T00:00:00Z",
+  "notes": "Transitional baseline artifact. Replace this file during the next model training/export cycle."
+}
