@@ -1,0 +1,47 @@
+{
+  "match_outcome": {
+    "accuracy": 0.5181,
+    "log_loss": 1.0102,
+    "brier_score": 0.6033
+  },
+  "home_goals": {
+    "mae": 1.0332,
+    "rmse": 1.2972,
+    "calibration_score": 0.1641
+  },
+  "home_goals_xgb": {
+    "mae": 1.0277,
+    "rmse": 1.3065,
+    "calibration_score": 0.1676
+  },
+  "away_goals": {
+    "mae": 0.9201,
+    "rmse": 1.1856,
+    "calibration_score": 0.1907
+  },
+  "away_goals_xgb": {
+    "mae": 0.9237,
+    "rmse": 1.1969,
+    "calibration_score": 0.1932
+  },
+  "corners": {
+    "mae": 2.8877,
+    "rmse": 3.615,
+    "calibration_score": 0.0
+  },
+  "corners_xgb": {
+    "mae": 2.9649,
+    "rmse": 3.7119,
+    "calibration_score": 0.0
+  },
+  "cards": {
+    "mae": 1.8458,
+    "rmse": 2.3875,
+    "calibration_score": 0.0333
+  },
+  "cards_xgb": {
+    "mae": 1.9421,
+    "rmse": 2.5168,
+    "calibration_score": 0.0346
+  }
+}

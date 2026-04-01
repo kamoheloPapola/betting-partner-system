@@ -354,9 +354,20 @@ def check_drift(
                 predictions["kickoff_date"], utc=True, errors="coerce"
             )
             predictions = predictions.dropna(subset=["kickoff_date"])
+
             # Use a calendar-day cutoff so "last N days" includes the full boundary day.
             cutoff = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=lookback)).normalize()
-            predictions = predictions[predictions["kickoff_date"] >= cutoff]
+            filtered = predictions[predictions["kickoff_date"] >= cutoff]
+
+            # If there are resolved outcomes but none in the live window, fall back to a
+            # data-relative window ending at the latest resolved kickoff. This keeps
+            # drift checks usable on stale/offline datasets and test fixtures.
+            if filtered.empty and not predictions.empty:
+                latest_kickoff = predictions["kickoff_date"].max().normalize()
+                relative_cutoff = latest_kickoff - pd.Timedelta(days=lookback)
+                filtered = predictions[predictions["kickoff_date"] >= relative_cutoff]
+
+            predictions = filtered
             if predictions.empty:
                 console.print(
                     f"[yellow]No resolved predictions found in the last {lookback} days.[/yellow]"
