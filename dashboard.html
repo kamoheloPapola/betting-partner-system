@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FI Terminal</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            --bg-dark: #0f0f0f;
+            --bg-card: #1a1a1a;
+            --bg-hover: #2a2a2a;
+            --accent: #00ff88;
+            --accent-dim: rgba(0, 255, 136, 0.15);
+            --text-primary: #ffffff;
+            --text-secondary: #888888;
+            --border: #333333;
+            --danger: #ff4444;
+            --danger-bg: rgba(255, 68, 68, 0.15);
+            --warning: #ffaa00;
+            --warning-bg: rgba(255, 170, 0, 0.15);
+            --success: #00ff88;
+            --success-bg: rgba(0, 255, 136, 0.15);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* HEADER */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2rem;
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 1.25rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent);
+        }
+
+        .env-toggle {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        /* TABS */
+        .tabs {
+            display: flex;
+            padding: 0 2rem;
+            background-color: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            overflow-x: auto;
+        }
+
+        .tab {
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-weight: 500;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+        }
+
+        .tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        /* MAIN */
+        main {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+
+        .section {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .section.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* CONTROLS */
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        select, button {
+            background-color: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 0.875rem;
+            outline: none;
+        }
+
+        select {
+            cursor: pointer;
+        }
+
+        button {
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        button.primary {
+            background-color: var(--accent-dim);
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+
+        button.primary:hover {
+            background-color: var(--accent);
+            color: var(--bg-dark);
+        }
+
+        /* CARDS / GRIDS */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* TABLES */
+        .table-container {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 0.875rem;
+        }
+
+        th, td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        th {
+            color: var(--text-secondary);
+            font-weight: 500;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tbody tr:hover {
+            background-color: var(--bg-hover);
+        }
+
+        /* UTILITIES */
+        .high-confidence {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge.go { background: var(--success-bg); color: var(--success); }
+        .badge.watch { background: var(--warning-bg); color: var(--warning); }
+        .badge.stop { background: var(--danger-bg); color: var(--danger); }
+
+        .progress-bar {
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            transition: width 0.5s ease;
+        }
+
+        /* SWITCH */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--border);
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: var(--accent); }
+        input:checked + .slider:before { transform: translateX(20px); background-color: var(--bg-dark); }
+
+        /* SPINNER */
+        .spinner {
+            border: 2px solid var(--border);
+            border-top: 2px solid var(--accent);
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+
+        .loading .spinner { display: inline-block; }
+        .loading .btn-text { display: none; }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .error-msg {
+            color: var(--danger);
+            background: var(--danger-bg);
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+            display: none;
+            border: 1px solid var(--danger);
+        }
+        
+        .empty-state {
+            padding: 3rem;
+            text-align: center;
+            color: var(--text-secondary);
+        }
+
+        .divergence-icon {
+            color: var(--warning);
+            margin-left: 0.5rem;
+            cursor: help;
+        }
+
+        .big-status {
+            font-size: 3rem;
+            font-weight: 700;
+            text-align: center;
+            padding: 2rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            letter-spacing: 2px;
+        }
+        .big-status.go { color: var(--success); background: var(--success-bg); border: 2px solid var(--success); }
+        .big-status.watch { color: var(--warning); background: var(--warning-bg); border: 2px solid var(--warning); }
+        .big-status.stop { color: var(--danger); background: var(--danger-bg); border: 2px solid var(--danger); }
+        
+        .flex-between { display: flex; justify-content: space-between; align-items: center; }
+        .text-sm { font-size: 0.75rem; color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">
+            <div class="logo-dot"></div>
+            FI ENGINE TERMINAL
+        </div>
+        <div class="env-toggle">
+            <span>PROD</span>
+            <label class="switch">
+                <input type="checkbox" id="envSwitch">
+                <span class="slider"></span>
+            </label>
+            <span>LOCAL</span>
+        </div>
+    </header>
+
+    <nav class="tabs">
+        <div class="tab active" data-target="predictions">Predictions</div>
+        <div class="tab" data-target="slips">Slip Recommendations</div>
+        <div class="tab" data-target="health">Model Health</div>
+        <div class="tab" data-target="drift">Drift Monitor</div>
+    </nav>
+
+    <main>
+        <!-- PREDICTIONS SECTION -->
+        <section id="predictions" class="section active">
+            <div id="pred-error" class="error-msg"></div>
+            <div class="controls">
+                <select id="pred-league">
+                    <option value="PL">Premier League (PL)</option>
+                    <option value="BL1">Bundesliga (BL1)</option>
+                    <option value="FL1">Ligue 1 (FL1)</option>
+                    <option value="SA">Serie A (SA)</option>
+                    <option value="PD">La Liga (PD)</option>
+                </select>
+                <button id="btn-fetch-pred" class="primary" onclick="fetchPredictions()">
+                    <span class="spinner"></span>
+                    <span class="btn-text">FETCH PREDICTIONS</span>
+                </button>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Home Team</th>
+                            <th>Away Team</th>
+                            <th>Home Win %</th>
+                            <th>Draw %</th>
+                            <th>Away Win %</th>
+                            <th>BTTS %</th>
+                            <th>Over 2.5 %</th>
+                            <th>Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pred-tbody">
+                        <tr><td colspan="8" class="empty-state">Select a league and fetch predictions</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- SLIPS SECTION -->
+        <section id="slips" class="section">
+            <div id="slip-error" class="error-msg"></div>
+            <div class="controls">
+                <select id="slip-league">
+                    <option value="PL">Premier League (PL)</option>
+                    <option value="BL1">Bundesliga (BL1)</option>
+                    <option value="FL1">Ligue 1 (FL1)</option>
+                    <option value="SA">Serie A (SA)</option>
+                    <option value="PD">La Liga (PD)</option>
+                </select>
+                <button id="btn-fetch-slip" class="primary" onclick="fetchSlips()">
+                    <span class="spinner"></span>
+                    <span class="btn-text">GET SLIP</span>
+                </button>
+            </div>
+            
+            <div id="slip-container" class="grid">
+                <div class="empty-state" style="grid-column: 1 / -1;">No slip loaded.</div>
+            </div>
+        </section>
+
+        <!-- HEALTH SECTION -->
+        <section id="health" class="section">
+            <div id="health-error" class="error-msg"></div>
+            <div class="flex-between" style="margin-bottom: 1.5rem;">
+                <h2 style="font-size: 1.25rem; font-weight: 600;">System Health Metrics</h2>
+                <button onclick="fetchHealth()" style="background: transparent; border: 1px solid var(--border);">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.28l5.67-4.14"/></svg>
+                </button>
+            </div>
+            <div id="health-grid" class="grid">
+                <div class="empty-state" style="grid-column: 1 / -1;">Loading health data...</div>
+            </div>
+        </section>
+
+        <!-- DRIFT SECTION -->
+        <section id="drift" class="section">
+            <div id="drift-error" class="error-msg"></div>
+            
+            <div class="flex-between" style="margin-bottom: 1rem;">
+                <h2 style="font-size: 1.25rem; font-weight: 600;">Live Drift Monitor</h2>
+                <div class="text-sm">Auto-refresh: 60s <span id="next-refresh" style="color:var(--accent); font-weight:bold;"></span></div>
+            </div>
+
+            <div id="overall-drift" class="big-status go">
+                SYSTEM GO
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Market</th>
+                            <th>Metric Status</th>
+                            <th>Drift Score</th>
+                            <th>Last Check</th>
+                        </tr>
+                    </thead>
+                    <tbody id="drift-tbody">
+                         <tr><td colspan="4" class="empty-state">Loading monitor...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // CORE CONFIG
+        const APIS = {
+            PROD: 'https://football-intelligence-api-yyb3.onrender.com',
+            LOCAL: 'http://localhost:8000'
+        };
+
+        const getBaseUrl = () => {
+            return document.getElementById('envSwitch').checked ? APIS.LOCAL : APIS.PROD;
+        };
+
+        const showError = (containerId, msg) => {
+            const el = document.getElementById(containerId);
+            if (el) {
+                el.innerText = msg;
+                el.style.display = 'block';
+                setTimeout(() => el.style.display = 'none', 5000);
+            }
+        };
+
+        // TAB NAVIGATION
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+                
+                tab.classList.add('active');
+                const target = tab.getAttribute('data-target');
+                document.getElementById(target).classList.add('active');
+
+                if (target === 'health') fetchHealth();
+                if (target === 'drift') fetchHealth(); // Drift uses same endpoint conceptually
+            });
+        });
+
+        // FORMATTERS
+        const fmtPct = (val) => val != null ? (val * 100).toFixed(1) + '%' : '-';
+        const getBrierColor = (score) => {
+            if (score == null) return 'var(--text-secondary)';
+            if (score < 0.20) return 'var(--success)';
+            if (score <= 0.25) return 'var(--warning)';
+            return 'var(--danger)';
+        };
+
+        // API: PREDICTIONS
+        async function fetchPredictions() {
+            const btn = document.getElementById('btn-fetch-pred');
+            const tbody = document.getElementById('pred-tbody');
+            const league = document.getElementById('pred-league').value;
+            
+            btn.classList.add('loading');
+            
+            try {
+                const res = await fetch(`${getBaseUrl()}/api/v1/predictions/trigger`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ league })
+                });
+
+                if (!res.ok) throw new Error(`API Error: ${res.status}`);
+                
+                const data = await res.json();
+                const predictions = data.predictions || data; 
+
+                if (!Array.isArray(predictions) || predictions.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No predictions found for ${league}</td></tr>`;
+                    return;
+                }
+
+                tbody.innerHTML = predictions.map(p => {
+                    const hConf = p.confidence > 70 || p.confidence > 0.7; 
+                    const confVal = p.confidence <= 1 ? p.confidence * 100 : p.confidence;
+                    
+                    const divWarning = p.ensemble_divergence 
+                        ? `<span class="divergence-icon" title="Ensemble Divergence Detected">⚠️</span>` 
+                        : '';
+
+                    return `
+                        <tr>
+                            <td style="font-weight: 500;">${p.home_team || 'Home'}</td>
+                            <td style="font-weight: 500;">${p.away_team || 'Away'}</td>
+                            <td>${fmtPct(p.home_win_prob || p.prob_1)}</td>
+                            <td>${fmtPct(p.draw_prob || p.prob_x)}</td>
+                            <td>${fmtPct(p.away_win_prob || p.prob_2)}</td>
+                            <td>${fmtPct(p.btts_prob)}</td>
+                            <td>${fmtPct(p.over_25_prob)}</td>
+                            <td class="${hConf ? 'high-confidence' : ''}">
+                                ${confVal ? confVal.toFixed(1) + '%' : '-'}
+                                ${divWarning}
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+            } catch (err) {
+                showError('pred-error', err.message);
+            } finally {
+                btn.classList.remove('loading');
+            }
+        }
+
+        // API: SLIPS
+        async function fetchSlips() {
+            const btn = document.getElementById('btn-fetch-slip');
+            const container = document.getElementById('slip-container');
+            const league = document.getElementById('slip-league').value;
+            
+            btn.classList.add('loading');
+            
+            try {
+                const res = await fetch(`${getBaseUrl()}/api/v1/slips/${league}`);
+                if (!res.ok) throw new Error(`API Error: ${res.status}`);
+                
+                const data = await res.json();
+                const slip = data.slip || data;
+
+                if (!slip || !slip.legs || slip.legs.length === 0) {
+                     container.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1;">No slip available for ${league}</div>`;
+                     return;
+                }
+
+                const confPct = slip.confidence <= 1 ? slip.confidence * 100 : slip.confidence;
+                
+                let html = `
+                    <div class="card" style="grid-column: 1 / -1; border-color: var(--accent);">
+                        <div class="card-header" style="border-bottom:none; padding-bottom:0;">
+                            <div>
+                                <h3 style="color: var(--accent); margin-bottom: 0.25rem;">Recommended Edge Slip</h3>
+                                <div class="text-sm">CSS Score: ${slip.css_score || '-'}</div>
+                            </div>
+                            <div style="text-align: right; width: 150px;">
+                                <div class="text-sm">Overall Confidence</div>
+                                <div style="font-weight:bold;">${confPct ? confPct.toFixed(1) + '%' : '-'}</div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${confPct || 0}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 1rem; border-top: 1px solid var(--border); padding-top: 1rem;">
+                            <table style="width: 100%;">
+                                <thead>
+                                    <tr>
+                                        <th style="padding: 0.5rem 0;">Match</th>
+                                        <th style="padding: 0.5rem 0;">Market</th>
+                                        <th style="padding: 0.5rem 0; text-align:right;">Probability</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                slip.legs.forEach(leg => {
+                    html += `
+                        <tr>
+                            <td style="padding: 0.75rem 0; font-weight:500;">${leg.match}</td>
+                            <td style="padding: 0.75rem 0;">
+                                <span style="background: var(--bg-hover); padding: 0.25rem 0.5rem; border-radius: 4px; font-family: monospace;">
+                                    ${leg.market}
+                                </span>
+                            </td>
+                            <td style="padding: 0.75rem 0; text-align:right; font-weight:bold; color: var(--accent);">
+                                ${fmtPct(leg.probability)}
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `</tbody></table></div></div>`;
+                container.innerHTML = html;
+
+            } catch (err) {
+                showError('slip-error', err.message);
+            } finally {
+                btn.classList.remove('loading');
+            }
+        }
+
+        // API: HEALTH & DRIFT
+        async function fetchHealth() {
+            try {
+                const res = await fetch(`${getBaseUrl()}/api/v1/model-health`);
+                if (!res.ok) throw new Error(`API Error: ${res.status}`);
+                const data = await res.json();
+                
+                const markets = data.markets || data; 
+                
+                // --- UPDATE HEALTH TAB ---
+                const hGrid = document.getElementById('health-grid');
+                if (!markets || Object.keys(markets).length === 0) {
+                    hGrid.innerHTML = `<div class="empty-state" style="grid-column: 1 / -1;">No health data available</div>`;
+                } else {
+                    let hHtml = '';
+                    Object.entries(markets).forEach(([marketName, metrics]) => {
+                        const bColor = getBrierColor(metrics.brier_score);
+                        const statusClass = (metrics.drift_status || 'watch').toLowerCase();
+                        
+                        hHtml += `
+                            <div class="card">
+                                <div class="card-header">
+                                    <span>${marketName.toUpperCase()}</span>
+                                    <span class="badge ${statusClass}">${metrics.drift_status || 'UNKNOWN'}</span>
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:0.5rem; margin-top:0.5rem;">
+                                    <div class="flex-between">
+                                        <span class="text-sm">Model version</span>
+                                        <span style="font-family:monospace;">${metrics.model_name || 'v1.0'}</span>
+                                    </div>
+                                    <div class="flex-between">
+                                        <span class="text-sm">Brier Score</span>
+                                        <span style="font-weight:bold; color:${bColor};">${metrics.brier_score ? metrics.brier_score.toFixed(4) : '-'}</span>
+                                    </div>
+                                    <div class="flex-between">
+                                        <span class="text-sm">Last Trained</span>
+                                        <span>${metrics.last_trained ? new Date(metrics.last_trained).toLocaleDateString() : '-'}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    hGrid.innerHTML = hHtml;
+                }
+
+                // --- UPDATE DRIFT TAB ---
+                const dTbody = document.getElementById('drift-tbody');
+                const dStatus = document.getElementById('overall-drift');
+                
+                let hasStop = false;
+                let hasWatch = false;
+                let dHtml = '';
+
+                Object.entries(markets).forEach(([marketName, metrics]) => {
+                    const statusClass = (metrics.drift_status || '').toLowerCase();
+                    if (statusClass === 'stop') hasStop = true;
+                    else if (statusClass === 'watch') hasWatch = true;
+
+                    dHtml += `
+                        <tr>
+                            <td style="font-weight:500;">${marketName.toUpperCase()}</td>
+                            <td><span class="badge ${statusClass}">${metrics.drift_status || 'UNKNOWN'}</span></td>
+                            <td>${metrics.drift_score ? metrics.drift_score.toFixed(3) : '-'}</td>
+                            <td class="text-sm">${new Date().toLocaleTimeString()}</td>
+                        </tr>
+                    `;
+                });
+                
+                if (dHtml) dTbody.innerHTML = dHtml;
+
+                if (hasStop) {
+                    dStatus.className = 'big-status stop';
+                    dStatus.innerText = 'SYSTEM STOP - DRIFT DETECTED';
+                } else if (hasWatch) {
+                    dStatus.className = 'big-status watch';
+                    dStatus.innerText = 'WATCH - MINOR DRIFT';
+                } else {
+                    dStatus.className = 'big-status go';
+                    dStatus.innerText = 'SYSTEM GO';
+                }
+
+            } catch (err) {
+                showError('health-error', `Failed to load health: ${err.message}`);
+                showError('drift-error', `Failed to load monitor: ${err.message}`);
+            }
+        }
+
+        // AUTO-LOAD HEALTH
+        window.addEventListener('DOMContentLoaded', () => {
+             fetchHealth();
+        });
+
+        // AUTO-REFRESH DRIFT (60s)
+        setInterval(() => {
+            if (document.getElementById('drift').classList.contains('active')) {
+                fetchHealth();
+            }
+        }, 60000);
+
+        setInterval(() => {
+            if (document.getElementById('drift').classList.contains('active')) {
+                const el = document.getElementById('next-refresh');
+                let count = parseInt(el.getAttribute('data-count') || 60);
+                count--;
+                if(count < 0) count = 59;
+                el.innerText = `in ${count}s`;
+                el.setAttribute('data-count', count);
+            }
+        }, 1000);
+
+    </script>
+</body>
+</html>

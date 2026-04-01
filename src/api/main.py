@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.schemas import (
     ForbiddenFruitSlipLeg,
@@ -250,6 +251,14 @@ app = FastAPI(
     title="Betting Partner API",
     version="2.1.0",
     description="Inference-only API for betting predictions",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
