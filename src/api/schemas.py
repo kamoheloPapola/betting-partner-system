@@ -26,6 +26,22 @@ class MatchPrediction(BaseModel):
     probabilities: Dict[str, Optional[float | bool]]
 
 
+class PredictionTriggerRequest(BaseModel):
+    """Request payload for manual prediction triggering."""
+
+    league: str
+    limit: Optional[int] = None
+
+
+class PredictionTriggerResponse(BaseModel):
+    """Manual prediction trigger response payload."""
+
+    generated_at: datetime
+    league: str
+    total_predictions: int
+    predictions: List[MatchPrediction]
+
+
 class ForbiddenFruitSlipLeg(BaseModel):
     """Single leg returned by the slip builder."""
 

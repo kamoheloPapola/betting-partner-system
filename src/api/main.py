@@ -18,6 +18,8 @@ from src.api.schemas import (
     ForbiddenFruitSlipResponse,
     HealthCheck,
     MatchPrediction,
+    PredictionTriggerRequest,
+    PredictionTriggerResponse,
 )
 from src.config import DATA_DIR, DEFAULT_TRAINING_LEAGUES
 from src.config.model_state import get_model_state, is_locked
@@ -156,6 +158,27 @@ def _raise_environment_mismatch(exc: ConfigurationError) -> None:
         status_code=503,
         detail=f"Model environment mismatch: {exc}",
     ) from exc
+
+
+def _generate_forbidden_fruit_slip(
+    *,
+    league: Optional[str],
+    min_prob: float,
+    max_selections: int,
+) -> ForbiddenFruitSlipResponse:
+    predictor = Predictor()
+    raw_predictions = predictor.predict_upcoming(league=league)
+    builder = ForbiddenFruitSlipBuilder()
+    slip = builder.generate(
+        raw_predictions,
+        min_probability=min_prob,
+        max_selections=max_selections,
+    )
+    return ForbiddenFruitSlipResponse(
+        generated_at=datetime.now(),
+        model_state=get_model_state(),
+        slip=[_serialize_slip_leg(leg) for leg in slip],
+    )
 
 
 def _load_latest_reliability_for_league(league: str) -> List[Dict[str, Any]]:
@@ -346,6 +369,36 @@ def get_predictions(league: str, limit: Optional[int] = 20) -> List[MatchPredict
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@app.post("/api/v1/predictions/trigger", response_model=PredictionTriggerResponse)
+def trigger_predictions(request: PredictionTriggerRequest) -> PredictionTriggerResponse:
+    if request.limit is not None and request.limit < 1:
+        raise HTTPException(status_code=400, detail="limit must be >= 1")
+
+    try:
+        predictor = Predictor()
+        raw_predictions = predictor.predict_upcoming(league=request.league, limit=request.limit)
+        serialized = [_serialize_prediction(prediction) for prediction in raw_predictions]
+        return PredictionTriggerResponse(
+            generated_at=datetime.now(),
+            league=str(request.league).upper(),
+            total_predictions=len(serialized),
+            predictions=serialized,
+        )
+    except ConfigurationError as exc:
+        logger.error("Prediction trigger environment mismatch for %s: %s", request.league, exc)
+        _raise_environment_mismatch(exc)
+    except DataValidationError as exc:
+        logger.warning("Prediction trigger request rejected for %s: %s", request.league, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("Prediction trigger error for %s: %s", request.league, exc)
+        capture_exception(
+            exc,
+            context={"endpoint": "/api/v1/predictions/trigger", "league": request.league},
+        )
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @app.get(
     "/api/v1/slips/forbidden-fruit",
     response_model=ForbiddenFruitSlipResponse,
@@ -360,18 +413,10 @@ def get_forbidden_fruit_slip(
         raise HTTPException(status_code=400, detail="max_selections must be >= 2")
 
     try:
-        predictor = Predictor()
-        raw_predictions = predictor.predict_upcoming()
-        builder = ForbiddenFruitSlipBuilder()
-        slip = builder.generate(
-            raw_predictions,
-            min_probability=min_prob,
+        return _generate_forbidden_fruit_slip(
+            league=None,
+            min_prob=min_prob,
             max_selections=max_selections,
-        )
-        return ForbiddenFruitSlipResponse(
-            generated_at=datetime.now(),
-            model_state=get_model_state(),
-            slip=[_serialize_slip_leg(leg) for leg in slip],
         )
     except ConfigurationError as exc:
         logger.error("Forbidden Fruit environment mismatch: %s", exc)
@@ -382,6 +427,35 @@ def get_forbidden_fruit_slip(
     except Exception as exc:
         logger.error("Forbidden Fruit error: %s", exc)
         capture_exception(exc, context={"endpoint": "/api/v1/slips/forbidden-fruit"})
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/slips/{league}", response_model=ForbiddenFruitSlipResponse)
+def get_latest_slips(
+    league: str,
+    min_prob: float = 0.65,
+    max_selections: int = 4,
+) -> ForbiddenFruitSlipResponse:
+    if not 0.0 <= min_prob <= 1.0:
+        raise HTTPException(status_code=400, detail="min_prob must be between 0 and 1")
+    if max_selections < 2:
+        raise HTTPException(status_code=400, detail="max_selections must be >= 2")
+
+    try:
+        return _generate_forbidden_fruit_slip(
+            league=league,
+            min_prob=min_prob,
+            max_selections=max_selections,
+        )
+    except ConfigurationError as exc:
+        logger.error("League slip environment mismatch for %s: %s", league, exc)
+        _raise_environment_mismatch(exc)
+    except DataValidationError as exc:
+        logger.warning("League slip request rejected for %s: %s", league, exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.error("League slip error for %s: %s", league, exc)
+        capture_exception(exc, context={"endpoint": "/api/v1/slips/{league}", "league": league})
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
