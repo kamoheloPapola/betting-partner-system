@@ -3,7 +3,7 @@
     "train_and_val": "<=2022",
     "test": ">=2023"
   },
-  "feature_count": 287,
+  "feature_count": 30,
   "models_trained": [
     "match_outcome",
     "home_goals",

@@ -47,8 +47,19 @@ class PredictionGuard:
              raise RuntimeError(f"Model missing registry metadata in {context}. Bypass detected?")
 
         # 2. Guard: Feature Schema (Strict Equality)
-        required_features = getattr(model, 'features', getattr(model, 'feature_names_in_', []))
-        if not required_features:
+        required_features_raw = getattr(model, 'features', None)
+        if required_features_raw is None:
+            required_features_raw = getattr(model, 'feature_names_in_', [])
+
+        # Normalize to list to avoid ambiguous truth-value checks for numpy arrays.
+        if isinstance(required_features_raw, np.ndarray):
+            required_features = required_features_raw.tolist()
+        elif isinstance(required_features_raw, (list, tuple, pd.Index)):
+            required_features = list(required_features_raw)
+        else:
+            required_features = []
+
+        if len(required_features) == 0:
             # Fallback (rare)
             pass
             

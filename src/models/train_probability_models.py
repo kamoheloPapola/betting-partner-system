@@ -19,7 +19,7 @@ from sklearn.metrics import (
     mean_squared_error,
 )
 
-from src.config import DATA_DIR
+from src.config import DATA_DIR, MODELS_DIR
 from src.ml.registry import ModelRegistry
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -34,6 +34,17 @@ EXCLUDE_COLS = [
     "home_fouls", "away_fouls", "home_total_shots", "away_total_shots", "referee",
     "status", "result"
 ]
+
+# Features unavailable at serving time (ref assignments are often unknown pre-match).
+SERVING_UNAVAILABLE_FEATURES = {
+    "home_referee",
+    "away_referee",
+    "referee_card_rate_10",
+    "referee_avg_yellows",
+    "referee_avg_reds",
+    "referee_avg_fouls",
+    "card_pressure",
+}
 
 # Model name → (filename, type, target) metadata for registration
 _PHASE5_MODEL_MAP = [
@@ -59,6 +70,7 @@ class ProbabilityModelTrainer:
         self.models_dir = models_dir
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.registry = ModelRegistry()
+        self._serving_columns_cache: Optional[set[str]] = None
         
     # Poisson target cap: extreme scorelines (e.g. 8-0) destabilize log-link learning
     GOAL_TARGET_CAP = 6
@@ -127,14 +139,67 @@ class ProbabilityModelTrainer:
         logger.info(f"Temporal Split - Train (<=2021): {len(train)}, Val (2022): {len(val)}, Test (>=2023): {len(test)}")
         return train, val, test
 
+    def _get_serving_columns(self) -> Optional[set[str]]:
+        """
+        Best-effort discovery of columns available at prediction serving time.
+
+        This prevents training models on features that won't exist for upcoming
+        fixtures during inference.
+        """
+        if self._serving_columns_cache is not None:
+            return self._serving_columns_cache
+
+        try:
+            from src.core.container import ServiceContainer
+
+            serving_df = ServiceContainer.get_instance().pipeline.run(league="PL")
+            if serving_df is None or serving_df.empty:
+                logger.warning(
+                    "Serving schema discovery returned no rows; skipping serving-safe feature filter."
+                )
+                self._serving_columns_cache = set()
+                return None
+
+            self._serving_columns_cache = {str(col) for col in serving_df.columns}
+            logger.info(
+                "Loaded serving schema with %d columns for feature safety filtering.",
+                len(self._serving_columns_cache),
+            )
+            return self._serving_columns_cache
+        except Exception as exc:
+            logger.warning(
+                "Serving schema discovery failed; continuing without serving-safe filter: %s",
+                exc,
+            )
+            self._serving_columns_cache = set()
+            return None
+
     def select_features(self, df: pd.DataFrame) -> List[str]:
         # Drop identifiers, raw leakages, and our newly engineered targets
         features = [
             c for c in df.columns 
             if c not in EXCLUDE_COLS 
+            and c not in SERVING_UNAVAILABLE_FEATURES
+            and pd.api.types.is_numeric_dtype(df[c])
             and not c.startswith("total_") 
             and c not in ("outcome", "season_year", "season", "home_goals", "away_goals")
         ]
+
+        serving_cols = self._get_serving_columns()
+        if serving_cols:
+            before = len(features)
+            features = [
+                f
+                for f in features
+                if f in serving_cols
+                or f.replace("_scored_", "_won_").replace("_conceded_", "_received_") in serving_cols
+            ]
+            logger.info(
+                "Serving-safe feature filter retained %d/%d features.",
+                len(features),
+                before,
+            )
+
         logger.info(f"Selected {len(features)} predictive features.")
         return features
 
@@ -191,10 +256,16 @@ class ProbabilityModelTrainer:
         preds = np.maximum(0.05, model.predict(X_test))
         mae = mean_absolute_error(y_test, preds)
         rmse = float(np.sqrt(mean_squared_error(y_test, preds)))
+
+        # Calibration proxy for count models: Brier on event Y > 0 using Poisson mapping.
+        y_event = (np.asarray(y_test, dtype=float) > 0.0).astype(float)
+        p_event = np.clip(1.0 - np.exp(-preds), 1e-6, 1.0 - 1e-6)
+        calibration_score = float(brier_score_loss(y_event, p_event))
         
         metrics = {
             "mae": round(mae, 4),
-            "rmse": round(rmse, 4)
+            "rmse": round(rmse, 4),
+            "calibration_score": round(calibration_score, 4),
         }
         logger.info(f"{name} Metrics on Test: {metrics}")
         
@@ -236,9 +307,16 @@ class ProbabilityModelTrainer:
         preds = np.maximum(0.05, model.predict(X_test))
         mae = mean_absolute_error(y_test, preds)
         rmse = float(np.sqrt(mean_squared_error(y_test, preds)))
+
+        # Calibration proxy for count models: Brier on event Y > 0 using Poisson mapping.
+        y_event = (np.asarray(y_test, dtype=float) > 0.0).astype(float)
+        p_event = np.clip(1.0 - np.exp(-preds), 1e-6, 1.0 - 1e-6)
+        calibration_score = float(brier_score_loss(y_event, p_event))
+
         metrics = {
             "mae": round(mae, 4),
             "rmse": round(rmse, 4),
+            "calibration_score": round(calibration_score, 4),
         }
         logger.info("%s XGB Metrics on Test: %s", name, metrics)
         return model, metrics
@@ -506,9 +584,9 @@ class ProbabilityModelTrainer:
 
 if __name__ == "__main__":
     features_csv = DATA_DIR / "features" / "feature_matrix.csv"
-    
-    # Store at root-level models directory as specified
-    models_out = Path("models")
-    
+
+    # Persist artifacts directly to the runtime registry directory.
+    models_out = MODELS_DIR
+
     trainer = ProbabilityModelTrainer(features_path=features_csv, models_dir=models_out)
     trainer.run()
