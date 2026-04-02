@@ -44,7 +44,7 @@ from src.strategies.slip_builder import ForbiddenFruitSlipBuilder
 from src.ml.guards import PredictionGuard
 from src.strategies.derived import DoubleChanceEngine
 from src.ml.models.corners.team_offsets import TeamOffsetManager
-from src.strategies.drift_guard import DriftGuardrail
+from src.monitoring.drift_orchestrator import DriftOrchestrator
 from src.ml.calibration import (
     apply_binary_calibrator,
     apply_soft_cap,
@@ -1066,6 +1066,9 @@ def _run_predict_loop(df: pd.DataFrame, use_simulator: bool = True) -> List[Dict
     
     feature_monitor = FeatureDriftMonitor()
     shadow_registry = ModelRegistry()
+    logged_smart_routing = set()
+    shadow_registry._logged_smart_routing = logged_smart_routing
+    ServiceContainer.get_instance().registry._logged_smart_routing = logged_smart_routing
     shadow_log: List[Dict[str, Any]] = []
     
     with Progress(console=console) as progress:
@@ -1076,7 +1079,14 @@ def _run_predict_loop(df: pd.DataFrame, use_simulator: bool = True) -> List[Dict
                 
                 # Fetch drift state once per league run
                 try:
-                    drift_state = DriftGuardrail().check_drift()
+                    orchestrator = DriftOrchestrator()
+                    orchestrator.load_global_state()
+                    if orchestrator.global_status == DriftOrchestrator.GO:
+                        drift_state = "OK"
+                    elif orchestrator.global_status == DriftOrchestrator.WATCH:
+                        drift_state = "WATCH"
+                    else:
+                        drift_state = "STOP"
                 except Exception:
                     drift_state = "UNKNOWN"
 
@@ -1413,9 +1423,11 @@ def _render_output(
     # 1. Prediction Tables
     term_width = _get_terminal_width()
     is_narrow = term_width < 110  # Lower threshold for modern terminals
+    gate = SelectionGate()
     
     for lg in sorted({p['league'] for p in preds}):
         p_lg = [p for p in preds if p['league'] == lg]
+        gated_lg = [b for b in gated if b.get('league') == lg]
         lg_n = LeagueCode(lg).full_name if lg in LeagueCode.__members__ else lg
         lg_emoji = _get_league_emoji(lg)
         t = Table(title=f"{lg_emoji} [bold cyan]{lg_n} ({lg})[/bold cyan]", box=box.ROUNDED, show_lines=True)
@@ -1464,7 +1476,15 @@ def _render_output(
         t.add_column("Team Goals U1.5", justify="center")
         
         # Stats tracking for summary
-        high_conf_count = 0
+        high_conf_count = sum(
+            1
+            for bet in gated_lg
+            if float(bet.get("probability", 0.0) or 0.0)
+            >= gate.PROB_FLOORS.get(
+                gate._get_market_type(str(bet.get("market", ""))),
+                gate.PROB_FLOORS["default"],
+            )
+        )
         total_edge = 0.0
         
         for p in p_lg:
@@ -1552,8 +1572,6 @@ def _render_output(
             
             # Track stats for summary
             best_prob = max(ph, pd_prob, pa, po25, pbtts_yes)
-            if best_prob >= 0.70:
-                high_conf_count += 1
             total_edge += (best_prob - 0.5)  # Simple edge calculation
 
             # Build row based on terminal width

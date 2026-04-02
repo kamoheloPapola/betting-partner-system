@@ -13,6 +13,7 @@ import hashlib
 import joblib
 import json
 import logging
+import os
 import pickle
 import shutil
 import warnings
@@ -20,7 +21,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, cast
 
+import s3fs
 import sklearn
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
 from sklearn.exceptions import InconsistentVersionWarning
 
 from src.config import MODELS_DIR
@@ -30,6 +34,8 @@ from src.core.exceptions import (
     DataValidationError,
     ModelNotFoundError,
 )
+from src.db.connection import database_is_configured, get_engine
+from src.db.models import ModelManifestEntry
 from src.ml.model_db import ModelHistoryDB
 
 # Define public API
@@ -125,34 +131,52 @@ class ModelRegistry:
         if self._manifest_cache is not None:
             return
 
-        if self.MANIFEST_FILE.exists():
-            try:
-                with open(self.MANIFEST_FILE, "r") as f:
-                    self.manifest = json.load(f)
+        if database_is_configured():
+            db_manifest = self._load_manifest_from_db()
+            if db_manifest is not None:
+                self.manifest = db_manifest
+                self._save_manifest_file()
                 return
-            except Exception as e:
-                logger.error(f"Failed to load primary manifest: {e}. Attempting backup recovery...")
-        
-        if self.BACKUP_FILE.exists():
-            try:
-                with open(self.BACKUP_FILE, "r") as f:
-                    self.manifest = json.load(f)
-                logger.info("Successfully recovered manifest from backup.")
-                return
-            except Exception as e:
-                logger.error(f"Failed to load backup manifest: {e}")
-        
+
+        file_manifest = self._load_manifest_from_file()
+        if file_manifest is not None:
+            self.manifest = file_manifest
+            return
+
         logger.warning("No valid manifest found or recovery failed. Initializing empty Registry.")
         self.manifest = {}
 
     def _save_manifest(self) -> None:
+        self._save_manifest_file()
+        self._save_manifest_to_db()
+
+    def _load_manifest_from_file(self) -> Optional[Dict[str, Any]]:
+        if self.MANIFEST_FILE.exists():
+            try:
+                with open(self.MANIFEST_FILE, "r", encoding="utf-8") as f:
+                    return cast(Dict[str, Any], json.load(f))
+            except Exception as e:
+                logger.error(f"Failed to load primary manifest: {e}. Attempting backup recovery...")
+
+        if self.BACKUP_FILE.exists():
+            try:
+                with open(self.BACKUP_FILE, "r", encoding="utf-8") as f:
+                    manifest = cast(Dict[str, Any], json.load(f))
+                logger.info("Successfully recovered manifest from backup.")
+                return manifest
+            except Exception as e:
+                logger.error(f"Failed to load backup manifest: {e}")
+
+        return None
+
+    def _save_manifest_file(self) -> None:
         # ensure dir exists
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
-        
+
         # Save primary
-        with open(self.MANIFEST_FILE, "w") as f:
+        with open(self.MANIFEST_FILE, "w", encoding="utf-8") as f:
             json.dump(self.manifest, f, indent=2)
-            
+
         # Create backup
         self._save_backup()
 
@@ -161,6 +185,196 @@ class ModelRegistry:
             shutil.copy2(self.MANIFEST_FILE, self.BACKUP_FILE)
         except Exception as e:
             logger.error(f"Failed to create manifest backup: {e}")
+
+    @staticmethod
+    def _parse_optional_datetime(value: Any) -> Optional[datetime]:
+        if value in {None, ""}:
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    @staticmethod
+    def _json_blob(value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        try:
+            return json.dumps(value, default=str, sort_keys=True)
+        except TypeError:
+            return json.dumps(str(value))
+
+    def _save_manifest_to_db(self) -> None:
+        if not database_is_configured():
+            return
+
+        try:
+            with Session(get_engine()) as session:
+                session.execute(delete(ModelManifestEntry))
+                for manifest_key, meta in self.manifest.items():
+                    payload: Any = meta if isinstance(meta, dict) else {"__manifest_value__": meta}
+                    session.add(
+                        ModelManifestEntry(
+                            manifest_key=str(manifest_key),
+                            model_name=payload.get("name") if isinstance(payload, dict) else None,
+                            version=payload.get("version") if isinstance(payload, dict) else None,
+                            league=payload.get("league") if isinstance(payload, dict) else None,
+                            model_type=payload.get("type") if isinstance(payload, dict) else None,
+                            target=payload.get("target") if isinstance(payload, dict) else None,
+                            filename=payload.get("filename") if isinstance(payload, dict) else None,
+                            mode=payload.get("mode") if isinstance(payload, dict) else None,
+                            status=payload.get("status") if isinstance(payload, dict) else None,
+                            sklearn_version=payload.get("sklearn_version") if isinstance(payload, dict) else None,
+                            train_size=payload.get("train_size") if isinstance(payload, dict) else None,
+                            test_size=payload.get("test_size") if isinstance(payload, dict) else None,
+                            registered_at=self._parse_optional_datetime(
+                                payload.get("registered_at") if isinstance(payload, dict) else None
+                            ),
+                            features_json=self._json_blob(
+                                payload.get("features") if isinstance(payload, dict) else None
+                            ),
+                            params_json=self._json_blob(
+                                payload.get("params") if isinstance(payload, dict) else None
+                            ),
+                            metrics_json=self._json_blob(
+                                payload.get("metrics") if isinstance(payload, dict) else None
+                            ),
+                            metadata_json=self._json_blob(payload) or "{}",
+                        )
+                    )
+                session.commit()
+        except Exception as exc:
+            logger.warning("Failed to persist manifest to database: %s", exc)
+
+    def _load_manifest_from_db(self) -> Optional[Dict[str, Any]]:
+        try:
+            with Session(get_engine()) as session:
+                rows = session.execute(
+                    select(ModelManifestEntry).order_by(ModelManifestEntry.manifest_key.asc())
+                ).scalars().all()
+        except Exception as exc:
+            logger.warning("Failed to load manifest from database: %s", exc)
+            return None
+
+        if not rows:
+            return None
+
+        manifest: Dict[str, Any] = {}
+        for row in rows:
+            payload: Any
+            try:
+                payload = json.loads(row.metadata_json) if row.metadata_json else {}
+            except Exception:
+                payload = {}
+
+            if isinstance(payload, dict) and "__manifest_value__" in payload:
+                manifest[row.manifest_key] = payload["__manifest_value__"]
+            else:
+                manifest[row.manifest_key] = payload if isinstance(payload, dict) else {}
+        return manifest
+
+    @staticmethod
+    def _require_aws_s3_env() -> Dict[str, str]:
+        required = {
+            "AWS_ACCESS_KEY_ID": os.environ.get("AWS_ACCESS_KEY_ID"),
+            "AWS_SECRET_ACCESS_KEY": os.environ.get("AWS_SECRET_ACCESS_KEY"),
+            "AWS_REGION": os.environ.get("AWS_REGION"),
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            missing_list = ", ".join(missing)
+            raise EnvironmentError(
+                f"Missing required AWS S3 environment variables: {missing_list}"
+            )
+        return {name: str(value) for name, value in required.items()}
+
+    def _manifest_model_filenames(self, *, pkl_only: bool = False) -> List[str]:
+        filenames: set[str] = set()
+        for meta in self.manifest.values():
+            if not isinstance(meta, dict):
+                continue
+            filename = meta.get("filename")
+            if not isinstance(filename, str):
+                continue
+            normalized = filename.strip()
+            if not normalized:
+                continue
+            if pkl_only and not normalized.lower().endswith(".pkl"):
+                continue
+            filenames.add(normalized)
+        return sorted(filenames)
+
+    @staticmethod
+    def _s3_object_path(bucket: str, prefix: str, filename: str) -> str:
+        normalized_bucket = str(bucket).strip().strip("/")
+        normalized_prefix = str(prefix).strip().strip("/")
+        normalized_filename = str(filename).strip().replace("\\", "/").lstrip("/")
+        if normalized_prefix:
+            return f"{normalized_bucket}/{normalized_prefix}/{normalized_filename}"
+        return f"{normalized_bucket}/{normalized_filename}"
+
+    @classmethod
+    def _s3_object_uri(cls, bucket: str, prefix: str, filename: str) -> str:
+        return f"s3://{cls._s3_object_path(bucket, prefix, filename)}"
+
+    def _build_s3_filesystem(self) -> s3fs.S3FileSystem:
+        env = self._require_aws_s3_env()
+        return s3fs.S3FileSystem(
+            key=env["AWS_ACCESS_KEY_ID"],
+            secret=env["AWS_SECRET_ACCESS_KEY"],
+            client_kwargs={"region_name": env["AWS_REGION"]},
+        )
+
+    def push_to_s3(self, bucket: str, prefix: str) -> int:
+        if not str(bucket).strip():
+            raise ValueError("bucket must be non-empty")
+
+        fs = self._build_s3_filesystem()
+        uploaded = 0
+        for filename in self._manifest_model_filenames(pkl_only=True):
+            local_path = MODELS_DIR / filename
+            if not local_path.exists():
+                raise FileNotFoundError(f"Model artifact listed in manifest is missing locally: {local_path}")
+            fs.put(str(local_path), self._s3_object_path(bucket, prefix, filename))
+            uploaded += 1
+
+        logger.info(
+            "Uploaded %s model artifacts to %s",
+            uploaded,
+            f"s3://{str(bucket).strip().strip('/')}/{str(prefix).strip().strip('/')}".rstrip("/"),
+        )
+        return uploaded
+
+    def pull_from_s3(self, bucket: str, prefix: str) -> int:
+        if not str(bucket).strip():
+            raise ValueError("bucket must be non-empty")
+
+        fs = self._build_s3_filesystem()
+        MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        downloaded = 0
+        for filename in self._manifest_model_filenames():
+            local_path = MODELS_DIR / filename
+            if local_path.exists():
+                continue
+
+            remote_path = self._s3_object_path(bucket, prefix, filename)
+            if not fs.exists(remote_path):
+                raise FileNotFoundError(
+                    f"Model artifact listed in manifest is missing in S3: {self._s3_object_uri(bucket, prefix, filename)}"
+                )
+
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            fs.get(remote_path, str(local_path))
+            downloaded += 1
+
+        logger.info(
+            "Downloaded %s model artifacts from %s",
+            downloaded,
+            f"s3://{str(bucket).strip().strip('/')}/{str(prefix).strip().strip('/')}".rstrip("/"),
+        )
+        return downloaded
 
     def _write_lifecycle_event(self, event_type: str, metadata: Dict[str, Any]) -> None:
         """Best-effort write to SQLite lifecycle history."""
@@ -508,15 +722,19 @@ class ModelRegistry:
                 )
                 return local_meta
 
-            logger.warning(
-                "Smart Routing: Promoted local model overridden by Global for %s "
-                "(n=%s, local_ece=%.4f > guardrail=%.4f from global_ece=%.4f)",
-                league,
-                local_n,
-                local_score,
-                promoted_guardrail,
-                global_score,
-            )
+            logged_smart_routing = getattr(self, "_logged_smart_routing", None)
+            if logged_smart_routing is None or league not in logged_smart_routing:
+                logger.warning(
+                    "Smart Routing: Promoted local model overridden by Global for %s "
+                    "(n=%s, local_ece=%.4f > guardrail=%.4f from global_ece=%.4f)",
+                    league,
+                    local_n,
+                    local_score,
+                    promoted_guardrail,
+                    global_score,
+                )
+                if logged_smart_routing is not None:
+                    logged_smart_routing.add(league)
             return global_meta
             
         # Fallback: If local is under-trained, compare scores

@@ -11,9 +11,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
 from src.api.schemas import (
     ForbiddenFruitSlipLeg,
@@ -413,11 +417,16 @@ def _report_drift_stop_transition(global_drift: Dict[str, Any]) -> None:
 
 _enforce_locked_state()
 
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
 app = FastAPI(
     title="Betting Partner API",
     version="2.1.0",
     description="Inference-only API for betting predictions",
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -586,8 +595,9 @@ def get_predictions(league: str, limit: Optional[int] = 20) -> List[MatchPredict
 
 
 @app.post("/api/v1/predictions/trigger", response_model=PredictionTriggerResponse)
-def trigger_predictions(request: PredictionTriggerRequest) -> PredictionTriggerResponse:
-    if request.limit is not None and request.limit < 1:
+@limiter.limit("10/minute")
+def trigger_predictions(request: Request, payload: PredictionTriggerRequest) -> PredictionTriggerResponse:
+    if payload.limit is not None and payload.limit < 1:
         raise HTTPException(status_code=400, detail="limit must be >= 1")
 
     try:
@@ -595,13 +605,13 @@ def trigger_predictions(request: PredictionTriggerRequest) -> PredictionTriggerR
         if drift_status == DriftOrchestrator.STOP:
             return PredictionTriggerResponse(
                 generated_at=datetime.now(),
-                league=str(request.league).upper(),
+                league=str(payload.league).upper(),
                 total_predictions=0,
                 predictions=[],
                 drift_status=drift_status,
                 blocked=True,
                 message=_empty_predictions_message(
-                    league=str(request.league).upper(),
+                    league=str(payload.league).upper(),
                     drift_status=drift_status,
                     total_predictions=0,
                 ),
@@ -609,38 +619,38 @@ def trigger_predictions(request: PredictionTriggerRequest) -> PredictionTriggerR
 
         predictor = Predictor()
         raw_predictions = predictor.predict_for_show_predictions(
-            league=request.league,
+            league=payload.league,
             date="today",
             show_all=False,
             timezone="LOCAL",
             simulate=True,
-            limit=request.limit,
+            limit=payload.limit,
         )
         serialized = [_serialize_trigger_prediction(prediction) for prediction in raw_predictions]
         return PredictionTriggerResponse(
             generated_at=datetime.now(),
-            league=str(request.league).upper(),
+            league=str(payload.league).upper(),
             total_predictions=len(serialized),
             predictions=serialized,
             drift_status=drift_status,
             blocked=False,
             message=_empty_predictions_message(
-                league=str(request.league).upper(),
+                league=str(payload.league).upper(),
                 drift_status=drift_status,
                 total_predictions=len(serialized),
             ),
         )
     except ConfigurationError as exc:
-        logger.error("Prediction trigger environment mismatch for %s: %s", request.league, exc)
+        logger.error("Prediction trigger environment mismatch for %s: %s", payload.league, exc)
         _raise_environment_mismatch(exc)
     except DataValidationError as exc:
-        logger.warning("Prediction trigger request rejected for %s: %s", request.league, exc)
+        logger.warning("Prediction trigger request rejected for %s: %s", payload.league, exc)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        logger.error("Prediction trigger error for %s: %s", request.league, exc)
+        logger.error("Prediction trigger error for %s: %s", payload.league, exc)
         capture_exception(
             exc,
-            context={"endpoint": "/api/v1/predictions/trigger", "league": request.league},
+            context={"endpoint": "/api/v1/predictions/trigger", "league": payload.league},
         )
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -677,7 +687,9 @@ def get_forbidden_fruit_slip(
 
 
 @app.get("/api/v1/slips/{league}", response_model=ForbiddenFruitSlipResponse)
+@limiter.limit("30/minute")
 def get_latest_slips(
+    request: Request,
     league: str,
     min_prob: float = 0.65,
     max_selections: int = 4,

@@ -84,3 +84,28 @@ def test_trigger_predictions_returns_503_on_model_environment_mismatch(monkeypat
 
     assert response.status_code == 503
     assert response.json()["detail"] == "Model environment mismatch: sklearn 1.8.0 required"
+
+
+def test_trigger_predictions_returns_blocked_response_when_drift_stops_predictions(monkeypatch):
+    def fail_if_called(self, **kwargs):
+        raise AssertionError("predict_for_show_predictions should not run when drift blocks predictions")
+
+    monkeypatch.setattr(
+        "src.api.main._read_prediction_guard_status",
+        lambda: "STOP",
+    )
+    monkeypatch.setattr(
+        "src.predictions.predictor.Predictor.predict_for_show_predictions",
+        fail_if_called,
+    )
+
+    response = client.post("/api/v1/predictions/trigger", json={"league": "PL"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["league"] == "PL"
+    assert payload["total_predictions"] == 0
+    assert payload["predictions"] == []
+    assert payload["drift_status"] == "STOP"
+    assert payload["blocked"] is True
+    assert "blocked by the drift guardrail" in payload["message"]

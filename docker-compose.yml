@@ -18,6 +18,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
+      - ./data:/app/data
       - model_db:/app/data/models
     healthcheck:
       test:
@@ -44,5 +45,19 @@ services:
     volumes:
       - model_db:/app/data/models
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: football_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: football_intelligence
+      POSTGRES_USER: football
+      POSTGRES_PASSWORD: football_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
 volumes:
   model_db:
+  postgres_data:

@@ -8,16 +8,23 @@ This module merges:
 """
 from __future__ import annotations
 
+import csv
+import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
 import numpy as np
 import pandas as pd
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from src.config import DATA_DIR
+from src.db.connection import database_is_configured, get_engine
+from src.db.models import DriftEvent
 from src.monitoring.telemetry import capture_alert
 
 logger = logging.getLogger(__name__)
@@ -39,6 +46,8 @@ class DriftOrchestrator:
     DEFAULT_STATUS_FILE: Path = DATA_DIR / "drift" / "rolling_90d_status.json"
     DEFAULT_BASELINE_FILE: Path = DATA_DIR / "models" / "drift_baselines.json"
     DEFAULT_CONFIDENCE_STATE_FILE: Path = DATA_DIR / "drift" / "confidence_drift_state.json"
+    DEFAULT_ALERTS_FILE: Path = DATA_DIR / "monitoring" / "drift_alerts.csv"
+    GLOBAL_STATE_EVENT_TYPE = "global_drift_state"
 
     # --- Global drift baselines / thresholds (legacy DriftGuardrail semantics) ---
     LEGACY_BASELINES: Dict[str, float] = {
@@ -79,9 +88,11 @@ class DriftOrchestrator:
             if confidence_state_file
             else self.DEFAULT_CONFIDENCE_STATE_FILE
         )
+        self.alerts_file = self.DEFAULT_ALERTS_FILE
 
         self.status_file.parent.mkdir(parents=True, exist_ok=True)
         self.confidence_state_file.parent.mkdir(parents=True, exist_ok=True)
+        self.alerts_file.parent.mkdir(parents=True, exist_ok=True)
 
         # Global drift state
         self.global_status: str = self.GO
@@ -96,6 +107,7 @@ class DriftOrchestrator:
         self.baselines: Dict[str, float] = self._load_baselines()
 
         # Confidence drift state
+        self.confidence_state: Dict[str, str] = self._default_confidence_state()
         self.market_status: Dict[str, str] = {}
         self.cooldowns: Dict[str, datetime] = {}
         self.bet_counts: Dict[str, int] = {}
@@ -204,8 +216,14 @@ class DriftOrchestrator:
         }
         with open(self.status_file, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
+        self._persist_global_state_to_db(payload)
 
     def load_global_state(self) -> None:
+        db_payload = self._load_global_state_from_db()
+        if db_payload is not None:
+            self._apply_global_state_payload(db_payload)
+            return
+
         if not self.status_file.exists():
             self.global_status = self.GO
             self.global_alerts = []
@@ -219,15 +237,7 @@ class DriftOrchestrator:
             with open(self.status_file, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
 
-            self.global_status = self._normalize_state(data.get("status", self.GO))
-            self.global_alerts = data.get("alerts", [])
-            self.global_metrics = data.get("metrics", {})
-            self.global_metrics_included = set(self.global_metrics.keys())
-            self.global_evaluated_at = data.get("evaluated_at")
-            legacy_date = data.get("date")
-            self.global_legacy_date = (
-                legacy_date if legacy_date and not self.global_evaluated_at else None
-            )
+            self._apply_global_state_payload(data)
         except Exception as exc:
             logger.error("Failed to load global drift state: %s", exc)
             # Fail closed for global guardrail
@@ -237,6 +247,32 @@ class DriftOrchestrator:
             self.global_metrics_included = set()
             self.global_evaluated_at = None
             self.global_legacy_date = None
+
+    def append_drift_alerts(
+        self,
+        alerts: List[str],
+        *,
+        league: Optional[str] = None,
+        market: Optional[str] = None,
+        status: Optional[str] = None,
+    ) -> None:
+        if not alerts:
+            return
+
+        detected_at = datetime.now(timezone.utc).isoformat()
+        rows = [
+            self._format_drift_alert_row(
+                alert,
+                detected_at=detected_at,
+                league=league,
+                market=market,
+                status=status,
+                ordinal=index,
+            )
+            for index, alert in enumerate(alerts)
+        ]
+        self._append_alert_rows_to_csv(rows)
+        self._append_alert_rows_to_db(rows)
 
     # ------------------------------------------------------------------
     # Confidence drift monitor (legacy ConfidenceDriftMonitor responsibilities)
@@ -436,11 +472,25 @@ class DriftOrchestrator:
             json.dump(state, handle, indent=2)
 
     def load_confidence_state(self) -> None:
+        self.confidence_state = self._default_confidence_state()
         if not self.confidence_state_file.exists():
+            self.market_status = {}
+            self.cooldowns = {}
+            self.bet_counts = {}
+            self.rolling_data = {}
+            with open(self.confidence_state_file, "w", encoding="utf-8") as handle:
+                json.dump(self.confidence_state, handle, indent=2)
             return
         try:
             with open(self.confidence_state_file, "r", encoding="utf-8") as handle:
                 state = json.load(handle)
+
+            if isinstance(state, dict):
+                self.confidence_state = {
+                    "status": str(state.get("status", self.GO)),
+                    "action": str(state.get("action", self.GO)),
+                    "reason": str(state.get("reason", self.confidence_state["reason"])),
+                }
 
             raw_market_status = state.get("market_status", {})
             if isinstance(raw_market_status, dict):
@@ -469,6 +519,13 @@ class DriftOrchestrator:
                     continue
         except Exception as exc:
             logger.warning("Failed to load confidence drift state: %s", exc)
+
+    def _default_confidence_state(self) -> Dict[str, str]:
+        return {
+            "status": self.GO,
+            "action": self.GO,
+            "reason": "initialised",
+        }
 
     # ------------------------------------------------------------------
     # Shared helpers
@@ -565,6 +622,209 @@ class DriftOrchestrator:
         if market not in self.cooldowns:
             return True
         return datetime.now() >= self.cooldowns[market]
+
+    def _apply_global_state_payload(self, data: Dict[str, Any]) -> None:
+        self.global_status = self._normalize_state(data.get("status", self.GO))
+        self.global_alerts = list(data.get("alerts", []))
+        self.global_metrics = dict(data.get("metrics", {}))
+        self.global_metrics_included = set(self.global_metrics.keys())
+        self.global_evaluated_at = data.get("evaluated_at")
+        legacy_date = data.get("date")
+        self.global_legacy_date = legacy_date if legacy_date and not self.global_evaluated_at else None
+
+    def _persist_global_state_to_db(self, payload: Dict[str, Any]) -> None:
+        if not database_is_configured():
+            return
+
+        try:
+            with Session(get_engine()) as session:
+                session.merge(
+                    DriftEvent(
+                        event_id=self._make_event_id(
+                            self.GLOBAL_STATE_EVENT_TYPE,
+                            payload.get("evaluated_at"),
+                            payload.get("status"),
+                        ),
+                        event_type=self.GLOBAL_STATE_EVENT_TYPE,
+                        league="GLOBAL",
+                        market=None,
+                        severity=str(payload.get("status")),
+                        metric="global_status",
+                        value=None,
+                        threshold=None,
+                        detected_at=self._parse_iso_datetime(payload.get("evaluated_at")),
+                        payload_json=json.dumps(payload, default=str, sort_keys=True),
+                    )
+                )
+                session.commit()
+        except Exception as exc:
+            logger.warning("Failed to persist global drift state to database: %s", exc)
+
+    def _load_global_state_from_db(self) -> Optional[Dict[str, Any]]:
+        if not database_is_configured():
+            return None
+
+        try:
+            with Session(get_engine()) as session:
+                row = session.execute(
+                    select(DriftEvent)
+                    .where(DriftEvent.event_type == self.GLOBAL_STATE_EVENT_TYPE)
+                    .order_by(DriftEvent.detected_at.desc())
+                ).scalars().first()
+        except Exception as exc:
+            logger.warning("Failed to load global drift state from database: %s", exc)
+            return None
+
+        if row is None:
+            return None
+
+        payload: Dict[str, Any] = {}
+        if row.payload_json:
+            try:
+                loaded = json.loads(row.payload_json)
+                if isinstance(loaded, dict):
+                    payload = loaded
+            except Exception as exc:
+                logger.warning("Failed to decode global drift payload from database: %s", exc)
+
+        if "status" not in payload:
+            payload["status"] = row.severity or self.GO
+        if "alerts" not in payload:
+            payload["alerts"] = []
+        if "metrics" not in payload:
+            payload["metrics"] = {}
+        if "evaluated_at" not in payload and row.detected_at is not None:
+            payload["evaluated_at"] = row.detected_at.isoformat()
+        if "date" not in payload and payload.get("evaluated_at"):
+            payload["date"] = str(payload["evaluated_at"])[:10]
+        return payload
+
+    def _format_drift_alert_row(
+        self,
+        alert: str,
+        *,
+        detected_at: str,
+        league: Optional[str],
+        market: Optional[str],
+        status: Optional[str],
+        ordinal: int,
+    ) -> Dict[str, Any]:
+        alert_type, _, details = str(alert).partition(":")
+        normalized_type = alert_type.strip().lower() or "unknown"
+        details_text = (details or str(alert)).strip()
+        metric, value, threshold = self._extract_alert_metrics(normalized_type, details_text)
+        normalized_status = self._normalize_state(status or self.global_status)
+        severity = "CRITICAL" if normalized_status == self.STOP else "WARNING"
+        if normalized_type.endswith("watch"):
+            severity = "WARNING"
+
+        return {
+            "type": normalized_type,
+            "league": str(league) if league else "",
+            "market": str(market) if market else "",
+            "severity": severity,
+            "metric": metric or "",
+            "value": value,
+            "threshold": threshold,
+            "detected_at": detected_at,
+            "payload_json": json.dumps(
+                {
+                    "alert": str(alert),
+                    "details": details_text,
+                    "ordinal": ordinal,
+                    "status": normalized_status,
+                },
+                default=str,
+                sort_keys=True,
+            ),
+        }
+
+    def _append_alert_rows_to_csv(self, rows: List[Dict[str, Any]]) -> None:
+        if not rows:
+            return
+
+        fieldnames = ["type", "league", "market", "severity", "metric", "value", "threshold", "detected_at"]
+        header = not self.alerts_file.exists() or self.alerts_file.stat().st_size == 0
+        with open(self.alerts_file, "a", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            if header:
+                writer.writeheader()
+            for row in rows:
+                writer.writerow({name: row.get(name, "") for name in fieldnames})
+
+    def _append_alert_rows_to_db(self, rows: List[Dict[str, Any]]) -> None:
+        if not rows or not database_is_configured():
+            return
+
+        try:
+            with Session(get_engine()) as session:
+                for row in rows:
+                    session.merge(
+                        DriftEvent(
+                            event_id=self._make_event_id(
+                                row.get("type"),
+                                row.get("league"),
+                                row.get("market"),
+                                row.get("detected_at"),
+                                row.get("payload_json"),
+                            ),
+                            event_type=str(row.get("type")),
+                            league=str(row.get("league") or "") or None,
+                            market=str(row.get("market") or "") or None,
+                            severity=str(row.get("severity") or "") or None,
+                            metric=str(row.get("metric") or "") or None,
+                            value=row.get("value"),
+                            threshold=row.get("threshold"),
+                            detected_at=self._parse_iso_datetime(row.get("detected_at")),
+                            payload_json=row.get("payload_json"),
+                        )
+                    )
+                session.commit()
+        except Exception as exc:
+            logger.warning("Failed to persist drift alerts to database: %s", exc)
+
+    @staticmethod
+    def _make_event_id(*parts: Any) -> str:
+        raw = "|".join("" if part is None else str(part) for part in parts)
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+        if value in {None, ""}:
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            normalized = str(value).replace("Z", "+00:00")
+            return datetime.fromisoformat(normalized)
+        except Exception:
+            return None
+
+    @classmethod
+    def _extract_alert_metrics(
+        cls,
+        alert_type: str,
+        details: str,
+    ) -> tuple[Optional[str], Optional[float], Optional[float]]:
+        metric_map = {
+            "calibration_drift": "ece",
+            "hit_rate_drift": "hit_rate",
+            "confidence_inflation": "mean_conf",
+            "global_stop": "global_status",
+            "global_watch": "global_status",
+        }
+        metric = metric_map.get(alert_type)
+        match = re.search(
+            r"([-+]?\d*\.?\d+)\s*\(Baseline\s*([-+]?\d*\.?\d+)\)",
+            details,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            return metric, float(match.group(1)), float(match.group(2))
+
+        standalone = re.search(r"[-+]?\d*\.?\d+", details)
+        value = float(standalone.group(0)) if standalone else None
+        return metric, value, None
 
     @classmethod
     def _normalize_state(cls, value: Any) -> str:

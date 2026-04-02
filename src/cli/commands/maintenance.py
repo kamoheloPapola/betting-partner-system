@@ -375,6 +375,7 @@ def check_drift(
         from src.evaluation.resolve_results import AuthoritativeResolver
         
         console = Console()
+        use_persisted_state = False
         
         # Get resolved predictions
         resolver = AuthoritativeResolver()
@@ -395,39 +396,33 @@ def check_drift(
             # Use a calendar-day cutoff so "last N days" includes the full boundary day.
             cutoff = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=lookback)).normalize()
             filtered = predictions[predictions["kickoff_date"] >= cutoff]
-
-            # If there are resolved outcomes but none in the live window, fall back to a
-            # data-relative window ending at the latest resolved kickoff. This keeps
-            # drift checks usable on stale/offline datasets and test fixtures.
-            if filtered.empty and not predictions.empty:
-                latest_kickoff = predictions["kickoff_date"].max().normalize()
-                relative_cutoff = latest_kickoff - pd.Timedelta(days=lookback)
-                filtered = predictions[predictions["kickoff_date"] >= relative_cutoff]
-
             predictions = filtered
             if predictions.empty:
                 console.print(
-                    f"[yellow]No resolved predictions found in the last {lookback} days.[/yellow]"
+                    f"[yellow]No resolved predictions in the last {lookback} days — drift status read from persisted state. Run 'resolve-predictions' to populate recent outcomes.[/yellow]"
                 )
-                return
+                use_persisted_state = True
         
         # Filter by league if specified
-        if league:
+        if league and not use_persisted_state:
             predictions = predictions[predictions['league'] == league]
             if predictions.empty:
                 console.print(f"[yellow]No predictions found for league {league}[/yellow]")
                 return
 
-        console.print(
-            f"[dim]Using {len(predictions)} resolved predictions from the last {lookback} days.[/dim]"
-        )
+        if not use_persisted_state:
+            console.print(
+                f"[dim]Using {len(predictions)} resolved predictions from the last {lookback} days.[/dim]"
+            )
         
         # Run drift checks via unified orchestrator
         monitor = DriftOrchestrator()
         alerts: list[str] = []
         status = DriftOrchestrator.GO
 
-        if {"probability", "outcome"}.issubset(predictions.columns):
+        if use_persisted_state:
+            status = monitor.evaluate_global_drift()
+        elif {"probability", "outcome"}.issubset(predictions.columns):
             scored = predictions[["probability", "outcome"]].copy()
             scored["probability"] = pd.to_numeric(scored["probability"], errors="coerce")
             scored = scored.dropna(subset=["probability", "outcome"])
@@ -462,7 +457,10 @@ def check_drift(
             alerts = ["GLOBAL_STOP: DriftOrchestrator returned STOP state"]
         elif status == DriftOrchestrator.WATCH and not alerts:
             alerts = ["GLOBAL_WATCH: DriftOrchestrator returned WATCH state"]
-        
+
+        if alerts:
+            monitor.append_drift_alerts(alerts, league=league, status=status)
+
         # Display results
         if not alerts:
             console.print("[green]✓ No drift detected[/green]")
@@ -580,6 +578,79 @@ def freeze_models(
     except Exception as e:
         logger.error("Freeze operation failed", exc_info=True)
         raise typer.Exit(code=1)
+
+
+@app.command("sync-models")
+def sync_models(
+    push: bool = typer.Option(False, "--push", help="Upload manifest-listed local .pkl models to S3."),
+    pull: bool = typer.Option(False, "--pull", help="Download missing manifest-listed models from S3."),
+) -> None:
+    from rich.console import Console
+    import os
+    from src.ml.registry import ModelRegistry
+
+    console = Console()
+    if push == pull:
+        console.print("[red]Specify exactly one of --push or --pull.[/red]")
+        raise typer.Exit(code=1)
+
+    bucket = os.environ.get("S3_BUCKET")
+    prefix = os.environ.get("S3_PREFIX")
+    missing = [name for name, value in {"S3_BUCKET": bucket, "S3_PREFIX": prefix}.items() if not value]
+    if missing:
+        console.print(
+            f"[red]Missing required S3 environment variables: {', '.join(missing)}[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    try:
+        registry = ModelRegistry()
+        if push:
+            uploaded = registry.push_to_s3(bucket=bucket, prefix=prefix)
+            console.print(
+                f"[green]Uploaded {uploaded} model artifacts to s3://{bucket.strip().strip('/')}/{prefix.strip().strip('/')}[/green]"
+            )
+        else:
+            downloaded = registry.pull_from_s3(bucket=bucket, prefix=prefix)
+            console.print(
+                f"[green]Downloaded {downloaded} missing model artifacts from s3://{bucket.strip().strip('/')}/{prefix.strip().strip('/')}[/green]"
+            )
+    except Exception as exc:
+        logger.error("Model sync failed", exc_info=True)
+        console.print(f"[red]{type(exc).__name__}: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+
+@app.command("init-db")
+def init_db() -> None:
+    """Initialize the optional SQL database schema for the active backend."""
+    from pathlib import Path
+
+    from rich.console import Console
+
+    from src.db.connection import get_engine
+
+    console = Console()
+    migration_path = Path(__file__).resolve().parents[2] / "db" / "migrations" / "001_initial.sql"
+
+    try:
+        migration_sql = migration_path.read_text(encoding="utf-8")
+        statements = [statement.strip() for statement in migration_sql.split(";") if statement.strip()]
+        if not statements:
+            raise RuntimeError(f"No SQL statements found in migration: {migration_path}")
+
+        engine = get_engine()
+        with engine.begin() as conn:
+            for statement in statements:
+                conn.exec_driver_sql(statement)
+
+        console.print(
+            f"[green]Initialized database schema using {engine.dialect.name} at {engine.url}[/green]"
+        )
+    except Exception as exc:
+        logger.error("Database initialization failed", exc_info=True)
+        console.print(f"[red]{type(exc).__name__}: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
 
 
 @app.command("run-daily-pipeline")

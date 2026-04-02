@@ -3,6 +3,9 @@ import pytest
 import pandas as pd
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+import src.ml.registry as registry_module
+from src.db import connection as connection_module
+from src.db.models import Base
 from src.ml.registry import ModelRegistry, PROMOTION_THRESHOLDS
 from src.core.exceptions import ModelNotFoundError
 
@@ -185,6 +188,33 @@ def test_promotion_threshold_is_clamped_to_50_500():
         PROMOTION_THRESHOLDS.update(original_thresholds)
 
 
+def test_smart_routing_override_warning_logs_once_per_league(monkeypatch):
+    registry = ModelRegistry()
+    monkeypatch.setattr(registry, "_logged_smart_routing", set(), raising=False)
+
+    local_meta = {
+        "metrics": {"calibration_score": 0.09},
+        "train_size": 150,
+        "test_size": 150,
+    }
+    global_meta = {
+        "metrics": {"calibration_score": 0.05},
+        "train_size": 5000,
+        "test_size": 1000,
+    }
+
+    with patch.object(registry, "_calibrate_promotion_threshold"), patch.object(
+        registry,
+        "_get_promotion_threshold",
+        return_value=100,
+    ), patch("src.ml.registry.logger.warning") as mock_warning:
+        registry._select_best_model(local_meta, global_meta, "poisson_home_base", "PL")
+        registry._select_best_model(local_meta, global_meta, "poisson_away_base", "PL")
+
+    assert mock_warning.call_count == 1
+    assert "PL" in registry._logged_smart_routing
+
+
 def test_load_models_for_market_returns_all_loaded_models():
     registry = ModelRegistry()
     with patch.object(
@@ -221,3 +251,152 @@ def test_load_models_for_market_raises_when_any_model_missing():
                 model_names=["home_goals", "away_goals"],
                 league="PL",
             )
+
+
+class _FakeS3FileSystem:
+    storage: dict[str, bytes] = {}
+    created_with: list[dict[str, object]] = []
+
+    def __init__(self, key=None, secret=None, client_kwargs=None):
+        self.__class__.created_with.append(
+            {"key": key, "secret": secret, "client_kwargs": client_kwargs}
+        )
+
+    def put(self, local_path: str, remote_path: str) -> None:
+        self.__class__.storage[remote_path] = Path(local_path).read_bytes()
+
+    def exists(self, remote_path: str) -> bool:
+        return remote_path in self.__class__.storage
+
+    def get(self, remote_path: str, local_path: str) -> None:
+        target = Path(local_path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(self.__class__.storage[remote_path])
+
+
+def test_push_to_s3_uploads_manifest_listed_pkl_files_only(tmp_path, monkeypatch):
+    registry = ModelRegistry()
+    original_manifest = dict(registry.manifest)
+    model_dir = tmp_path / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    (model_dir / "alpha.pkl").write_bytes(b"alpha")
+    (model_dir / "beta.joblib").write_bytes(b"beta")
+
+    try:
+        registry.manifest = {
+            "alpha_model": {"filename": "alpha.pkl"},
+            "beta_model": {"filename": "beta.joblib"},
+            "active_models": {},
+        }
+        monkeypatch.setattr(registry_module, "MODELS_DIR", model_dir)
+        monkeypatch.setattr(registry_module.s3fs, "S3FileSystem", _FakeS3FileSystem)
+        _FakeS3FileSystem.storage = {}
+        _FakeS3FileSystem.created_with = []
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "key")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
+        monkeypatch.setenv("AWS_REGION", "af-south-1")
+
+        uploaded = registry.push_to_s3(bucket="test-bucket", prefix="models/prod")
+
+        assert uploaded == 1
+        assert _FakeS3FileSystem.storage == {
+            "test-bucket/models/prod/alpha.pkl": b"alpha"
+        }
+        assert _FakeS3FileSystem.created_with[0]["client_kwargs"] == {"region_name": "af-south-1"}
+    finally:
+        registry.manifest = original_manifest
+
+
+def test_pull_from_s3_downloads_missing_manifest_files(tmp_path, monkeypatch):
+    registry = ModelRegistry()
+    original_manifest = dict(registry.manifest)
+    model_dir = tmp_path / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    existing_path = model_dir / "existing.pkl"
+    existing_path.write_bytes(b"keep-local")
+
+    try:
+        registry.manifest = {
+            "alpha_model": {"filename": "nested/alpha.pkl"},
+            "beta_model": {"filename": "beta.joblib"},
+            "existing_model": {"filename": "existing.pkl"},
+            "shadow_models": {},
+        }
+        monkeypatch.setattr(registry_module, "MODELS_DIR", model_dir)
+        monkeypatch.setattr(registry_module.s3fs, "S3FileSystem", _FakeS3FileSystem)
+        _FakeS3FileSystem.storage = {
+            "test-bucket/models/prod/nested/alpha.pkl": b"alpha",
+            "test-bucket/models/prod/beta.joblib": b"beta",
+        }
+        _FakeS3FileSystem.created_with = []
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "key")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
+        monkeypatch.setenv("AWS_REGION", "af-south-1")
+
+        downloaded = registry.pull_from_s3(bucket="test-bucket", prefix="models/prod")
+
+        assert downloaded == 2
+        assert (model_dir / "nested" / "alpha.pkl").read_bytes() == b"alpha"
+        assert (model_dir / "beta.joblib").read_bytes() == b"beta"
+        assert existing_path.read_bytes() == b"keep-local"
+    finally:
+        registry.manifest = original_manifest
+
+
+def test_push_to_s3_requires_aws_env(monkeypatch):
+    registry = ModelRegistry()
+    monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
+    monkeypatch.delenv("AWS_SECRET_ACCESS_KEY", raising=False)
+    monkeypatch.delenv("AWS_REGION", raising=False)
+
+    with pytest.raises(EnvironmentError, match="AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION"):
+        registry.push_to_s3(bucket="test-bucket", prefix="models/prod")
+
+
+def test_manifest_load_prefers_database_when_database_url_is_set(tmp_path, monkeypatch):
+    db_path = tmp_path / "manifest.db"
+    models_dir = tmp_path / "models"
+    manifest_file = models_dir / "manifest.json"
+    backup_file = models_dir / "manifest.json.bak"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path.as_posix()}")
+    monkeypatch.setattr(registry_module, "MODELS_DIR", models_dir)
+    monkeypatch.setattr(ModelRegistry, "MANIFEST_FILE", manifest_file)
+    monkeypatch.setattr(ModelRegistry, "BACKUP_FILE", backup_file)
+    connection_module.get_engine.cache_clear()
+    engine = connection_module.get_engine()
+    Base.metadata.create_all(engine)
+
+    ModelRegistry._instance = None
+    ModelRegistry._manifest_cache = None
+
+    try:
+        registry = ModelRegistry()
+        registry.manifest = {
+            "alpha_model": {
+                "name": "poisson_home_base",
+                "version": "1.0.0",
+                "league": "PL",
+                "filename": "alpha.pkl",
+                "metrics": {"brier_score": 0.21},
+            },
+            "active_models": {"poisson_home_base_PL": "alpha_model"},
+        }
+        registry._save_manifest()
+
+        manifest_file.write_text(
+            json.dumps({"from_file": {"name": "wrong", "version": "9.9.9"}}, indent=2),
+            encoding="utf-8",
+        )
+
+        ModelRegistry._instance = None
+        ModelRegistry._manifest_cache = None
+        reloaded = ModelRegistry()
+
+        assert "from_file" not in reloaded.manifest
+        assert reloaded.manifest["alpha_model"]["version"] == "1.0.0"
+        assert reloaded.manifest["active_models"]["poisson_home_base_PL"] == "alpha_model"
+    finally:
+        engine.dispose()
+        connection_module.get_engine.cache_clear()
+        ModelRegistry._instance = None
+        ModelRegistry._manifest_cache = None

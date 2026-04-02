@@ -40664,12 +40664,12 @@
       "log_loss": 1.0102,
       "brier_score": 0.6033
     },
-    "training_date": "2026-04-01T05:34:13.357272",
+    "training_date": "2026-04-01T08:29:52.445829",
     "league": "PL",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 940,
-    "registered_at": "2026-04-01T05:34:13.357297",
+    "registered_at": "2026-04-01T08:29:52.445845",
     "name": "match_outcome",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -40716,12 +40716,12 @@
       "rmse": 1.2972,
       "calibration_score": 0.1641
     },
-    "training_date": "2026-04-01T05:34:14.044087",
+    "training_date": "2026-04-01T08:29:52.967509",
     "league": "PL",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 940,
-    "registered_at": "2026-04-01T05:34:14.044113",
+    "registered_at": "2026-04-01T08:29:52.967532",
     "name": "home_goals",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -40768,12 +40768,12 @@
       "rmse": 1.3065,
       "calibration_score": 0.1676
     },
-    "training_date": "2026-04-01T05:34:14.930273",
+    "training_date": "2026-04-01T08:29:53.461609",
     "league": "PL",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 940,
-    "registered_at": "2026-04-01T05:34:14.930303",
+    "registered_at": "2026-04-01T08:29:53.461624",
     "name": "home_goals_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -40820,12 +40820,12 @@
       "rmse": 1.1856,
       "calibration_score": 0.1907
     },
-    "training_date": "2026-04-01T05:34:15.569377",
+    "training_date": "2026-04-01T08:29:53.928408",
     "league": "PL",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 940,
-    "registered_at": "2026-04-01T05:34:15.569399",
+    "registered_at": "2026-04-01T08:29:53.928425",
     "name": "away_goals",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -40872,12 +40872,12 @@
       "rmse": 1.1969,
       "calibration_score": 0.1932
     },
-    "training_date": "2026-04-01T05:34:16.457292",
+    "training_date": "2026-04-01T08:29:54.443166",
     "league": "PL",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 940,
-    "registered_at": "2026-04-01T05:34:16.457318",
+    "registered_at": "2026-04-01T08:29:54.443178",
     "name": "away_goals_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -40924,12 +40924,12 @@
       "rmse": 3.615,
       "calibration_score": 0.0
     },
-    "training_date": "2026-04-01T05:34:17.074228",
+    "training_date": "2026-04-01T08:29:54.856396",
     "league": "PL",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 940,
-    "registered_at": "2026-04-01T05:34:17.074249",
+    "registered_at": "2026-04-01T08:29:54.856418",
     "name": "corners",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -40976,12 +40976,12 @@
       "rmse": 3.7119,
       "calibration_score": 0.0
     },
-    "training_date": "2026-04-01T05:34:17.877851",
+    "training_date": "2026-04-01T08:29:55.404875",
     "league": "PL",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 940,
-    "registered_at": "2026-04-01T05:34:17.877875",
+    "registered_at": "2026-04-01T08:29:55.404890",
     "name": "corners_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41028,12 +41028,12 @@
       "rmse": 2.3875,
       "calibration_score": 0.0333
     },
-    "training_date": "2026-04-01T05:34:18.526898",
+    "training_date": "2026-04-01T08:29:55.870280",
     "league": "PL",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 940,
-    "registered_at": "2026-04-01T05:34:18.526919",
+    "registered_at": "2026-04-01T08:29:55.870294",
     "name": "cards",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41080,12 +41080,12 @@
       "rmse": 2.5168,
       "calibration_score": 0.0346
     },
-    "training_date": "2026-04-01T05:34:19.377248",
+    "training_date": "2026-04-01T08:29:56.365649",
     "league": "PL",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 940,
-    "registered_at": "2026-04-01T05:34:19.377270",
+    "registered_at": "2026-04-01T08:29:56.365663",
     "name": "cards_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41132,12 +41132,12 @@
       "log_loss": 1.0292,
       "brier_score": 0.6163
     },
-    "training_date": "2026-04-01T05:34:28.987946",
+    "training_date": "2026-04-01T08:30:02.674367",
     "league": "BL1",
     "temporal_validated": true,
     "train_size": 1530,
     "test_size": 747,
-    "registered_at": "2026-04-01T05:34:28.987962",
+    "registered_at": "2026-04-01T08:30:02.674381",
     "name": "match_outcome",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41184,12 +41184,12 @@
       "rmse": 1.3646,
       "calibration_score": 0.1722
     },
-    "training_date": "2026-04-01T05:34:29.643430",
+    "training_date": "2026-04-01T08:30:03.146173",
     "league": "BL1",
     "temporal_validated": true,
     "train_size": 1530,
     "test_size": 747,
-    "registered_at": "2026-04-01T05:34:29.643451",
+    "registered_at": "2026-04-01T08:30:03.146188",
     "name": "home_goals",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41236,12 +41236,12 @@
       "rmse": 1.3648,
       "calibration_score": 0.1732
     },
-    "training_date": "2026-04-01T05:34:30.521425",
+    "training_date": "2026-04-01T08:30:03.737552",
     "league": "BL1",
     "temporal_validated": true,
     "train_size": 1530,
     "test_size": 747,
-    "registered_at": "2026-04-01T05:34:30.521448",
+    "registered_at": "2026-04-01T08:30:03.737569",
     "name": "home_goals_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41288,12 +41288,12 @@
       "rmse": 1.2172,
       "calibration_score": 0.1851
     },
-    "training_date": "2026-04-01T05:34:31.229260",
+    "training_date": "2026-04-01T08:30:04.269721",
     "league": "BL1",
     "temporal_validated": true,
     "train_size": 1530,
     "test_size": 747,
-    "registered_at": "2026-04-01T05:34:31.229281",
+    "registered_at": "2026-04-01T08:30:04.269736",
     "name": "away_goals",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41340,12 +41340,12 @@
       "rmse": 1.2271,
       "calibration_score": 0.1879
     },
-    "training_date": "2026-04-01T05:34:32.060618",
+    "training_date": "2026-04-01T08:30:04.848544",
     "league": "BL1",
     "temporal_validated": true,
     "train_size": 1530,
     "test_size": 747,
-    "registered_at": "2026-04-01T05:34:32.060638",
+    "registered_at": "2026-04-01T08:30:04.848558",
     "name": "away_goals_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41392,12 +41392,12 @@
       "rmse": 3.4032,
       "calibration_score": 0.0
     },
-    "training_date": "2026-04-01T05:34:32.674229",
+    "training_date": "2026-04-01T08:30:05.413083",
     "league": "BL1",
     "temporal_validated": true,
     "train_size": 1530,
     "test_size": 746,
-    "registered_at": "2026-04-01T05:34:32.674252",
+    "registered_at": "2026-04-01T08:30:05.413105",
     "name": "corners",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41444,12 +41444,12 @@
       "rmse": 3.5036,
       "calibration_score": 0.0
     },
-    "training_date": "2026-04-01T05:34:33.526591",
+    "training_date": "2026-04-01T08:30:06.298767",
     "league": "BL1",
     "temporal_validated": true,
     "train_size": 1530,
     "test_size": 746,
-    "registered_at": "2026-04-01T05:34:33.526614",
+    "registered_at": "2026-04-01T08:30:06.298788",
     "name": "corners_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41496,12 +41496,12 @@
       "rmse": 2.3386,
       "calibration_score": 0.0291
     },
-    "training_date": "2026-04-01T05:34:34.197075",
+    "training_date": "2026-04-01T08:30:06.799174",
     "league": "BL1",
     "temporal_validated": true,
     "train_size": 1530,
     "test_size": 746,
-    "registered_at": "2026-04-01T05:34:34.197097",
+    "registered_at": "2026-04-01T08:30:06.799189",
     "name": "cards",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41548,12 +41548,12 @@
       "rmse": 2.488,
       "calibration_score": 0.0306
     },
-    "training_date": "2026-04-01T05:34:34.992502",
+    "training_date": "2026-04-01T08:30:07.492578",
     "league": "BL1",
     "temporal_validated": true,
     "train_size": 1530,
     "test_size": 746,
-    "registered_at": "2026-04-01T05:34:34.992525",
+    "registered_at": "2026-04-01T08:30:07.492594",
     "name": "cards_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41600,12 +41600,12 @@
       "log_loss": 1.0352,
       "brier_score": 0.6208
     },
-    "training_date": "2026-04-01T05:34:47.858616",
+    "training_date": "2026-04-01T08:30:17.191915",
     "league": "FL1",
     "temporal_validated": true,
     "train_size": 1799,
     "test_size": 756,
-    "registered_at": "2026-04-01T05:34:47.858635",
+    "registered_at": "2026-04-01T08:30:17.191931",
     "name": "match_outcome",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41652,12 +41652,12 @@
       "rmse": 1.2625,
       "calibration_score": 0.1659
     },
-    "training_date": "2026-04-01T05:34:48.562307",
+    "training_date": "2026-04-01T08:30:17.814249",
     "league": "FL1",
     "temporal_validated": true,
     "train_size": 1799,
     "test_size": 756,
-    "registered_at": "2026-04-01T05:34:48.562329",
+    "registered_at": "2026-04-01T08:30:17.814277",
     "name": "home_goals",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41704,12 +41704,12 @@
       "rmse": 1.2645,
       "calibration_score": 0.1679
     },
-    "training_date": "2026-04-01T05:34:49.391518",
+    "training_date": "2026-04-01T08:30:18.567554",
     "league": "FL1",
     "temporal_validated": true,
     "train_size": 1799,
     "test_size": 756,
-    "registered_at": "2026-04-01T05:34:49.391541",
+    "registered_at": "2026-04-01T08:30:18.567567",
     "name": "home_goals_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41756,12 +41756,12 @@
       "rmse": 1.1861,
       "calibration_score": 0.2102
     },
-    "training_date": "2026-04-01T05:34:50.090036",
+    "training_date": "2026-04-01T08:30:19.572178",
     "league": "FL1",
     "temporal_validated": true,
     "train_size": 1799,
     "test_size": 756,
-    "registered_at": "2026-04-01T05:34:50.090057",
+    "registered_at": "2026-04-01T08:30:19.572194",
     "name": "away_goals",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41808,12 +41808,12 @@
       "rmse": 1.1845,
       "calibration_score": 0.2125
     },
-    "training_date": "2026-04-01T05:34:50.968165",
+    "training_date": "2026-04-01T08:30:20.450297",
     "league": "FL1",
     "temporal_validated": true,
     "train_size": 1799,
     "test_size": 756,
-    "registered_at": "2026-04-01T05:34:50.968189",
+    "registered_at": "2026-04-01T08:30:20.450318",
     "name": "away_goals_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41860,12 +41860,12 @@
       "rmse": 3.4361,
       "calibration_score": 0.0
     },
-    "training_date": "2026-04-01T05:34:51.581170",
+    "training_date": "2026-04-01T08:30:21.065213",
     "league": "FL1",
     "temporal_validated": true,
     "train_size": 1799,
     "test_size": 756,
-    "registered_at": "2026-04-01T05:34:51.581193",
+    "registered_at": "2026-04-01T08:30:21.065232",
     "name": "corners",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41912,12 +41912,12 @@
       "rmse": 3.5017,
       "calibration_score": 0.0
     },
-    "training_date": "2026-04-01T05:34:52.494469",
+    "training_date": "2026-04-01T08:30:21.820333",
     "league": "FL1",
     "temporal_validated": true,
     "train_size": 1799,
     "test_size": 756,
-    "registered_at": "2026-04-01T05:34:52.494499",
+    "registered_at": "2026-04-01T08:30:21.820353",
     "name": "corners_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -41964,12 +41964,12 @@
       "rmse": 2.0842,
       "calibration_score": 0.033
     },
-    "training_date": "2026-04-01T05:34:53.151135",
+    "training_date": "2026-04-01T08:30:22.380187",
     "league": "FL1",
     "temporal_validated": true,
     "train_size": 1799,
     "test_size": 756,
-    "registered_at": "2026-04-01T05:34:53.151157",
+    "registered_at": "2026-04-01T08:30:22.380208",
     "name": "cards",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42016,12 +42016,12 @@
       "rmse": 2.1476,
       "calibration_score": 0.0331
     },
-    "training_date": "2026-04-01T05:34:54.048985",
+    "training_date": "2026-04-01T08:30:23.079921",
     "league": "FL1",
     "temporal_validated": true,
     "train_size": 1799,
     "test_size": 756,
-    "registered_at": "2026-04-01T05:34:54.049018",
+    "registered_at": "2026-04-01T08:30:23.079944",
     "name": "cards_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42068,12 +42068,12 @@
       "log_loss": 1.0336,
       "brier_score": 0.6212
     },
-    "training_date": "2026-04-01T05:35:06.764295",
+    "training_date": "2026-04-01T08:30:32.619383",
     "league": "SA",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 924,
-    "registered_at": "2026-04-01T05:35:06.764316",
+    "registered_at": "2026-04-01T08:30:32.619398",
     "name": "match_outcome",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42120,12 +42120,12 @@
       "rmse": 1.1448,
       "calibration_score": 0.186
     },
-    "training_date": "2026-04-01T05:35:07.492192",
+    "training_date": "2026-04-01T08:30:33.450943",
     "league": "SA",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 924,
-    "registered_at": "2026-04-01T05:35:07.492215",
+    "registered_at": "2026-04-01T08:30:33.450963",
     "name": "home_goals",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42172,12 +42172,12 @@
       "rmse": 1.1414,
       "calibration_score": 0.188
     },
-    "training_date": "2026-04-01T05:35:08.380340",
+    "training_date": "2026-04-01T08:30:33.959414",
     "league": "SA",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 924,
-    "registered_at": "2026-04-01T05:35:08.380364",
+    "registered_at": "2026-04-01T08:30:33.959428",
     "name": "home_goals_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42224,12 +42224,12 @@
       "rmse": 1.0595,
       "calibration_score": 0.2078
     },
-    "training_date": "2026-04-01T05:35:09.030591",
+    "training_date": "2026-04-01T08:30:34.433204",
     "league": "SA",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 924,
-    "registered_at": "2026-04-01T05:35:09.030613",
+    "registered_at": "2026-04-01T08:30:34.433220",
     "name": "away_goals",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42276,12 +42276,12 @@
       "rmse": 1.0653,
       "calibration_score": 0.2116
     },
-    "training_date": "2026-04-01T05:35:09.944764",
+    "training_date": "2026-04-01T08:30:34.979222",
     "league": "SA",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 924,
-    "registered_at": "2026-04-01T05:35:09.944788",
+    "registered_at": "2026-04-01T08:30:34.979237",
     "name": "away_goals_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42328,12 +42328,12 @@
       "rmse": 3.5908,
       "calibration_score": 0.0
     },
-    "training_date": "2026-04-01T05:35:10.594187",
+    "training_date": "2026-04-01T08:30:35.488285",
     "league": "SA",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 924,
-    "registered_at": "2026-04-01T05:35:10.594207",
+    "registered_at": "2026-04-01T08:30:35.488305",
     "name": "corners",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42380,12 +42380,12 @@
       "rmse": 3.6812,
       "calibration_score": 0.0
     },
-    "training_date": "2026-04-01T05:35:11.421655",
+    "training_date": "2026-04-01T08:30:36.002755",
     "league": "SA",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 924,
-    "registered_at": "2026-04-01T05:35:11.421679",
+    "registered_at": "2026-04-01T08:30:36.002769",
     "name": "corners_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42432,12 +42432,12 @@
       "rmse": 2.2909,
       "calibration_score": 0.0297
     },
-    "training_date": "2026-04-01T05:35:12.081495",
+    "training_date": "2026-04-01T08:30:36.445296",
     "league": "SA",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 924,
-    "registered_at": "2026-04-01T05:35:12.081517",
+    "registered_at": "2026-04-01T08:30:36.445314",
     "name": "cards",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42484,12 +42484,12 @@
       "rmse": 2.2825,
       "calibration_score": 0.0296
     },
-    "training_date": "2026-04-01T05:35:12.950213",
+    "training_date": "2026-04-01T08:30:36.969764",
     "league": "SA",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 924,
-    "registered_at": "2026-04-01T05:35:12.950232",
+    "registered_at": "2026-04-01T08:30:36.969780",
     "name": "cards_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42536,12 +42536,12 @@
       "log_loss": 1.0209,
       "brier_score": 0.6122
     },
-    "training_date": "2026-04-01T05:35:25.587625",
+    "training_date": "2026-04-01T08:30:43.920366",
     "league": "PD",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 931,
-    "registered_at": "2026-04-01T05:35:25.587644",
+    "registered_at": "2026-04-01T08:30:43.920380",
     "name": "match_outcome",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42588,12 +42588,12 @@
       "rmse": 1.185,
       "calibration_score": 0.1684
     },
-    "training_date": "2026-04-01T05:35:26.258172",
+    "training_date": "2026-04-01T08:30:44.388284",
     "league": "PD",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 931,
-    "registered_at": "2026-04-01T05:35:26.258193",
+    "registered_at": "2026-04-01T08:30:44.388300",
     "name": "home_goals",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42640,12 +42640,12 @@
       "rmse": 1.201,
       "calibration_score": 0.1739
     },
-    "training_date": "2026-04-01T05:35:27.129098",
+    "training_date": "2026-04-01T08:30:44.884690",
     "league": "PD",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 931,
-    "registered_at": "2026-04-01T05:35:27.129120",
+    "registered_at": "2026-04-01T08:30:44.884703",
     "name": "home_goals_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42692,12 +42692,12 @@
       "rmse": 1.0788,
       "calibration_score": 0.2151
     },
-    "training_date": "2026-04-01T05:35:27.852832",
+    "training_date": "2026-04-01T08:30:45.367352",
     "league": "PD",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 931,
-    "registered_at": "2026-04-01T05:35:27.852855",
+    "registered_at": "2026-04-01T08:30:45.367368",
     "name": "away_goals",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42744,12 +42744,12 @@
       "rmse": 1.0883,
       "calibration_score": 0.2202
     },
-    "training_date": "2026-04-01T05:35:28.768145",
+    "training_date": "2026-04-01T08:30:45.869203",
     "league": "PD",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 931,
-    "registered_at": "2026-04-01T05:35:28.768178",
+    "registered_at": "2026-04-01T08:30:45.869215",
     "name": "away_goals_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42796,12 +42796,12 @@
       "rmse": 3.3144,
       "calibration_score": 0.0
     },
-    "training_date": "2026-04-01T05:35:29.423246",
+    "training_date": "2026-04-01T08:30:46.382312",
     "league": "PD",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 931,
-    "registered_at": "2026-04-01T05:35:29.423267",
+    "registered_at": "2026-04-01T08:30:46.382327",
     "name": "corners",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42848,12 +42848,12 @@
       "rmse": 3.4325,
       "calibration_score": 0.0
     },
-    "training_date": "2026-04-01T05:35:30.285609",
+    "training_date": "2026-04-01T08:30:46.866325",
     "league": "PD",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 931,
-    "registered_at": "2026-04-01T05:35:30.285633",
+    "registered_at": "2026-04-01T08:30:46.866338",
     "name": "corners_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42900,12 +42900,12 @@
       "rmse": 2.603,
       "calibration_score": 0.017
     },
-    "training_date": "2026-04-01T05:35:30.963787",
+    "training_date": "2026-04-01T08:30:47.328909",
     "league": "PD",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 931,
-    "registered_at": "2026-04-01T05:35:30.963816",
+    "registered_at": "2026-04-01T08:30:47.328925",
     "name": "cards",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"
@@ -42952,12 +42952,12 @@
       "rmse": 2.6745,
       "calibration_score": 0.0173
     },
-    "training_date": "2026-04-01T05:35:31.800438",
+    "training_date": "2026-04-01T08:30:47.831958",
     "league": "PD",
     "temporal_validated": true,
     "train_size": 1520,
     "test_size": 931,
-    "registered_at": "2026-04-01T05:35:31.800460",
+    "registered_at": "2026-04-01T08:30:47.831974",
     "name": "cards_xgb",
     "version": "1.0.0",
     "sklearn_version": "1.8.0"

@@ -32,6 +32,8 @@ def repo_state_paths(tmp_path):
         "models_dir": models_dir,
         "history_db_file": data_dir / "models" / "model_history.db",
         "drift_status_file": data_dir / "drift" / "rolling_90d_status.json",
+        "drift_confidence_file": data_dir / "drift" / "confidence_drift_state.json",
+        "drift_alerts_file": data_dir / "monitoring" / "drift_alerts.csv",
         "drift_baseline_file": data_dir / "models" / "drift_baselines.json",
         "model_state_file": data_dir / ".model_state",
         "model_state_audit_file": data_dir / ".model_state_audit.jsonl",
@@ -92,9 +94,18 @@ def isolated_repo_state(repo_state_paths, monkeypatch):
 @pytest.fixture(autouse=True)
 def isolate_drift_guard_files(repo_state_paths, monkeypatch):
     from src.ml.model_db import ModelHistoryDB
+    from src.monitoring.drift_orchestrator import DriftOrchestrator
     from src.strategies.drift_guard import DriftGuardrail
 
     monkeypatch.setattr(ModelHistoryDB, "DB_FILE", repo_state_paths["history_db_file"])
+    monkeypatch.setattr(DriftOrchestrator, "DEFAULT_STATUS_FILE", repo_state_paths["drift_status_file"])
+    monkeypatch.setattr(
+        DriftOrchestrator,
+        "DEFAULT_CONFIDENCE_STATE_FILE",
+        repo_state_paths["drift_confidence_file"],
+    )
+    monkeypatch.setattr(DriftOrchestrator, "DEFAULT_BASELINE_FILE", repo_state_paths["drift_baseline_file"])
+    monkeypatch.setattr(DriftOrchestrator, "DEFAULT_ALERTS_FILE", repo_state_paths["drift_alerts_file"])
     monkeypatch.setattr(
         DriftGuardrail,
         "STATUS_FILE",
@@ -105,3 +116,15 @@ def isolate_drift_guard_files(repo_state_paths, monkeypatch):
         "BASELINE_FILE",
         repo_state_paths["drift_baseline_file"],
     )
+
+
+@pytest.fixture(autouse=True)
+def isolate_database_url(monkeypatch):
+    from src.db import connection as connection_module
+
+    connection_module.get_engine.cache_clear()
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    try:
+        yield
+    finally:
+        connection_module.get_engine.cache_clear()

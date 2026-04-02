@@ -43,6 +43,10 @@ def test_model_health_endpoint_returns_market_entries(monkeypatch):
                 return "WATCH"
             return "GO"
 
+        def get_market_health(self, market):
+            assert market == "poisson_home_base"
+            return {"drift": 0.034, "n": 120, "bet_count": 120, "cooldown_until": None}
+
     monkeypatch.setattr(api_main, "ModelRegistry", FakeRegistry)
     monkeypatch.setattr(api_main, "ModelHistoryDB", FakeModelHistoryDB)
     monkeypatch.setattr(api_main, "DriftOrchestrator", FakeDrift)
@@ -57,7 +61,10 @@ def test_model_health_endpoint_returns_market_entries(monkeypatch):
     assert entry["league"] == "PL"
     assert entry["version"] == "1.4.0"
     assert entry["brier_score"] == 0.187
+    assert entry["drift_score"] == 0.034
     assert entry["drift_status"] == "WATCH"
+    assert entry["sample_size"] == 120
+    assert entry["bet_count"] == 120
     assert entry["last_trained"] == "2026-03-21T00:00:00+00:00"
 
 
@@ -94,6 +101,9 @@ def test_model_health_endpoint_falls_back_to_global_drift_status(monkeypatch):
 
         def get_status(self, market=None):
             return "STOP"
+
+        def get_market_health(self, market):
+            return {}
 
     monkeypatch.setattr(api_main, "ModelRegistry", FakeRegistry)
     monkeypatch.setattr(api_main, "ModelHistoryDB", FakeModelHistoryDB)
@@ -148,6 +158,9 @@ def test_model_health_endpoint_falls_back_to_model_history_brier(monkeypatch):
 
         def get_status(self, market=None):
             return "GO"
+
+        def get_market_health(self, market):
+            return {}
 
     monkeypatch.setattr(api_main, "ModelRegistry", FakeRegistry)
     monkeypatch.setattr(api_main, "ModelHistoryDB", FakeModelHistoryDB)
