@@ -355,7 +355,7 @@ def _report_drift_results(metrics: DriftMetrics) -> None:
 @app.command("check-drift")
 def check_drift(
     league: str = typer.Option(None, "--league", "-l", help="Specific league to check (default: all)"),
-    lookback: int = typer.Option(30, help="Days to look back", min=7, max=90)
+    lookback: int = typer.Option(120, help="Days to look back", min=7, max=120)
 ) -> None:
     """
     Run drift detection with type classification.
@@ -657,7 +657,7 @@ def init_db() -> None:
 def run_daily_pipeline(
     league: str = typer.Option("PL", "--league", "-l", help="League code for fetch, drift, and predictions."),
     season: Optional[str] = typer.Option(None, "--season", help="Season token YYZZ (default: inferred)."),
-    lookback: int = typer.Option(30, "--lookback", min=7, max=90, help="Days for drift check."),
+    lookback: int = typer.Option(120, "--lookback", min=7, max=120, help="Days for drift check."),
     prediction_date: str = typer.Option("today", "--prediction-date", help="Date filter for predictions."),
     show_all_predictions: bool = typer.Option(False, "--all", help="Show all upcoming predictions."),
     tz: str = typer.Option("LOCAL", "--tz", help="Timezone for prediction filtering."),
