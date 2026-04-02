@@ -94,7 +94,7 @@ class Predictor:
         timezone: str = "LOCAL",
         simulate: bool = True,
         limit: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]] | Dict[str, Any]:
         """
         Reuse the exact core data/prediction path used by CLI `show-predictions`.
         """
@@ -102,14 +102,21 @@ class Predictor:
         df = self.container.pipeline.run(league=league_code)
         validate_match_dataframe(df, context="predictor.predict_for_show_predictions")
 
+        resolved_date = DateFilter.ALL if str(date).lower() == "upcoming" else date
+
         df_target = filter_matches_by_date(
             df,
-            date,
+            resolved_date,
             show_all=show_all,
             user_timezone=timezone,
         )
         if df_target.empty:
-            return []
+            return {
+                "predictions": [],
+                "total": 0,
+                "reason": "no_fixtures",
+                "message": "No upcoming fixtures found for this league in the dataset.",
+            }
 
         predictions = _run_predict_loop(df_target.sort_values("date"), use_simulator=simulate)
         if limit is not None:

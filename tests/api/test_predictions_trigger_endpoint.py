@@ -12,15 +12,15 @@ def test_trigger_predictions_runs_pipeline(monkeypatch):
         self,
         *,
         league=None,
-        date="today",
-        show_all=False,
+        date="upcoming",
+        show_all=True,
         timezone="LOCAL",
         simulate=True,
         limit=None,
     ):
         assert league == "PL"
-        assert date == "today"
-        assert show_all is False
+        assert date == "upcoming"
+        assert show_all is True
         assert timezone == "LOCAL"
         assert simulate is True
         assert limit is None

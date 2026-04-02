@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -435,6 +436,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
 
 @app.get("/dashboard")
@@ -607,6 +609,7 @@ def trigger_predictions(request: Request, payload: PredictionTriggerRequest) -> 
                 generated_at=datetime.now(),
                 league=str(payload.league).upper(),
                 total_predictions=0,
+                total=0,
                 predictions=[],
                 drift_status=drift_status,
                 blocked=True,
@@ -615,30 +618,50 @@ def trigger_predictions(request: Request, payload: PredictionTriggerRequest) -> 
                     drift_status=drift_status,
                     total_predictions=0,
                 ),
+                reason="drift_guardrail_stop",
             )
 
         predictor = Predictor()
         raw_predictions = predictor.predict_for_show_predictions(
             league=payload.league,
-            date="today",
-            show_all=False,
+            date="upcoming",
+            show_all=True,
             timezone="LOCAL",
             simulate=True,
             limit=payload.limit,
         )
+        empty_reason: Optional[str] = None
+        empty_message: Optional[str] = None
+        total: Optional[int] = None
+        if isinstance(raw_predictions, dict):
+            empty_reason = str(raw_predictions.get("reason", "")).strip() or None
+            empty_message = str(raw_predictions.get("message", "")).strip() or None
+            total_value = raw_predictions.get("total")
+            if isinstance(total_value, int):
+                total = total_value
+            candidate_predictions = raw_predictions.get("predictions", [])
+            raw_predictions = candidate_predictions if isinstance(candidate_predictions, list) else []
+
         serialized = [_serialize_trigger_prediction(prediction) for prediction in raw_predictions]
+        effective_total = total if total is not None else len(serialized)
+        message = _empty_predictions_message(
+            league=str(payload.league).upper(),
+            drift_status=drift_status,
+            total_predictions=effective_total,
+        )
+        if effective_total == 0 and empty_message:
+            message = empty_message
+
         return PredictionTriggerResponse(
             generated_at=datetime.now(),
             league=str(payload.league).upper(),
             total_predictions=len(serialized),
+            total=effective_total,
             predictions=serialized,
             drift_status=drift_status,
             blocked=False,
-            message=_empty_predictions_message(
-                league=str(payload.league).upper(),
-                drift_status=drift_status,
-                total_predictions=len(serialized),
-            ),
+            message=message,
+            reason=empty_reason,
         )
     except ConfigurationError as exc:
         logger.error("Prediction trigger environment mismatch for %s: %s", payload.league, exc)

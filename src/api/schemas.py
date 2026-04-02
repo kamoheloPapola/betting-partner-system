@@ -53,10 +53,12 @@ class PredictionTriggerResponse(BaseModel):
     generated_at: datetime
     league: str
     total_predictions: int
+    total: Optional[int] = None
     predictions: List[TriggerPrediction]
     drift_status: Optional[str] = None
     blocked: bool = False
     message: Optional[str] = None
+    reason: Optional[str] = None
 
 
 class ForbiddenFruitSlipLeg(BaseModel):
