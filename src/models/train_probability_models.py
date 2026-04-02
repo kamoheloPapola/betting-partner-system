@@ -303,6 +303,9 @@ class ProbabilityModelTrainer:
         y_train: pd.Series,
         X_test: pd.DataFrame,
         y_test: pd.Series,
+        *,
+        existing_model_path: Optional[Path] = None,
+        full_retrain: bool = False,
     ) -> Tuple[Any, Dict[str, Any]]:
         logger.info("Training %s Model (LGBMRegressor Poisson)...", name)
         model = LGBMRegressor(
@@ -314,7 +317,27 @@ class ProbabilityModelTrainer:
             random_state=42,
             verbose=-1,
         )
-        model.fit(X_train, y_train)
+        fit_kwargs: Dict[str, Any] = {}
+        if (
+            not full_retrain
+            and existing_model_path is not None
+            and existing_model_path.exists()
+        ):
+            try:
+                existing_model = joblib.load(existing_model_path)
+                if hasattr(existing_model, "booster_"):
+                    fit_kwargs["init_model"] = existing_model.booster_
+                else:
+                    fit_kwargs["init_model"] = str(existing_model_path)
+                logger.info("Warm-start enabled for %s using %s", name, existing_model_path)
+            except Exception as exc:
+                logger.warning(
+                    "Warm-start checkpoint ignored for %s (%s): %s",
+                    name,
+                    existing_model_path,
+                    exc,
+                )
+        model.fit(X_train, y_train, **fit_kwargs)
 
         preds = np.maximum(0.05, model.predict(X_test))
         mae = mean_absolute_error(y_test, preds)
@@ -342,6 +365,8 @@ class ProbabilityModelTrainer:
         y_test: pd.Series,
         *,
         objective: str,
+        existing_model_path: Optional[Path] = None,
+        full_retrain: bool = False,
     ) -> Tuple[Any, Dict[str, Any]]:
         logger.info("Training %s Model (XGBRegressor %s)...", name, objective)
         params: Dict[str, Any] = {
@@ -364,7 +389,24 @@ class ProbabilityModelTrainer:
             params["eval_metric"] = "rmse"
 
         model = XGBRegressor(**params)
-        model.fit(X_train, y_train)
+        fit_kwargs: Dict[str, Any] = {}
+        if (
+            not full_retrain
+            and existing_model_path is not None
+            and existing_model_path.exists()
+        ):
+            try:
+                existing_model = joblib.load(existing_model_path)
+                fit_kwargs["xgb_model"] = existing_model
+                logger.info("Warm-start enabled for %s using %s", name, existing_model_path)
+            except Exception as exc:
+                logger.warning(
+                    "Warm-start checkpoint ignored for %s (%s): %s",
+                    name,
+                    existing_model_path,
+                    exc,
+                )
+        model.fit(X_train, y_train, **fit_kwargs)
 
         preds = np.maximum(0.05, model.predict(X_test))
         mae = mean_absolute_error(y_test, preds)
@@ -413,7 +455,13 @@ class ProbabilityModelTrainer:
         self.registry.set_active_model(name, manifest_key, league=league)
         return manifest_key
 
-    def _train_league(self, league: str, df_scope: pd.DataFrame) -> Dict[str, Any]:
+    def _train_league(
+        self,
+        league: str,
+        df_scope: pd.DataFrame,
+        *,
+        full_retrain: bool = False,
+    ) -> Dict[str, Any]:
         train, val, test = self.get_time_splits(df_scope)
         if train.empty or val.empty or test.empty:
             raise RuntimeError(
@@ -459,15 +507,18 @@ class ProbabilityModelTrainer:
         # 2) Home goals
         home_train_idx, home_test_idx = self._target_masks(X_train_full, X_test, df_scope, "home_goals")
         self._require_non_empty_masks(home_train_idx, home_test_idx, "home_goals", league)
+        home_goals_file = self._append_league_suffix("home_goals_model.pkl", league)
+        home_goals_path = self.models_dir / home_goals_file
         home_goals_model, home_goals_metrics = self.train_count_model(
             f"Home Goals [{league}]",
             X_train_full.loc[home_train_idx],
             df_scope.loc[home_train_idx, "home_goals"],
             X_test.loc[home_test_idx],
             df_scope.loc[home_test_idx, "home_goals"],
+            existing_model_path=home_goals_path,
+            full_retrain=full_retrain,
         )
-        home_goals_file = self._append_league_suffix("home_goals_model.pkl", league)
-        joblib.dump(home_goals_model, self.models_dir / home_goals_file)
+        joblib.dump(home_goals_model, home_goals_path)
         report["home_goals"] = home_goals_metrics
         models_trained.append("home_goals")
         self._register_model(
@@ -482,6 +533,8 @@ class ProbabilityModelTrainer:
             test_size=len(home_test_idx),
         )
 
+        home_goals_xgb_file = self._append_league_suffix("home_goals_xgb_v1.joblib", league)
+        home_goals_xgb_path = self.models_dir / home_goals_xgb_file
         home_goals_xgb_model, home_goals_xgb_metrics = self.train_count_model_xgb(
             f"Home Goals XGB [{league}]",
             X_train_full.loc[home_train_idx],
@@ -489,9 +542,10 @@ class ProbabilityModelTrainer:
             X_test.loc[home_test_idx],
             df_scope.loc[home_test_idx, "home_goals"],
             objective="count:poisson",
+            existing_model_path=home_goals_xgb_path,
+            full_retrain=full_retrain,
         )
-        home_goals_xgb_file = self._append_league_suffix("home_goals_xgb_v1.joblib", league)
-        joblib.dump(home_goals_xgb_model, self.models_dir / home_goals_xgb_file)
+        joblib.dump(home_goals_xgb_model, home_goals_xgb_path)
         report["home_goals_xgb"] = home_goals_xgb_metrics
         models_trained.append("home_goals_xgb")
         self._register_model(
@@ -509,15 +563,18 @@ class ProbabilityModelTrainer:
         # 3) Away goals
         away_train_idx, away_test_idx = self._target_masks(X_train_full, X_test, df_scope, "away_goals")
         self._require_non_empty_masks(away_train_idx, away_test_idx, "away_goals", league)
+        away_goals_file = self._append_league_suffix("away_goals_model.pkl", league)
+        away_goals_path = self.models_dir / away_goals_file
         away_goals_model, away_goals_metrics = self.train_count_model(
             f"Away Goals [{league}]",
             X_train_full.loc[away_train_idx],
             df_scope.loc[away_train_idx, "away_goals"],
             X_test.loc[away_test_idx],
             df_scope.loc[away_test_idx, "away_goals"],
+            existing_model_path=away_goals_path,
+            full_retrain=full_retrain,
         )
-        away_goals_file = self._append_league_suffix("away_goals_model.pkl", league)
-        joblib.dump(away_goals_model, self.models_dir / away_goals_file)
+        joblib.dump(away_goals_model, away_goals_path)
         report["away_goals"] = away_goals_metrics
         models_trained.append("away_goals")
         self._register_model(
@@ -532,6 +589,8 @@ class ProbabilityModelTrainer:
             test_size=len(away_test_idx),
         )
 
+        away_goals_xgb_file = self._append_league_suffix("away_goals_xgb_v1.joblib", league)
+        away_goals_xgb_path = self.models_dir / away_goals_xgb_file
         away_goals_xgb_model, away_goals_xgb_metrics = self.train_count_model_xgb(
             f"Away Goals XGB [{league}]",
             X_train_full.loc[away_train_idx],
@@ -539,9 +598,10 @@ class ProbabilityModelTrainer:
             X_test.loc[away_test_idx],
             df_scope.loc[away_test_idx, "away_goals"],
             objective="count:poisson",
+            existing_model_path=away_goals_xgb_path,
+            full_retrain=full_retrain,
         )
-        away_goals_xgb_file = self._append_league_suffix("away_goals_xgb_v1.joblib", league)
-        joblib.dump(away_goals_xgb_model, self.models_dir / away_goals_xgb_file)
+        joblib.dump(away_goals_xgb_model, away_goals_xgb_path)
         report["away_goals_xgb"] = away_goals_xgb_metrics
         models_trained.append("away_goals_xgb")
         self._register_model(
@@ -559,15 +619,18 @@ class ProbabilityModelTrainer:
         # 4) Total corners
         corners_train_idx, corners_test_idx = self._target_masks(X_train_full, X_test, df_scope, "total_corners")
         self._require_non_empty_masks(corners_train_idx, corners_test_idx, "total_corners", league)
+        corners_file = self._append_league_suffix("corners_model.pkl", league)
+        corners_path = self.models_dir / corners_file
         corners_model, corners_metrics = self.train_count_model(
             f"Corners [{league}]",
             X_train_full.loc[corners_train_idx],
             df_scope.loc[corners_train_idx, "total_corners"],
             X_test.loc[corners_test_idx],
             df_scope.loc[corners_test_idx, "total_corners"],
+            existing_model_path=corners_path,
+            full_retrain=full_retrain,
         )
-        corners_file = self._append_league_suffix("corners_model.pkl", league)
-        joblib.dump(corners_model, self.models_dir / corners_file)
+        joblib.dump(corners_model, corners_path)
         report["corners"] = corners_metrics
         models_trained.append("corners")
         self._register_model(
@@ -582,6 +645,8 @@ class ProbabilityModelTrainer:
             test_size=len(corners_test_idx),
         )
 
+        corners_xgb_file = self._append_league_suffix("corners_xgb_v1.joblib", league)
+        corners_xgb_path = self.models_dir / corners_xgb_file
         corners_xgb_model, corners_xgb_metrics = self.train_count_model_xgb(
             f"Corners XGB [{league}]",
             X_train_full.loc[corners_train_idx],
@@ -589,9 +654,10 @@ class ProbabilityModelTrainer:
             X_test.loc[corners_test_idx],
             df_scope.loc[corners_test_idx, "total_corners"],
             objective="reg:tweedie",
+            existing_model_path=corners_xgb_path,
+            full_retrain=full_retrain,
         )
-        corners_xgb_file = self._append_league_suffix("corners_xgb_v1.joblib", league)
-        joblib.dump(corners_xgb_model, self.models_dir / corners_xgb_file)
+        joblib.dump(corners_xgb_model, corners_xgb_path)
         report["corners_xgb"] = corners_xgb_metrics
         models_trained.append("corners_xgb")
         self._register_model(
@@ -609,15 +675,18 @@ class ProbabilityModelTrainer:
         # 5) Total cards
         cards_train_idx, cards_test_idx = self._target_masks(X_train_full, X_test, df_scope, "total_cards")
         self._require_non_empty_masks(cards_train_idx, cards_test_idx, "total_cards", league)
+        cards_file = self._append_league_suffix("cards_model.pkl", league)
+        cards_path = self.models_dir / cards_file
         cards_model, cards_metrics = self.train_count_model(
             f"Cards [{league}]",
             X_train_full.loc[cards_train_idx],
             df_scope.loc[cards_train_idx, "total_cards"],
             X_test.loc[cards_test_idx],
             df_scope.loc[cards_test_idx, "total_cards"],
+            existing_model_path=cards_path,
+            full_retrain=full_retrain,
         )
-        cards_file = self._append_league_suffix("cards_model.pkl", league)
-        joblib.dump(cards_model, self.models_dir / cards_file)
+        joblib.dump(cards_model, cards_path)
         report["cards"] = cards_metrics
         models_trained.append("cards")
         self._register_model(
@@ -632,6 +701,8 @@ class ProbabilityModelTrainer:
             test_size=len(cards_test_idx),
         )
 
+        cards_xgb_file = self._append_league_suffix("cards_xgb_v1.joblib", league)
+        cards_xgb_path = self.models_dir / cards_xgb_file
         cards_xgb_model, cards_xgb_metrics = self.train_count_model_xgb(
             f"Cards XGB [{league}]",
             X_train_full.loc[cards_train_idx],
@@ -639,9 +710,10 @@ class ProbabilityModelTrainer:
             X_test.loc[cards_test_idx],
             df_scope.loc[cards_test_idx, "total_cards"],
             objective="reg:tweedie",
+            existing_model_path=cards_xgb_path,
+            full_retrain=full_retrain,
         )
-        cards_xgb_file = self._append_league_suffix("cards_xgb_v1.joblib", league)
-        joblib.dump(cards_xgb_model, self.models_dir / cards_xgb_file)
+        joblib.dump(cards_xgb_model, cards_xgb_path)
         report["cards_xgb"] = cards_xgb_metrics
         models_trained.append("cards_xgb")
         self._register_model(
@@ -698,7 +770,12 @@ class ProbabilityModelTrainer:
             "metadata": league_meta,
         }
 
-    def run(self) -> None:
+    def run(
+        self,
+        *,
+        tracked_leagues: Optional[List[str]] = None,
+        full_retrain: bool = False,
+    ) -> None:
         df = self.load_and_engineer_data()
 
         if "league" not in df.columns:
@@ -713,14 +790,16 @@ class ProbabilityModelTrainer:
         all_metadata: Dict[str, Dict[str, Any]] = {}
         available_leagues = set(df_valid["league"].astype(str).unique())
 
-        for league in TRACKED_LEAGUES:
+        leagues_to_train: Tuple[str, ...] = tuple(tracked_leagues) if tracked_leagues else TRACKED_LEAGUES
+
+        for league in leagues_to_train:
             if league not in available_leagues:
                 logger.warning("League %s missing from feature matrix. Skipping.", league)
                 continue
 
             league_df = df_valid[df_valid["league"].astype(str) == league].copy()
             logger.info("=== Training specialist models for %s (%d rows) ===", league, len(league_df))
-            league_result = self._train_league(league, league_df)
+            league_result = self._train_league(league, league_df, full_retrain=full_retrain)
             all_reports[league] = league_result["metrics"]
             all_metadata[league] = league_result["metadata"]
 
@@ -729,7 +808,7 @@ class ProbabilityModelTrainer:
 
         combined_metadata = {
             "generated_at": datetime.now().isoformat(),
-            "tracked_leagues": list(TRACKED_LEAGUES),
+            "tracked_leagues": list(leagues_to_train),
             "leagues": all_metadata,
         }
         combined_report = {

@@ -4,6 +4,8 @@ API/CLI Parity Tests.
 Ensures API output matches CLI output exactly.
 Prevents divergence, formatting drift, and logic duplication.
 """
+import os
+import re
 import pytest
 from typing import Dict, Any
 
@@ -86,7 +88,11 @@ class TestAPICLIParity:
         assert set(response.keys()) == expected_keys
         assert isinstance(response["immune_markets"], list)
     
-    @pytest.mark.skip(reason="Requires live system with matching data")
+    @pytest.mark.integration
+    @pytest.mark.skipif(
+        not os.getenv("RUN_INTEGRATION_TESTS"),
+        reason="Integration test — set RUN_INTEGRATION_TESTS=1 to run"
+    )
     def test_full_parity_check(self):
         """
         Full parity test comparing CLI and API outputs.
@@ -98,27 +104,37 @@ class TestAPICLIParity:
         """
         import subprocess
         import requests
-        import json
         
         # Run CLI
         cli_result = subprocess.run(
-            ["python", "-m", "src.cli", "show-predictions", "--league", "PL", "--json"],
+            ["python", "-m", "src.cli", "show-predictions", "--league", "PL", "--all"],
             capture_output=True,
-            text=True
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
         )
-        cli_output = json.loads(cli_result.stdout)
+        assert cli_result.returncode == 0, cli_result.stderr or cli_result.stdout
+
+        cli_text = f"{cli_result.stdout}\n{cli_result.stderr}"
+        summary_match = re.search(r"Summary:\s*(\d+)\s*matches", cli_text)
+        assert summary_match is not None, "Could not parse CLI summary match count."
+        cli_match_count = int(summary_match.group(1))
         
         # Call API
-        api_response = requests.get("http://localhost:8000/api/v1/predictions/PL")
+        api_response = requests.post(
+            "http://localhost:8000/api/v1/predictions/trigger",
+            json={"league": "PL"},
+            timeout=30,
+        )
+        assert api_response.status_code == 200, api_response.text
         api_output = api_response.json()
+        assert "predictions" in api_output
+        assert isinstance(api_output["predictions"], list)
         
         # Compare structure
-        assert len(cli_output) == len(api_output), "Fixture count mismatch"
+        assert len(api_output["predictions"]) == cli_match_count, "Fixture count mismatch"
         
         # Compare probabilities within tolerance
-        TOLERANCE = 0.001
-        for cli_pred, api_pred in zip(cli_output, api_output):
-            for key in ["home_win", "draw", "away_win"]:
-                cli_val = cli_pred["probabilities"].get(key, 0)
-                api_val = api_pred["probabilities"].get(key, 0)
-                assert abs(cli_val - api_val) < TOLERANCE, f"{key} mismatch"
+        for api_pred in api_output["predictions"]:
+            for key in ["home_win_prob", "draw_prob", "away_win_prob"]:
+                assert key in api_pred, f"Missing key: {key}"

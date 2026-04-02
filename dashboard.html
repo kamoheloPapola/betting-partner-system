@@ -322,6 +322,7 @@
     border: 1px solid var(--border);
     border-radius: 14px;
     padding: 20px 24px;
+    min-height: 200px;
     box-shadow: var(--card-shadow);
   }
 
@@ -742,6 +743,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
+    min-height: 200px;
     padding: 64px 32px;
     text-align: center;
   }
@@ -1185,7 +1187,7 @@ async function checkStatus() {
 async function fetchPredictions() {
   const league = document.getElementById('leagueSelect').value;
   const btn = document.getElementById('fetchBtn');
-  btn.textContent = 'Fetching...';
+  btn.textContent = '⏳ Fetching…';
   btn.classList.add('btn-loading');
 
   document.getElementById('predictionsEmpty').style.display = 'none';
@@ -1229,10 +1231,10 @@ async function fetchPredictions() {
     renderPredictions(matches);
   } catch (e) {
     showPredictionError('Could not reach the API. Is it running?');
+  } finally {
+    btn.innerHTML = '<img class="btn-icon" src="/assets/icons/predictions.png" alt="" aria-hidden="true"/> Get Predictions';
+    btn.classList.remove('btn-loading');
   }
-
-  btn.innerHTML = '<img class="btn-icon" src="/assets/icons/predictions.png" alt="" aria-hidden="true"/> Get Predictions';
-  btn.classList.remove('btn-loading');
 }
 
 function showPredictionError(msg) {
@@ -1373,7 +1375,7 @@ function formatDate(d) {
 async function fetchSlip() {
   const league = document.getElementById('slipLeagueSelect').value;
   const btn = document.getElementById('slipBtn');
-  btn.textContent = 'Building...';
+  btn.textContent = '⏳ Building…';
   btn.classList.add('btn-loading');
 
   try {
@@ -1399,13 +1401,13 @@ async function fetchSlip() {
         <div class="empty-state">
           <div class="empty-icon"><img src="/assets/icons/slip-builder.png" alt="" aria-hidden="true"/></div>
           <div class="empty-title">Could not load slip</div>
-          <div class="empty-body">Make sure the API is running and try again.</div>
+            <div class="empty-body">Make sure the API is running and try again.</div>
         </div>
       </div>`;
+  } finally {
+    btn.innerHTML = '<img class="btn-icon" src="/assets/icons/slip-builder.png" alt="" aria-hidden="true"/> Get Slip';
+    btn.classList.remove('btn-loading');
   }
-
-  btn.innerHTML = '<img class="btn-icon" src="/assets/icons/slip-builder.png" alt="" aria-hidden="true"/> Get Slip';
-  btn.classList.remove('btn-loading');
 }
 
 function renderSlip(data, league) {
@@ -1442,7 +1444,7 @@ function renderSlip(data, league) {
 // --- HEALTH ---
 async function fetchHealth() {
   const btn = document.getElementById('healthBtn');
-  btn.textContent = 'Loading...';
+  btn.textContent = '⏳ Loading…';
   btn.classList.add('btn-loading');
 
   try {
@@ -1497,10 +1499,10 @@ async function fetchHealth() {
       <div class="empty-title">Could not load health data</div>
       <div class="empty-body">Make sure the API is running and try again.</div>`;
     document.getElementById('healthEmpty').style.display = 'flex';
+  } finally {
+    btn.innerHTML = '<img class="btn-icon" src="/assets/icons/model-health.png" alt="" aria-hidden="true"/> Refresh Health';
+    btn.classList.remove('btn-loading');
   }
-
-  btn.innerHTML = '<img class="btn-icon" src="/assets/icons/model-health.png" alt="" aria-hidden="true"/> Refresh Health';
-  btn.classList.remove('btn-loading');
 }
 
 function formatMarketName(k) {
@@ -1529,7 +1531,7 @@ let driftCountdown = 60;
 async function fetchDrift() {
   const league = document.getElementById('driftLeagueSelect').value;
   const btn = document.getElementById('driftBtn');
-  btn.textContent = 'Checking...';
+  btn.textContent = '⏳ Checking…';
   btn.classList.add('btn-loading');
 
   try {
@@ -1553,10 +1555,10 @@ async function fetchDrift() {
       <div class="empty-icon"><img src="/assets/icons/drift-monitor.png" alt="" aria-hidden="true"/></div>
       <div class="empty-title">Cannot reach the API</div>
       <div class="empty-body">Check that the API is running on port 8000.</div>`;
+  } finally {
+    btn.innerHTML = '<img class="btn-icon" src="/assets/icons/drift-monitor.png" alt="" aria-hidden="true"/> Check Drift';
+    btn.classList.remove('btn-loading');
   }
-
-  btn.innerHTML = '<img class="btn-icon" src="/assets/icons/drift-monitor.png" alt="" aria-hidden="true"/> Check Drift';
-  btn.classList.remove('btn-loading');
 }
 
 function renderDrift(data, league) {

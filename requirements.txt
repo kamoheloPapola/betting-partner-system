@@ -28,5 +28,6 @@ rapidfuzz==3.14.3
 html5lib==1.1
 rich==14.2.0
 scipy==1.16.3
+statsmodels==0.14.6
 sentry-sdk==2.28.0
 slowapi==0.1.9
