@@ -1,0 +1,109 @@
+name: Nightly Pipeline
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: .
+      # Add these repository secrets in GitHub Actions:
+      # Required for this workflow:
+      # - DATABASE_URL
+      # - FOOTBALL_DATA_API_KEY
+      # Optional app/config/env secrets referenced by the codebase:
+      # - FOOTBALL_DATA_ORG_KEY (falls back to FOOTBALL_DATA_API_KEY below)
+      # - RAPIDAPI_KEY
+      # - ODDS_API_KEY
+      # - OPENWEATHERMAP_API_KEY
+      # - OPENWEATHER_API_KEY
+      # - SENTRY_DSN
+      # - APP_VERSION
+      # - SENTRY_TRACES_SAMPLE_RATE
+      # - AWS_ACCESS_KEY_ID
+      # - AWS_SECRET_ACCESS_KEY
+      # - AWS_REGION
+      # - S3_BUCKET
+      # - S3_PREFIX
+      # - SLACK_WEBHOOK_URL
+      # - ALERT_EMAIL_TO
+      # - ALERT_EMAIL_FROM
+      # - SMTP_HOST
+      # - SMTP_PORT
+      # - LOG_LEVEL
+      # - ENV
+      # - SPECIALIST_ENSEMBLE_LGBM_WEIGHT
+      # - SPECIALIST_ENSEMBLE_XGB_WEIGHT
+      # - SPECIALIST_ENSEMBLE_DIVERGENCE_THRESHOLD
+      # - PREDICTION_SYSTEM_LOG_FILE
+      # - SKIP_MODEL_LOCK_CHECK
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
+      FOOTBALL_DATA_ORG_KEY: ${{ secrets.FOOTBALL_DATA_ORG_KEY || secrets.FOOTBALL_DATA_API_KEY }}
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      OPENWEATHERMAP_API_KEY: ${{ secrets.OPENWEATHERMAP_API_KEY }}
+      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+      APP_VERSION: ${{ secrets.APP_VERSION || github.sha }}
+      SENTRY_TRACES_SAMPLE_RATE: ${{ secrets.SENTRY_TRACES_SAMPLE_RATE || '0.0' }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      S3_BUCKET: ${{ secrets.S3_BUCKET }}
+      S3_PREFIX: ${{ secrets.S3_PREFIX }}
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+      ALERT_EMAIL_FROM: ${{ secrets.ALERT_EMAIL_FROM || 'betting-system@localhost' }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST || 'localhost' }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT || '25' }}
+      LOG_LEVEL: ${{ secrets.LOG_LEVEL || 'INFO' }}
+      ENV: ${{ secrets.ENV || 'development' }}
+      SPECIALIST_ENSEMBLE_LGBM_WEIGHT: ${{ secrets.SPECIALIST_ENSEMBLE_LGBM_WEIGHT || '0.6' }}
+      SPECIALIST_ENSEMBLE_XGB_WEIGHT: ${{ secrets.SPECIALIST_ENSEMBLE_XGB_WEIGHT || '0.4' }}
+      SPECIALIST_ENSEMBLE_DIVERGENCE_THRESHOLD: ${{ secrets.SPECIALIST_ENSEMBLE_DIVERGENCE_THRESHOLD || '0.20' }}
+      PREDICTION_SYSTEM_LOG_FILE: ${{ secrets.PREDICTION_SYSTEM_LOG_FILE || 'prediction_system.log' }}
+      SKIP_MODEL_LOCK_CHECK: ${{ secrets.SKIP_MODEL_LOCK_CHECK || 'false' }}
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Set Up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Fetch Fresh Data
+        run: python scripts/fetch_fresh_data.py
+
+      - name: Run Nightly Pipeline
+        id: nightly_pipeline
+        continue-on-error: true
+        run: python scripts/nightly_pipeline.py
+
+      - name: Upload Bandit State Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rl-bandit-state
+          path: |
+            data/rl_bandit_state.json
+            data/rl_bandit_live.flag
+          if-no-files-found: ignore
+
+      - name: Upload Logs Artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-logs
+          path: logs/
+          if-no-files-found: ignore
