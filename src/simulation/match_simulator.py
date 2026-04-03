@@ -106,6 +106,7 @@ class SimulationResult:
 
     # --- Audit ---
     n_simulations: int
+    rl_weights_applied: bool = False
 
 
 class MatchSimulator:
@@ -138,7 +139,12 @@ class MatchSimulator:
         self.tempo_sigma = tempo_sigma
         self.rng = np.random.default_rng(seed)
 
-    def simulate(self, home_xg: float, away_xg: float) -> SimulationResult:
+    def simulate(
+        self,
+        home_xg: float,
+        away_xg: float,
+        rl_weights: Optional[dict[str, float]] = None,
+    ) -> SimulationResult:
         """
         Simulate a match using Poisson-distributed goals.
 
@@ -149,14 +155,15 @@ class MatchSimulator:
         Returns:
             SimulationResult with all derived probabilities.
         """
-        # 1. Lambda clamping (global utility)
-        home_xg = float(clamp_lambda(home_xg))
-        away_xg = float(clamp_lambda(away_xg))
+        weights = rl_weights or {}
+        tempo_sigma = self.tempo_sigma * float(weights.get("tempo_sigma_scale", 1.0))
+        home_xg = float(clamp_lambda(home_xg * float(weights.get("lambda_scale_home", 1.0))))
+        away_xg = float(clamp_lambda(away_xg * float(weights.get("lambda_scale_away", 1.0))))
 
         # 2. Tempo correlation: log-normal shared noise factor per simulation.
         #    Models the reality that games have shared tempo (open vs defensive).
         #    LogNormal guarantees tempo > 0, unlike Normal which can go negative.
-        tempo = self.rng.lognormal(mean=0.0, sigma=self.tempo_sigma, size=self.n_simulations)
+        tempo = self.rng.lognormal(mean=0.0, sigma=tempo_sigma, size=self.n_simulations)
 
         # 3. Per-simulation lambdas
         home_lambdas = home_xg * tempo
@@ -245,6 +252,7 @@ class MatchSimulator:
             match_type=match_type,
             tail_mass=tail_mass,
             n_simulations=self.n_simulations,
+            rl_weights_applied=bool(rl_weights),
         )
 
     def _compute_scoreline_probs(

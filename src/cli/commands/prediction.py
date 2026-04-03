@@ -52,6 +52,7 @@ from src.ml.calibration import (
 )
 from src.ml.confidence import get_confidence_calculator
 from src.simulation.match_simulator import MatchSimulator, clamp_lambda, DEFAULT_N_SIMULATIONS
+from src.simulation.rl_bandit import ContextualBandit
 from src.core.constants import (
     H2H_HIGH_SAMPLE_THRESHOLD,
     MAX_H2H_LIFT_DEFAULT,
@@ -63,6 +64,7 @@ logger = logging.getLogger(__name__)
 # Backward-compatible alias for older tests/config names.
 GOALS_ENSEMBLE_POISSON_WEIGHT = GOALS_ENSEMBLE_XGB_WEIGHT
 _MODEL_CALIBRATOR_CACHE: Dict[str, Optional[Dict[str, Any]]] = {}
+RL_SHADOW_MARKET = "1x2"
 
 # --- TYPES: ARCHITECTURAL CONTRACTS ---
 
@@ -967,7 +969,12 @@ def show_predictions(
         True,
         "--simulate/--no-simulate",
         help="Use Monte Carlo simulation for goal markets (enabled by default)",
-    )
+    ),
+    use_rl_weights: bool = typer.Option(
+        False,
+        "--use-rl-weights",
+        help="Run contextual bandit simulator weights in shadow mode and log the output only",
+    ),
 ) -> None:
     """
     Display production match predictions with strict quality gates.
@@ -990,7 +997,11 @@ def show_predictions(
             return
 
         # 2. Prediction Engine (Flattened)
-        results = _run_predict_loop(df_target, use_simulator=simulate)
+        results = _run_predict_loop(
+            df_target,
+            use_simulator=simulate,
+            use_rl_weights=use_rl_weights,
+        )
         if not results:
             console.print("[yellow]No valid predictions generated.[/yellow]")
             return
@@ -1050,7 +1061,11 @@ def _is_high_intensity(match: pd.Series, league: str) -> bool:
 
     return False
 
-def _run_predict_loop(df: pd.DataFrame, use_simulator: bool = True) -> List[Dict[str, Any]]:
+def _run_predict_loop(
+    df: pd.DataFrame,
+    use_simulator: bool = True,
+    use_rl_weights: bool = False,
+) -> List[Dict[str, Any]]:
     """Flattened prediction loop with explicit Progress and consolidated warnings."""
     all_preds = []
     
@@ -1068,13 +1083,16 @@ def _run_predict_loop(df: pd.DataFrame, use_simulator: bool = True) -> List[Dict
     shadow_registry = ModelRegistry()
     logged_smart_routing = set()
     shadow_registry._logged_smart_routing = logged_smart_routing
-    ServiceContainer.get_instance().registry._logged_smart_routing = logged_smart_routing
     shadow_log: List[Dict[str, Any]] = []
+    rl_bandit = ContextualBandit() if use_rl_weights else None
     
     with Progress(console=console) as progress:
         for lg in df['league'].unique():
             try:
                 suite = _load_prediction_models(lg)
+                live_registry = getattr(ServiceContainer.get_instance(), "_registry", None)
+                if live_registry is not None:
+                    live_registry._logged_smart_routing = logged_smart_routing
                 matches = df[df['league'] == lg]
                 
                 # Fetch drift state once per league run
@@ -1161,6 +1179,8 @@ def _run_predict_loop(df: pd.DataFrame, use_simulator: bool = True) -> List[Dict
                             **p
                         }
                         all_preds.append(res)
+                        if rl_bandit is not None:
+                            _run_rl_shadow_simulation(match, lg, res, rl_bandit)
                         _log_evt(lg, match, res, suite)
 
                         # Shadow Model Evaluation (Step 3)
@@ -1240,6 +1260,42 @@ def _persist_shadow_log(shadow_log: List[Dict[str, Any]]) -> None:
         logger.info(f"Persisted {len(shadow_log)} shadow predictions to {filepath}")
     except Exception as e:
         logger.error(f"Failed to persist shadow log: {e}")
+
+
+def _run_rl_shadow_simulation(
+    match: pd.Series,
+    league: str,
+    active_result: Dict[str, Any],
+    bandit: ContextualBandit,
+) -> None:
+    """Run a logged-only shadow Monte Carlo pass with bandit weights."""
+    try:
+        home_lambda = float(active_result["goal_model_home_lambda"])
+        away_lambda = float(active_result["goal_model_away_lambda"])
+        context = bandit.context_key(league, RL_SHADOW_MARKET)
+        weights = bandit.get_weights(context)
+        shadow_result = MatchSimulator(
+            n_simulations=DEFAULT_N_SIMULATIONS,
+            seed=42,
+        ).simulate(home_lambda, away_lambda, rl_weights=weights)
+        logger.info(
+            "[RL-SHADOW] match_id=%s context=%s weights=%s home=%.4f draw=%.4f away=%.4f over_2_5=%.4f btts_yes=%.4f applied=%s",
+            match.get("match_id"),
+            context,
+            weights,
+            shadow_result.home_win_prob,
+            shadow_result.draw_prob,
+            shadow_result.away_win_prob,
+            shadow_result.over_2_5,
+            shadow_result.btts_prob,
+            shadow_result.rl_weights_applied,
+        )
+    except Exception as exc:
+        logger.debug(
+            "RL shadow simulation skipped for %s: %s",
+            match.get("match_id"),
+            exc,
+        )
 
 def _calculate_probabilities_v2(
     match: pd.Series, 

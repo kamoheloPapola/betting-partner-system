@@ -15,8 +15,11 @@ import logging
 import threading
 from typing import Optional
 
+from sqlalchemy.engine import Engine
+
 from src.ml.registry import ModelRegistry
 from src.features.pipeline import FeaturePipeline
+from src.db.connection import get_engine
 
 # Define public API
 __all__ = ["ServiceContainer"]
@@ -86,6 +89,11 @@ class ServiceContainer:
             logger.debug("Initializing FeaturePipeline")
             self._pipeline = FeaturePipeline()
         return self._pipeline
+
+    @property
+    def engine(self) -> Engine:
+        """Shared SQLAlchemy engine used by operational data helpers."""
+        return get_engine()
 
     def reset(self) -> None:
         """

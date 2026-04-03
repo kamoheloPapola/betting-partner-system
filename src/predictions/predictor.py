@@ -93,6 +93,7 @@ class Predictor:
         show_all: bool = False,
         timezone: str = "LOCAL",
         simulate: bool = True,
+        use_rl_weights: bool = False,
         limit: Optional[int] = None,
     ) -> List[Dict[str, Any]] | Dict[str, Any]:
         """
@@ -118,7 +119,11 @@ class Predictor:
                 "message": "No upcoming fixtures found for this league in the dataset.",
             }
 
-        predictions = _run_predict_loop(df_target.sort_values("date"), use_simulator=simulate)
+        predictions = _run_predict_loop(
+            df_target.sort_values("date"),
+            use_simulator=simulate,
+            use_rl_weights=use_rl_weights,
+        )
         if limit is not None:
             return predictions[:limit]
         return predictions
