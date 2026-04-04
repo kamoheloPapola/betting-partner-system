@@ -6,10 +6,11 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Iterator, Optional, TypeVar
 
 import pandas as pd
 from sqlalchemy import inspect
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -21,6 +22,8 @@ from src.db.models import DriftEvent, ModelManifestEntry, ResolvedPrediction
 from src.evaluation.resolve_results import AuthoritativeResolver
 from src.ml.registry import ModelRegistry
 from src.monitoring.drift_orchestrator import DriftOrchestrator
+
+T = TypeVar("T")
 
 
 def _parse_datetime(value: Any) -> Optional[datetime]:
@@ -57,6 +60,11 @@ def _json_blob(value: Any) -> Optional[str]:
 def _make_event_id(*parts: Any) -> str:
     raw = "|".join("" if part is None else str(part) for part in parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _chunked(lst: list[T], size: int) -> Iterator[list[T]]:
+    for start in range(0, len(lst), size):
+        yield lst[start : start + size]
 
 
 def _require_database_ready() -> str:
@@ -187,35 +195,67 @@ def _migrate_manifest() -> int:
     if not isinstance(payload, dict):
         raise RuntimeError(f"Manifest payload is not a JSON object: {manifest_path}")
 
-    migrated = 0
+    rows: list[dict[str, Any]] = []
+    for manifest_key, meta in payload.items():
+        record: Any = meta if isinstance(meta, dict) else {"__manifest_value__": meta}
+        rows.append(
+            {
+                "manifest_key": str(manifest_key),
+                "model_name": record.get("name") if isinstance(record, dict) else None,
+                "version": record.get("version") if isinstance(record, dict) else None,
+                "league": record.get("league") if isinstance(record, dict) else None,
+                "model_type": record.get("type") if isinstance(record, dict) else None,
+                "target": record.get("target") if isinstance(record, dict) else None,
+                "filename": record.get("filename") if isinstance(record, dict) else None,
+                "mode": record.get("mode") if isinstance(record, dict) else None,
+                "status": record.get("status") if isinstance(record, dict) else None,
+                "sklearn_version": record.get("sklearn_version") if isinstance(record, dict) else None,
+                "train_size": record.get("train_size") if isinstance(record, dict) else None,
+                "test_size": record.get("test_size") if isinstance(record, dict) else None,
+                "registered_at": _parse_datetime(
+                    record.get("registered_at") if isinstance(record, dict) else None
+                ),
+                "features_json": _json_blob(record.get("features") if isinstance(record, dict) else None),
+                "params_json": _json_blob(record.get("params") if isinstance(record, dict) else None),
+                "metrics_json": _json_blob(record.get("metrics") if isinstance(record, dict) else None),
+                "metadata_json": _json_blob(record) or "{}",
+            }
+        )
+
+    migrated = len(rows)
+    if not rows:
+        print(f"[ok] Migrated {migrated} manifest entries from {manifest_path}")
+        return migrated
+
+    print(f"[bulk] Inserting {migrated} manifest entries...")
     with Session(get_engine()) as session:
-        for manifest_key, meta in payload.items():
-            record: Any = meta if isinstance(meta, dict) else {"__manifest_value__": meta}
-            session.merge(
-                ModelManifestEntry(
-                    manifest_key=str(manifest_key),
-                    model_name=record.get("name") if isinstance(record, dict) else None,
-                    version=record.get("version") if isinstance(record, dict) else None,
-                    league=record.get("league") if isinstance(record, dict) else None,
-                    model_type=record.get("type") if isinstance(record, dict) else None,
-                    target=record.get("target") if isinstance(record, dict) else None,
-                    filename=record.get("filename") if isinstance(record, dict) else None,
-                    mode=record.get("mode") if isinstance(record, dict) else None,
-                    status=record.get("status") if isinstance(record, dict) else None,
-                    sklearn_version=record.get("sklearn_version") if isinstance(record, dict) else None,
-                    train_size=record.get("train_size") if isinstance(record, dict) else None,
-                    test_size=record.get("test_size") if isinstance(record, dict) else None,
-                    registered_at=_parse_datetime(
-                        record.get("registered_at") if isinstance(record, dict) else None
-                    ),
-                    features_json=_json_blob(record.get("features") if isinstance(record, dict) else None),
-                    params_json=_json_blob(record.get("params") if isinstance(record, dict) else None),
-                    metrics_json=_json_blob(record.get("metrics") if isinstance(record, dict) else None),
-                    metadata_json=_json_blob(record) or "{}",
-                )
+        for chunk_index, chunk in enumerate(_chunked(rows, 500), start=1):
+            insert_stmt = pg_insert(ModelManifestEntry).values(chunk)
+            upsert_stmt = insert_stmt.on_conflict_do_update(
+                index_elements=["manifest_key"],
+                set_={
+                    "model_name": insert_stmt.excluded.model_name,
+                    "version": insert_stmt.excluded.version,
+                    "league": insert_stmt.excluded.league,
+                    "model_type": insert_stmt.excluded.model_type,
+                    "target": insert_stmt.excluded.target,
+                    "filename": insert_stmt.excluded.filename,
+                    "mode": insert_stmt.excluded.mode,
+                    "status": insert_stmt.excluded.status,
+                    "sklearn_version": insert_stmt.excluded.sklearn_version,
+                    "train_size": insert_stmt.excluded.train_size,
+                    "test_size": insert_stmt.excluded.test_size,
+                    "registered_at": insert_stmt.excluded.registered_at,
+                    "features_json": insert_stmt.excluded.features_json,
+                    "params_json": insert_stmt.excluded.params_json,
+                    "metrics_json": insert_stmt.excluded.metrics_json,
+                    "metadata_json": insert_stmt.excluded.metadata_json,
+                },
             )
-            migrated += 1
-        session.commit()
+            session.execute(upsert_stmt)
+            session.commit()
+            inserted = min(chunk_index * 500, migrated)
+            print(f"[bulk] Inserted {inserted}/{migrated} rows...")
 
     print(f"[ok] Migrated {migrated} manifest entries from {manifest_path}")
     return migrated
@@ -244,29 +284,52 @@ def _migrate_resolved_predictions() -> int:
         )
 
     repaired = repaired.where(pd.notnull(repaired), None)
-    migrated = 0
-    with Session(get_engine()) as session:
-        for row in repaired.to_dict(orient="records"):
-            prediction_id = row.get("prediction_id")
-            match_hash = row.get("match_hash")
-            league = row.get("league")
-            if not prediction_id or not match_hash or not league:
-                continue
+    rows: list[dict[str, Any]] = []
+    for row in repaired.to_dict(orient="records"):
+        prediction_id = row.get("prediction_id")
+        match_hash = row.get("match_hash")
+        league = row.get("league")
+        if not prediction_id or not match_hash or not league:
+            continue
 
-            session.merge(
-                ResolvedPrediction(
-                    prediction_id=str(prediction_id),
-                    match_hash=str(match_hash),
-                    league=str(league),
-                    kickoff_date=_parse_datetime(row.get("kickoff_date")),
-                    market=str(row.get("market")) if row.get("market") is not None else None,
-                    probability=_to_float(row.get("probability")),
-                    outcome=str(row.get("outcome")) if row.get("outcome") is not None else None,
-                    resolved_at=_parse_datetime(row.get("resolved_at")),
-                )
+        rows.append(
+            {
+                "prediction_id": str(prediction_id),
+                "match_hash": str(match_hash),
+                "league": str(league),
+                "kickoff_date": _parse_datetime(row.get("kickoff_date")),
+                "market": str(row.get("market")) if row.get("market") is not None else None,
+                "probability": _to_float(row.get("probability")),
+                "outcome": str(row.get("outcome")) if row.get("outcome") is not None else None,
+                "resolved_at": _parse_datetime(row.get("resolved_at")),
+            }
+        )
+
+    migrated = len(rows)
+    if not rows:
+        print(f"[ok] Migrated {migrated} resolved prediction rows from {outcomes_path}")
+        return migrated
+
+    print(f"[bulk] Inserting {migrated} resolved prediction rows...")
+    with Session(get_engine()) as session:
+        for chunk_index, chunk in enumerate(_chunked(rows, 500), start=1):
+            insert_stmt = pg_insert(ResolvedPrediction).values(chunk)
+            upsert_stmt = insert_stmt.on_conflict_do_update(
+                index_elements=["prediction_id"],
+                set_={
+                    "match_hash": insert_stmt.excluded.match_hash,
+                    "league": insert_stmt.excluded.league,
+                    "kickoff_date": insert_stmt.excluded.kickoff_date,
+                    "market": insert_stmt.excluded.market,
+                    "probability": insert_stmt.excluded.probability,
+                    "outcome": insert_stmt.excluded.outcome,
+                    "resolved_at": insert_stmt.excluded.resolved_at,
+                },
             )
-            migrated += 1
-        session.commit()
+            session.execute(upsert_stmt)
+            session.commit()
+            inserted = min(chunk_index * 500, migrated)
+            print(f"[bulk] Inserted {inserted}/{migrated} rows...")
 
     print(f"[ok] Migrated {migrated} resolved prediction rows from {outcomes_path}")
     return migrated
