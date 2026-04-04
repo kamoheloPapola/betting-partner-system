@@ -10,7 +10,9 @@ services:
         sync: false
       - key: ODDS_API_KEY
         sync: false
+      - key: FOOTBALL_DATA_API_KEY
+        sync: false
       - key: SKIP_MODEL_LOCK_CHECK
-        value: true
-	- key: DATABASE_URL
+        value: "true"
+      - key: DATABASE_URL
         value: postgresql://football_intelligence_db_user:TtYB92KNTTcGXsn2JcMmuCE3Np0IqLfl@dpg-d77sppvkijhs73a7km3g-a.oregon-postgres.render.com/football_intelligence_db
