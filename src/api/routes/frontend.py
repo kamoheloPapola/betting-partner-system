@@ -207,7 +207,8 @@ def _load_cached_predictions(league: Optional[str]) -> tuple[List[Dict[str, Any]
 
     predictor = Predictor()
     rows = predictor.predict_upcoming(league=league)
-    prediction_cache.set(cache_key, rows)
+    if rows:
+        prediction_cache.set(cache_key, rows)
     return rows, cache_hit, cache_key
 
 

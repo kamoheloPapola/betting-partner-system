@@ -131,20 +131,87 @@ class ModelRegistry:
         if self._manifest_cache is not None:
             return
 
+        file_manifest = self._load_manifest_from_file()
+        db_manifest: Optional[Dict[str, Any]] = None
         if database_is_configured():
             db_manifest = self._load_manifest_from_db()
-            if db_manifest is not None:
-                self.manifest = db_manifest
-                self._save_manifest_file()
-                return
 
-        file_manifest = self._load_manifest_from_file()
-        if file_manifest is not None:
-            self.manifest = file_manifest
+        selected_manifest, source = self._select_manifest_source(
+            file_manifest=file_manifest,
+            db_manifest=db_manifest,
+        )
+        if selected_manifest is not None:
+            self.manifest = selected_manifest
+            if source == "db":
+                self._save_manifest_file()
+            elif source == "file" and db_manifest is not None and db_manifest != file_manifest:
+                self._save_manifest_to_db()
             return
 
         logger.warning("No valid manifest found or recovery failed. Initializing empty Registry.")
         self.manifest = {}
+
+    @staticmethod
+    def _manifest_active_file_coverage(manifest: Optional[Dict[str, Any]]) -> tuple[int, int]:
+        if not isinstance(manifest, dict):
+            return 0, 0
+
+        active_models = manifest.get("active_models")
+        if not isinstance(active_models, dict):
+            return 0, 0
+
+        found = 0
+        total = 0
+        for manifest_key in active_models.values():
+            meta = manifest.get(manifest_key)
+            if not isinstance(meta, dict):
+                continue
+
+            candidate = meta.get("filename") or meta.get("path")
+            if not candidate:
+                continue
+
+            total += 1
+            path = Path(str(candidate))
+            if not path.is_absolute():
+                path = MODELS_DIR / path
+
+            if path.exists():
+                found += 1
+
+        return found, total
+
+    def _select_manifest_source(
+        self,
+        *,
+        file_manifest: Optional[Dict[str, Any]],
+        db_manifest: Optional[Dict[str, Any]],
+    ) -> tuple[Optional[Dict[str, Any]], str]:
+        if file_manifest is None and db_manifest is None:
+            return None, "none"
+        if file_manifest is None:
+            return db_manifest, "db"
+        if db_manifest is None:
+            return file_manifest, "file"
+
+        file_found, file_total = self._manifest_active_file_coverage(file_manifest)
+        db_found, db_total = self._manifest_active_file_coverage(db_manifest)
+
+        logger.info(
+            "Manifest coverage comparison: file=%s/%s, db=%s/%s",
+            file_found,
+            file_total,
+            db_found,
+            db_total,
+        )
+
+        if file_found != db_found:
+            return (file_manifest, "file") if file_found > db_found else (db_manifest, "db")
+
+        if file_total != db_total:
+            return (file_manifest, "file") if file_total < db_total else (db_manifest, "db")
+
+        return file_manifest, "file"
 
     def _save_manifest(self) -> None:
         self._save_manifest_file()

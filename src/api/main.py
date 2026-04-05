@@ -319,7 +319,8 @@ def _load_or_compute_predictions(league: Optional[str]) -> List[Dict[str, Any]]:
 
     predictor = Predictor()
     raw_predictions = predictor.predict_upcoming(league=league)
-    prediction_cache.set(cache_key, raw_predictions)
+    if raw_predictions:
+        prediction_cache.set(cache_key, raw_predictions)
     return raw_predictions
 
 
