@@ -5,8 +5,9 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+# libgomp1 = LightGBM requirement, curl = model download
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libgomp1 \
+    && apt-get install -y --no-install-recommends libgomp1 curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
@@ -15,6 +16,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY . /app
 
-EXPOSE 8000
+RUN chmod +x /app/scripts/download_models.sh
 
-CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Download models on boot, then start API
+CMD ["/bin/bash", "-c", "/app/scripts/download_models.sh && uvicorn src.api.main:app --host 0.0.0.0 --port 8000"]

@@ -1,0 +1,48 @@
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.page-enter {
+  animation: fadeUp 0.24s ease both;
+}
+
+.match-card,
+.slip-card,
+.status-card,
+.empty-state {
+  animation: fadeUp 0.24s ease both;
+}
+
+.toast {
+  animation: slideUp 0.3s ease;
+}

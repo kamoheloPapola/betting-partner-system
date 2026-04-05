@@ -488,8 +488,14 @@ class ForbiddenFruitEngine:
         self.edge_engine = EdgeEngine()
         self.standings = StandingsManager()
         self._registry = ModelRegistry()
+        self._cached_drift_status: Optional[str] = None
         # Warning collection for consolidated output
         self._gate_warnings: Dict[str, int] = {}
+
+    def _get_drift_status(self) -> str:
+        if self._cached_drift_status is None:
+            self._cached_drift_status = self.drift_guard.check_drift()
+        return self._cached_drift_status
 
     def analyze_match(
         self, 
@@ -509,7 +515,7 @@ class ForbiddenFruitEngine:
         
         # 🛡️ Phase 10: Strategy Gate Enforcement (CRITICAL FIX 2026-01-13)
         # Must CALL check_drift() to get current status from persisted file
-        drift_status = self.drift_guard.check_drift()
+        drift_status = self._get_drift_status()
         
         if drift_status == "STOP":
             logger.error(f"[{league_code}] DRIFT STOP HARD-BLOCK: Strategy halted due to drift alert!")

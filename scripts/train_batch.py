@@ -5,6 +5,8 @@ import time
 from pathlib import Path
 from typing import List
 
+import requests
+
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
@@ -58,6 +60,12 @@ def run_training(*, leagues: List[str], full_retrain: bool) -> None:
         print("Bandit update complete.")
     except Exception as exc:
         print(f"BANDIT UPDATE FAILED (non-fatal): {exc}")
+
+    try:
+        requests.post("http://127.0.0.1:8000/cli/invalidate-cache", timeout=3)
+        print("API cache invalidated.")
+    except Exception:
+        pass
 
     duration = time.time() - start_global
     print("\n" + "=" * 60)

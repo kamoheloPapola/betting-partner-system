@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pitchsense</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/layout.css">
+  <link rel="stylesheet" href="/static/css/components.css">
+  <link rel="stylesheet" href="/static/css/animations.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-badge">
+        <img src="/assets/icons/brand-ball.png" alt="Pitchsense">
+      </div>
+      <div class="brand-copy">
+        <div class="brand-title">Pitchsense</div>
+        <div class="brand-subtitle">Football intelligence platform</div>
+      </div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">Analysis</div>
+      <a href="#predictions" class="nav-item active" data-page="predictions">
+        <img src="/assets/icons/predictions.png" alt="">
+        <span>Predictions</span>
+      </a>
+      <a href="#slip-builder" class="nav-item" data-page="slip-builder">
+        <img src="/assets/icons/slip-builder.png" alt="">
+        <span>Slip Builder</span>
+      </a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-label">System</div>
+      <a href="#model-health" class="nav-item" data-page="model-health">
+        <img src="/assets/icons/model-health.png" alt="">
+        <span>Model Health</span>
+      </a>
+      <a href="#drift-monitor" class="nav-item" data-page="drift-monitor">
+        <img src="/assets/icons/drift-monitor.png" alt="">
+        <span>Drift Monitor</span>
+      </a>
+      <a href="#terminal" class="nav-item" data-page="terminal">
+        <img src="/assets/icons/brand-ball.png" alt="">
+        <span>Terminal</span>
+        <span class="nav-badge">NEW</span>
+      </a>
+    </div>
+
+    <div class="nav-spacer"></div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-status api-pill" id="sidebar-api-status">
+        <span class="api-pill-dot"></span>
+        <span id="sidebar-api-text">Checking API</span>
+      </div>
+      <div class="sidebar-version">v2.1.0</div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div class="topbar-copy">
+        <div class="topbar-title" id="page-title">Match Predictions</div>
+        <div class="topbar-subtitle" id="page-subtitle">Probability estimates for upcoming fixtures</div>
+      </div>
+      <div class="topbar-meta">
+        <span class="updated-at" id="updated-at">Updated --:--</span>
+        <div class="api-pill" id="api-pill">
+          <span class="api-pill-dot"></span>
+          <span id="api-pill-text">Checking API</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="page-container" id="page-container"></div>
+  </main>
+
+  <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

@@ -16,3 +16,7 @@ services:
         value: "true"
       - key: DATABASE_URL
         sync: false
+      - key: MODELS_DIR
+        value: "/app/models"
+      - key: RENDER
+        value: "true"

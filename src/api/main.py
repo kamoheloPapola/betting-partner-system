@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -20,6 +20,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
+from src.api.cache import MODEL_HEALTH_CACHE_KEY, prediction_cache, prediction_cache_key, slip_cache_key
 from src.api.schemas import (
     ForbiddenFruitSlipLeg,
     ForbiddenFruitSlipResponse,
@@ -29,12 +30,12 @@ from src.api.schemas import (
     PredictionTriggerResponse,
     TriggerPrediction,
 )
-from src.config import DATA_DIR, DEFAULT_TRAINING_LEAGUES
+from src.api.routes.cli import router as cli_router
+from src.api.routes.frontend import router as frontend_router
+from src.config import DATA_DIR, MODELS_DIR
 from src.config.model_state import get_model_state, is_locked
 from src.core.exceptions import ConfigurationError, DataValidationError
-from src.ml.model_db import ModelHistoryDB
 from src.ml.registry import ModelRegistry
-from src.ml.training.model_configs import MODEL_CONFIGS
 from src.monitoring.drift_orchestrator import DriftOrchestrator
 from src.monitoring.telemetry import capture_alert, capture_exception, init_sentry
 from src.predictions.predictor import Predictor
@@ -43,6 +44,7 @@ from src.strategies.slip_builder import ForbiddenFruitSlipBuilder
 
 logger = logging.getLogger(__name__)
 _LAST_GLOBAL_DRIFT_STATUS: Optional[str] = None
+STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 
 try:
     from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -309,16 +311,33 @@ def _raise_environment_mismatch(exc: ConfigurationError) -> None:
     ) from exc
 
 
+def _load_or_compute_predictions(league: Optional[str]) -> List[Dict[str, Any]]:
+    cache_key = prediction_cache_key(league)
+    cached_predictions = prediction_cache.get(cache_key)
+    if isinstance(cached_predictions, list):
+        return cached_predictions
+
+    predictor = Predictor()
+    raw_predictions = predictor.predict_upcoming(league=league)
+    prediction_cache.set(cache_key, raw_predictions)
+    return raw_predictions
+
+
 def _generate_forbidden_fruit_slip(
     *,
     league: Optional[str],
     min_prob: float,
     max_selections: int,
 ) -> ForbiddenFruitSlipResponse:
+    cache_key = slip_cache_key(league, min_prob, max_selections)
+    cached_slip = prediction_cache.get(cache_key)
+    if isinstance(cached_slip, ForbiddenFruitSlipResponse):
+        return cached_slip
+
     drift_status = _read_prediction_guard_status()
     league_label = str(league or "ALL").upper()
     if drift_status == DriftOrchestrator.STOP:
-        return ForbiddenFruitSlipResponse(
+        response = ForbiddenFruitSlipResponse(
             generated_at=datetime.now(),
             model_state=get_model_state(),
             slip=[],
@@ -330,16 +349,17 @@ def _generate_forbidden_fruit_slip(
                 total_legs=0,
             ),
         )
+        prediction_cache.set(cache_key, response)
+        return response
 
-    predictor = Predictor()
-    raw_predictions = predictor.predict_upcoming(league=league)
+    raw_predictions = _load_or_compute_predictions(league)
     builder = ForbiddenFruitSlipBuilder()
     slip = builder.generate(
         raw_predictions,
         min_probability=min_prob,
         max_selections=max_selections,
     )
-    return ForbiddenFruitSlipResponse(
+    response = ForbiddenFruitSlipResponse(
         generated_at=datetime.now(),
         model_state=get_model_state(),
         slip=[_serialize_slip_leg(leg) for leg in slip],
@@ -351,6 +371,8 @@ def _generate_forbidden_fruit_slip(
             total_legs=len(slip),
         ),
     )
+    prediction_cache.set(cache_key, response)
+    return response
 
 
 def _load_latest_reliability_for_league(league: str) -> List[Dict[str, Any]]:
@@ -425,6 +447,35 @@ app = FastAPI(
     version="2.1.0",
     description="Inference-only API for betting predictions",
 )
+
+
+@app.on_event("startup")
+async def warm_cache_on_boot() -> None:
+    """Background task: pre-warm prediction cache after server boots.
+    Only runs on Render (RENDER env var set). Skipped in local dev."""
+    import asyncio
+    import os
+
+    if not os.getenv("RENDER"):
+        return
+
+    async def _warm() -> None:
+        await asyncio.sleep(10)
+        leagues = ["PL", "BL1", "FL1", "SA", "PD"]
+        for league in leagues:
+            try:
+                key = prediction_cache_key(league)
+                if prediction_cache.get(key) is None:
+                    predictor = Predictor()
+                    data = predictor.predict_upcoming(league=league)
+                    prediction_cache.set(key, data)
+                    print(f"[startup] Cache warmed: {league} ({len(data)} predictions)")
+            except Exception as exc:
+                print(f"[startup] Cache warm failed for {league}: {exc}")
+        print("[startup] Cache warm-up complete.")
+
+    asyncio.create_task(_warm())
+
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
@@ -436,13 +487,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
+app.include_router(frontend_router)
+app.include_router(cli_router)
+
+
+@app.get("/")
+def get_root() -> RedirectResponse:
+    return RedirectResponse(url="/dashboard")
 
 
 @app.get("/dashboard")
 def get_dashboard() -> FileResponse:
     """Serve the terminal dashboard UI."""
-    return FileResponse("dashboard.html")
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.get("/health", response_model=HealthCheck)
@@ -488,91 +547,134 @@ def get_drift_status() -> Dict[str, Any]:
         return {"status": "error", "error": str(exc)}
 
 
-@app.get("/model-health")
-@app.get("/api/v1/model-health")
-def get_model_health() -> Dict[str, Any]:
-    """Current productive model health by market and serving scope."""
-    registry = ModelRegistry()
-    model_db: Optional[ModelHistoryDB] = None
-    try:
-        model_db = ModelHistoryDB()
-    except Exception as exc:
-        logger.warning("Model history DB unavailable for model-health brier fallback: %s", exc)
+def _manifest_model_path(meta: Dict[str, Any]) -> Optional[Path]:
+    candidate = meta.get("path") or meta.get("filename")
+    if not candidate:
+        return None
 
-    drift = DriftOrchestrator()
-    global_drift = drift.inspect_global_state()
-    drift.load_confidence_state()
-    _report_drift_stop_transition(global_drift)
+    path = Path(str(candidate))
+    if path.is_absolute():
+        return path
+    return MODELS_DIR / path
 
-    global_status = str(global_drift.get("status", DriftOrchestrator.STOP))
-    model_names = [
-        str(cfg["name"])
-        for cfg in MODEL_CONFIGS
-        if isinstance(cfg, dict) and cfg.get("name")
-    ]
-    serving_leagues = list(dict.fromkeys([*DEFAULT_TRAINING_LEAGUES, "Global"]))
 
+def _serving_league_from_key(serving_key: str, meta: Dict[str, Any]) -> str:
+    league = meta.get("league")
+    if league not in {None, ""}:
+        return str(league)
+
+    suffix = str(serving_key).rsplit("_", 1)[-1]
+    return suffix if suffix else "Global"
+
+
+def _fast_model_health_snapshot() -> Dict[str, Any]:
+    cached_snapshot = prediction_cache.get(MODEL_HEALTH_CACHE_KEY)
+    if isinstance(cached_snapshot, dict):
+        return cached_snapshot
+
+    global_status = "UNKNOWN"
+    evaluated_at = None
+
+    manifest_path = ModelRegistry.MANIFEST_FILE
+    generated_at = datetime.now().isoformat()
+    if not manifest_path.exists():
+        result = {
+            "generated_at": generated_at,
+            "status": "no_manifest",
+            "global_drift_status": global_status,
+            "global_drift_evaluated_at": evaluated_at,
+            "model_count": 0,
+            "markets": {},
+            "models": [],
+            "message": "manifest.json not found",
+        }
+        prediction_cache.set(MODEL_HEALTH_CACHE_KEY, result, ttl_seconds=300)
+        return result
+
+    with open(manifest_path, "r", encoding="utf-8") as handle:
+        manifest = json.load(handle)
+
+    active_models = manifest.get("active_models", {}) if isinstance(manifest, dict) else {}
+    models: List[Dict[str, Any]] = []
     markets: Dict[str, List[Dict[str, Any]]] = {}
-    for market in model_names:
-        market_health = drift.get_market_health(market)
-        drift_score = _first_valid_float(
-            market_health.get("drift"),
-            default=None,
-        )
-        bet_count = market_health.get("bet_count")
-        sample_size = market_health.get("n")
-        cooldown_until = market_health.get("cooldown_until")
-        entries: List[Dict[str, Any]] = []
-        for serving_league in serving_leagues:
-            meta = registry.get_production_model_for_league(serving_league, market)
+
+    if isinstance(active_models, dict):
+        for serving_key, manifest_key in active_models.items():
+            meta = manifest.get(manifest_key) if isinstance(manifest, dict) else None
             if not isinstance(meta, dict):
                 continue
 
-            model_name = str(meta.get("name") or market)
-            model_league = str(meta.get("league") or "Global")
-            version = str(meta.get("version", "unknown"))
-            brier_score = _extract_manifest_brier(meta)
-            if brier_score is None:
-                brier_score = _resolve_history_brier(
-                    model_db,
-                    model_name=model_name,
-                    preferred_leagues=[model_league, str(serving_league), "Global"],
-                    version=version,
-                )
+            model_path = _manifest_model_path(meta)
+            feature_count = meta.get("n_features")
+            if feature_count is None and isinstance(meta.get("features"), list):
+                feature_count = len(meta["features"])
 
-            last_trained = (
-                meta.get("training_date")
-                or meta.get("trained_at")
-                or meta.get("registered_at")
-            )
-            entries.append(
+            status = meta.get("status") or "ok"
+            if model_path is not None and not model_path.exists():
+                status = "missing_file"
+
+            entry = {
+                "key": str(serving_key),
+                "manifest_key": str(manifest_key),
+                "league": _serving_league_from_key(str(serving_key), meta),
+                "model_league": str(meta.get("league") or "Global"),
+                "market": str(meta.get("name") or serving_key),
+                "version": str(meta.get("version", "unknown")),
+                "brier_score": _extract_manifest_brier(meta),
+                "drift_status": global_status,
+                "last_trained": meta.get("training_date") or meta.get("trained_at") or meta.get("registered_at"),
+                "trained_at": meta.get("trained_at") or meta.get("training_date"),
+                "registered_at": meta.get("registered_at"),
+                "features": feature_count,
+                "status": status,
+                "path": str(model_path) if model_path is not None else None,
+            }
+            models.append(entry)
+            markets.setdefault(entry["market"], []).append(
                 {
-                    "league": serving_league,
-                    "model_league": model_league,
-                    "version": version,
-                    "brier_score": brier_score,
-                    "drift_score": drift_score,
-                    "drift_status": _resolve_drift_status(
-                        drift,
-                        market=market,
-                        global_status=global_status,
-                    ),
-                    "sample_size": sample_size,
-                    "bet_count": bet_count,
-                    "cooldown_until": cooldown_until,
-                    "last_trained": last_trained,
+                    "league": entry["league"],
+                    "model_league": entry["model_league"],
+                    "version": entry["version"],
+                    "brier_score": entry["brier_score"],
+                    "drift_status": entry["drift_status"],
+                    "status": entry["status"],
                 }
             )
 
-        if entries:
-            markets[market] = entries
+    for entries in markets.values():
+        entries.sort(key=lambda item: (str(item.get("league") or ""), str(item.get("model_league") or "")))
 
-    return {
-        "generated_at": datetime.now().isoformat(),
+    result = {
+        "generated_at": generated_at,
+        "status": "ok",
         "global_drift_status": global_status,
-        "global_drift_evaluated_at": global_drift.get("evaluated_at"),
-        "markets": markets,
+        "global_drift_evaluated_at": evaluated_at,
+        "model_count": len(models),
+        "markets": dict(sorted(markets.items())),
+        "models": models,
     }
+    prediction_cache.set(MODEL_HEALTH_CACHE_KEY, result, ttl_seconds=300)
+    return result
+
+
+@app.get("/model-health")
+@app.get("/api/v1/model-health")
+def get_model_health() -> Dict[str, Any]:
+    """Fast productive model snapshot backed by the manifest file."""
+    try:
+        return _fast_model_health_snapshot()
+    except Exception as exc:
+        capture_exception(exc, context={"endpoint": "/model-health"})
+        return {
+            "generated_at": datetime.now().isoformat(),
+            "status": "error",
+            "message": str(exc),
+            "global_drift_status": "UNKNOWN",
+            "global_drift_evaluated_at": None,
+            "model_count": 0,
+            "markets": {},
+            "models": [],
+        }
 
 
 @app.get("/api/v1/predictions/{league}", response_model=List[MatchPrediction])
@@ -581,8 +683,9 @@ def get_predictions(league: str, limit: Optional[int] = 20) -> List[MatchPredict
         raise HTTPException(status_code=400, detail="limit must be >= 1")
 
     try:
-        predictor = Predictor()
-        raw_predictions = predictor.predict_upcoming(league=league, limit=limit)
+        raw_predictions = _load_or_compute_predictions(league)
+        if limit is not None:
+            raw_predictions = raw_predictions[:limit]
         return [_serialize_prediction(prediction) for prediction in raw_predictions]
     except ConfigurationError as exc:
         logger.error("Prediction environment mismatch for %s: %s", league, exc)
