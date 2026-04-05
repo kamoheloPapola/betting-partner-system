@@ -138,9 +138,12 @@ function renderPredictionResults(predictions) {
     root.innerHTML = `
       <div class="empty-state">
         <div class="empty-icon">&#9917;</div>
-        <h3>No predictions yet</h3>
-        <p>Models may not be loaded. Try running <code>predict</code> in the Terminal.</p>
-        <button type="button" onclick="navigateTo('terminal')">Open Terminal -&gt;</button>
+        <h3>Predictions are not ready yet</h3>
+        <p>We are still syncing the latest model data for this fixture window. Please refresh in a moment or widen the date range.</p>
+        <div class="empty-state-actions">
+          <button type="button" class="btn-primary" onclick="applyFilters()">Refresh</button>
+          <button type="button" class="btn-ghost" onclick="clearFilters()">Reset Filters</button>
+        </div>
       </div>
     `;
     return;

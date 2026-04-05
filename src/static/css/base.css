@@ -1,36 +1,36 @@
 :root {
-  --bg-primary: #0a0f0d;
-  --bg-secondary: #111813;
-  --bg-card: #161d1a;
-  --bg-card-hover: #1c2520;
-  --bg-input: #1a2220;
-  --green-primary: #00e676;
-  --green-dim: #00c853;
-  --green-muted: rgba(0, 230, 118, 0.12);
-  --green-border: rgba(0, 230, 118, 0.2);
-  --amber: #ffb300;
-  --amber-muted: rgba(255, 179, 0, 0.12);
-  --red: #ff5252;
-  --red-muted: rgba(255, 82, 82, 0.12);
-  --blue: #448aff;
-  --blue-muted: rgba(68, 138, 255, 0.1);
-  --text-primary: #e8f5e9;
-  --text-secondary: #7b9e87;
-  --text-muted: #4a6355;
-  --text-inverse: #0a0f0d;
-  --border: rgba(255, 255, 255, 0.06);
-  --border-hover: rgba(0, 230, 118, 0.25);
-  --terminal-bg: #080c0a;
-  --terminal-green: #00e676;
-  --terminal-amber: #ffb300;
-  --terminal-red: #ff5252;
-  --terminal-gray: #4a6355;
-  --terminal-white: #c8e6c9;
+  --bg-primary: #0f1417;
+  --bg-secondary: #151d20;
+  --bg-card: #1a2326;
+  --bg-card-hover: #223034;
+  --bg-input: #202b2f;
+  --green-primary: #5fa894;
+  --green-dim: #4f8d7d;
+  --green-muted: rgba(95, 168, 148, 0.14);
+  --green-border: rgba(95, 168, 148, 0.22);
+  --amber: #d6a96a;
+  --amber-muted: rgba(214, 169, 106, 0.14);
+  --red: #d47676;
+  --red-muted: rgba(212, 118, 118, 0.14);
+  --blue: #7892d8;
+  --blue-muted: rgba(120, 146, 216, 0.12);
+  --text-primary: #edf2ef;
+  --text-secondary: #9aaca2;
+  --text-muted: #6b7d76;
+  --text-inverse: #f6f9f7;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(95, 168, 148, 0.26);
+  --terminal-bg: #0d1214;
+  --terminal-green: #79c4ac;
+  --terminal-amber: #d6a96a;
+  --terminal-red: #d47676;
+  --terminal-gray: #71817a;
+  --terminal-white: #d7e3dc;
   --font-display: "Space Grotesk", sans-serif;
   --font-body: "Inter", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
-  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
-  --shadow-glow: 0 0 20px rgba(0, 230, 118, 0.15);
+  --shadow-card: 0 20px 48px rgba(0, 0, 0, 0.28);
+  --shadow-glow: 0 18px 42px rgba(95, 168, 148, 0.12);
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
@@ -53,9 +53,9 @@ body {
   color: var(--text-primary);
   font-family: var(--font-body);
   background:
-    radial-gradient(circle at 12% 10%, rgba(0, 230, 118, 0.08), transparent 32%),
-    radial-gradient(circle at 88% 82%, rgba(68, 138, 255, 0.08), transparent 28%),
-    linear-gradient(180deg, #0a0f0d 0%, #0d1411 100%);
+    radial-gradient(circle at 10% 12%, rgba(95, 168, 148, 0.08), transparent 34%),
+    radial-gradient(circle at 88% 80%, rgba(120, 146, 216, 0.08), transparent 30%),
+    linear-gradient(180deg, #0f1417 0%, #141b1e 100%);
   overflow-x: hidden;
 }
 

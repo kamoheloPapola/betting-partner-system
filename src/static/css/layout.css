@@ -4,7 +4,7 @@
   position: fixed;
   left: 0;
   top: 0;
-  background: rgba(17, 24, 19, 0.96);
+  background: rgba(16, 22, 25, 0.92);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -27,7 +27,7 @@
   display: grid;
   place-items: center;
   border-radius: 14px;
-  background: linear-gradient(135deg, rgba(0, 230, 118, 0.2), rgba(68, 138, 255, 0.14));
+  background: linear-gradient(135deg, rgba(95, 168, 148, 0.2), rgba(120, 146, 216, 0.16));
   border: 1px solid var(--green-border);
   box-shadow: var(--shadow-glow);
 }
@@ -78,13 +78,13 @@
 
 .nav-item:hover {
   color: var(--text-primary);
-  background: var(--green-muted);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .nav-item.active {
   color: var(--green-primary);
   border-left-color: var(--green-primary);
-  background: var(--green-muted);
+  background: linear-gradient(90deg, rgba(95, 168, 148, 0.18), rgba(95, 168, 148, 0.06));
   font-weight: 500;
 }
 
@@ -149,7 +149,7 @@
   top: 0;
   z-index: 90;
   border-bottom: 1px solid var(--border);
-  background: rgba(10, 15, 13, 0.92);
+  background: rgba(15, 20, 23, 0.88);
   backdrop-filter: blur(18px);
 }
 
@@ -190,7 +190,7 @@
   gap: 8px;
   padding: 8px 12px;
   border-radius: 999px;
-  background: var(--bg-card);
+  background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);
   font-size: 13px;
   color: var(--text-secondary);
@@ -206,7 +206,7 @@
 
 .api-pill.online .api-pill-dot {
   background: var(--green-primary);
-  box-shadow: 0 0 12px rgba(0, 230, 118, 0.45);
+  box-shadow: 0 0 10px rgba(95, 168, 148, 0.32);
 }
 
 .api-pill.offline .api-pill-dot {
