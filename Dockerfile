@@ -17,6 +17,6 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY . /app
 
 RUN chmod +x /app/scripts/download_models.sh
+RUN mkdir -p /app/data
 
-# Download models on boot, then start API
-CMD ["/bin/bash", "-c", "/app/scripts/download_models.sh && uvicorn src.api.main:app --host 0.0.0.0 --port 8000"]
+CMD ["/bin/bash", "-c", "/app/scripts/download_models.sh && python scripts/fetch_fresh_data.py && uvicorn src.api.main:app --host 0.0.0.0 --port 8000"]
