@@ -65,6 +65,7 @@ logger = logging.getLogger(__name__)
 GOALS_ENSEMBLE_POISSON_WEIGHT = GOALS_ENSEMBLE_XGB_WEIGHT
 _MODEL_CALIBRATOR_CACHE: Dict[str, Optional[Dict[str, Any]]] = {}
 RL_SHADOW_MARKET = "1x2"
+RL_BANDIT_LIVE_FLAG = DATA_DIR / "rl_bandit_live.flag"
 
 # --- TYPES: ARCHITECTURAL CONTRACTS ---
 
@@ -971,8 +972,8 @@ def show_predictions(
         help="Use Monte Carlo simulation for goal markets (enabled by default)",
     ),
     use_rl_weights: bool = typer.Option(
-        False,
-        "--use-rl-weights",
+        RL_BANDIT_LIVE_FLAG.exists(),
+        "--use-rl-weights/--no-use-rl-weights",
         help="Run contextual bandit simulator weights in shadow mode and log the output only",
     ),
 ) -> None:
