@@ -1611,7 +1611,7 @@ def _render_output(
             
             # Corn 1X2 - Manual check
             ch, ca = p.get('corn_1x2_h', 0), p.get('corn_1x2_a', 0)
-            if ch == 0 and ca == 0:
+            if not ch or not ca or (ch == 0 and ca == 0):
                 s_corn_1x2 = "-"
             else:
                 winner = "H" if ch > ca else "A"
