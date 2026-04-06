@@ -986,16 +986,28 @@ def show_predictions(
         - Logs prediction events to the monitoring system.
     """
     console = Console()
+    all_leagues = ["PL", "BL1", "FL1", "SA", "PD"]
     try:
         # 1. Data Loading
-        lg_val = resolve_league_code(league).value if league else None
-        df = ServiceContainer.get_instance().pipeline.run(league=lg_val)
-        validate_match_dataframe(df, context="show_predictions")
-        
-        df_target = filter_matches_by_date(df, date, show_all=all, user_timezone=tz)
-        if df_target.empty:
+        leagues_to_run = all_leagues if all and not league else [league]
+        df_targets = []
+        for league_code in leagues_to_run:
+            lg_val = resolve_league_code(league_code).value if league_code else None
+            df = ServiceContainer.get_instance().pipeline.run(league=lg_val)
+            validate_match_dataframe(
+                df,
+                context=f"show_predictions[{lg_val or 'ALL'}]",
+            )
+
+            df_target = filter_matches_by_date(df, date, show_all=all, user_timezone=tz)
+            if not df_target.empty:
+                df_targets.append(df_target)
+
+        if not df_targets:
             console.print(f"[yellow][!] No matches found for filter: {date}[/yellow]")
             return
+
+        df_target = pd.concat(df_targets, ignore_index=True)
 
         # 2. Prediction Engine (Flattened)
         results = _run_predict_loop(
