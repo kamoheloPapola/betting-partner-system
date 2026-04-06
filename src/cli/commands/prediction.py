@@ -9,6 +9,8 @@ import typer
 import pandas as pd
 import numpy as np
 import logging
+import os
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List, TypedDict, Tuple, cast, Protocol, runtime_checkable
@@ -987,6 +989,27 @@ def show_predictions(
     """
     console = Console()
     ALL_LEAGUES = ["PL", "BL1", "FL1", "SA", "PD"]
+    if logging.getLogger().getEffectiveLevel() == logging.WARNING:
+        os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(os.cpu_count() or 1))
+        logging.getLogger(__name__).setLevel(logging.ERROR)
+        for logger_name in (
+            "src.ml.registry",
+            "src.monitoring",
+            "src.predictions",
+            "src.strategies",
+            "src.core",
+        ):
+            logging.getLogger(logger_name).setLevel(logging.CRITICAL)
+        warnings.filterwarnings(
+            "ignore",
+            message="Could not find the number of physical cores.*",
+            module="joblib.externals.loky.backend.context",
+        )
+        warnings.filterwarnings(
+            "ignore",
+            category=UserWarning,
+            module=r"joblib\.externals\.loky\.backend\.context",
+        )
     try:
         # 1. Data Loading
         target_leagues = ALL_LEAGUES if (all and not league) else [league or "PL"]
@@ -1000,9 +1023,13 @@ def show_predictions(
                 context=f"show_predictions[{lg_val or 'PL'}]",
             )
 
-            df_target = filter_matches_by_date(df, date, show_all=all, user_timezone=tz)
+            date_filter = DateFilter.ALL if all else date
+            df_target = filter_matches_by_date(df, date_filter, show_all=all, user_timezone=tz)
             if df_target.empty:
-                console.print(f"[yellow][!] No matches found for {lg_val or current_league} with filter: {date}[/yellow]")
+                filter_label = date_filter.value if isinstance(date_filter, DateFilter) else str(date_filter)
+                console.print(
+                    f"[yellow][!] No matches found for {lg_val or current_league} with filter: {filter_label}[/yellow]"
+                )
                 continue
 
             # 2. Prediction Engine (Flattened)
