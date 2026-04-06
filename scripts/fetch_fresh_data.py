@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List
@@ -6,6 +7,8 @@ from typing import Any, Dict, List
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.utils.naming import generate_match_fingerprint, normalize_team_name
 
