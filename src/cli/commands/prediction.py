@@ -986,42 +986,42 @@ def show_predictions(
         - Logs prediction events to the monitoring system.
     """
     console = Console()
-    all_leagues = ["PL", "BL1", "FL1", "SA", "PD"]
+    ALL_LEAGUES = ["PL", "BL1", "FL1", "SA", "PD"]
     try:
         # 1. Data Loading
-        leagues_to_run = all_leagues if all and not league else [league]
-        df_targets = []
-        for league_code in leagues_to_run:
-            lg_val = resolve_league_code(league_code).value if league_code else None
+        target_leagues = ALL_LEAGUES if (all and not league) else [league or "PL"]
+        rendered_any = False
+
+        for current_league in target_leagues:
+            lg_val = resolve_league_code(current_league).value if current_league else None
             df = ServiceContainer.get_instance().pipeline.run(league=lg_val)
             validate_match_dataframe(
                 df,
-                context=f"show_predictions[{lg_val or 'ALL'}]",
+                context=f"show_predictions[{lg_val or 'PL'}]",
             )
 
             df_target = filter_matches_by_date(df, date, show_all=all, user_timezone=tz)
-            if not df_target.empty:
-                df_targets.append(df_target)
+            if df_target.empty:
+                console.print(f"[yellow][!] No matches found for {lg_val or current_league} with filter: {date}[/yellow]")
+                continue
 
-        if not df_targets:
-            console.print(f"[yellow][!] No matches found for filter: {date}[/yellow]")
+            # 2. Prediction Engine (Flattened)
+            results = _run_predict_loop(
+                df_target,
+                use_simulator=simulate,
+                use_rl_weights=use_rl_weights,
+            )
+            if not results:
+                console.print(f"[yellow]No valid predictions generated for {lg_val or current_league}.[/yellow]")
+                continue
+
+            # 3. Strategy & Presentation
+            gated, stats = SelectionGate().process(_prepare_bets(results))
+            _render_output(results, gated, stats, console)
+            rendered_any = True
+
+        if not rendered_any:
             return
-
-        df_target = pd.concat(df_targets, ignore_index=True)
-
-        # 2. Prediction Engine (Flattened)
-        results = _run_predict_loop(
-            df_target,
-            use_simulator=simulate,
-            use_rl_weights=use_rl_weights,
-        )
-        if not results:
-            console.print("[yellow]No valid predictions generated.[/yellow]")
-            return
-
-        # 3. Strategy & Presentation
-        gated, stats = SelectionGate().process(_prepare_bets(results))
-        _render_output(results, gated, stats, console)
         
     except Exception as e:
         logger.error("Prediction workflow failed", exc_info=True)
