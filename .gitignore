@@ -33,8 +33,13 @@ venv/
 .vscode/
 
 # Project Data & Logs
-/data/
+/data/*
+!/data/fbref/
+/data/fbref/*
 !/data/fbref/raw/
+!/data/processed/
+/data/processed/*
+!/data/processed/season_maps.json
 /logs/
 *.log
 *.sqlite
