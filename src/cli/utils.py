@@ -273,8 +273,9 @@ def _filter_weekend(df: pd.DataFrame, now: pd.Timestamp) -> pd.DataFrame:
         saturday = (now + pd.Timedelta(days=5 - current_weekday)).normalize()
     
     monday = saturday + pd.Timedelta(days=2)
+    friday = saturday - pd.Timedelta(days=1)
     mask = (
-        (df['date_local'] >= saturday) & 
+        (df['date_local'] >= friday) & 
         (df['date_local'] < monday) & 
         (~df['status_upper'].isin(FINISHED_STATUSES))
     )
@@ -321,7 +322,6 @@ def _filter_week_range(df: pd.DataFrame, now: pd.Timestamp) -> pd.DataFrame:
     mask = (
         (df['date_local'] >= start) & 
         (df['date_local'] < end) & 
-        (df['date_local'].dt.dayofweek < 5) &  # Extra safety: Monday-Friday only
         (~df['status_upper'].isin(FINISHED_STATUSES))
     )
     return df[mask]

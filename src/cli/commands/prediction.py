@@ -1012,7 +1012,7 @@ def _calc_dc(probs: Dict[str, float], ctx: str) -> Dict[str, float]:
 
 @app.command(name="show-predictions")
 def show_predictions(
-    date: str = typer.Option("today", help="Date filter: 'yesterday', 'today', 'tomorrow', 'week', 'weekend'"),
+    date: str = typer.Option("today", help="Date filter: 'yesterday', 'today', 'tomorrow', 'week', 'weekend', 'month', or day name e.g. 'friday', 'saturday'"),
     league: Optional[str] = typer.Option(None, "--league", "-l", help="Filter by league code or name."),
     all: bool = typer.Option(False, "--all", "-a", help="Show all future predictions."),
     tz: str = typer.Option("LOCAL", help="Timezone for date filtering (e.g. 'Europe/London', 'America/New_York')"),
