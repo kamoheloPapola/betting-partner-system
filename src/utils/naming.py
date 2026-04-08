@@ -23,6 +23,7 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
+_normalize_warned: set[tuple[str, str]] = set()
 
 # === Constants ===
 # Fuzzy matching minimum score (0-100)
@@ -283,6 +284,18 @@ def normalize_team_name(name: str, league: Optional[str] = None, season: Optiona
             if clean in aliases:
                 return aliases[clean]
 
+            for other_season, other_canonical_names in LEAGUE_TEAMS[league].items():
+                if other_season == target_season:
+                    continue
+                other_canonical_set = {c.upper() for c in other_canonical_names}
+                other_aliases_raw = LEAGUE_ALIASES.get(league, {}).get(other_season, {})
+                other_aliases = {k.upper(): v.upper() for k, v in other_aliases_raw.items()}
+
+                if clean in other_canonical_set:
+                    return clean
+                if clean in other_aliases:
+                    return other_aliases[clean]
+
             result = process.extractOne(clean, list(canonical_set), score_cutoff=FUZZY_SCORE_CUTOFF)
             if result:
                 canonical, score, index = result
@@ -302,6 +315,18 @@ def normalize_team_name(name: str, league: Optional[str] = None, season: Optiona
         if clean in a_map:
             return a_map[clean]
 
+        # Cross-season search (mirrors league-specific path)
+        for other_season, other_canonical_names in s_map.items():
+            if other_season == s_target:
+                continue
+            other_c_set = {c.upper() for c in other_canonical_names}
+            other_aliases_raw = LEAGUE_ALIASES.get(l_code, {}).get(other_season, {})
+            other_a_map = {k.upper(): v.upper() for k, v in other_aliases_raw.items()}
+            if clean in other_c_set:
+                return clean
+            if clean in other_a_map:
+                return other_a_map[clean]
+
     # Fuzzy match across target season across ALL leagues as last ditch
     all_canonicals = []
     for l_code, s_map in LEAGUE_TEAMS.items():
@@ -316,7 +341,10 @@ def normalize_team_name(name: str, league: Optional[str] = None, season: Optiona
         return canonical.upper()
 
     # 4. Fallback
-    logger.warning(f"Could not normalize team name: '{clean}' (League: {league or 'Global Context'}).")
+    warn_key = (league or "", clean)
+    if warn_key not in _normalize_warned:
+        logger.warning(f"Could not normalize team name: '{clean}' (League: {league or 'Global Context'}).")
+        _normalize_warned.add(warn_key)
     return clean.upper()
 
 
