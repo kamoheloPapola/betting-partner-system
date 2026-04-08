@@ -353,6 +353,48 @@ def apply_calibration_cap(prob: float, market: str, ctx: str = "") -> float:
         return cap
     return prob
 
+def _poisson_implied(market: str, lh: float, la: float) -> float | None:
+    """Compute Poisson-implied probability for a market given goal lambdas."""
+    from scipy.stats import poisson as _poisson
+    if market == 'u25':
+        return sum(
+            _poisson.pmf(h, lh) * _poisson.pmf(a, la)
+            for h in range(5) for a in range(5) if h + a <= 2
+        )
+    if market == 'u35':
+        return sum(
+            _poisson.pmf(h, lh) * _poisson.pmf(a, la)
+            for h in range(5) for a in range(5) if h + a <= 3
+        )
+    if market == 'btts_yes':
+        return (1 - _poisson.pmf(0, lh)) * (1 - _poisson.pmf(0, la))
+    if market == 'btts_no':
+        btts_yes = (1 - _poisson.pmf(0, lh)) * (1 - _poisson.pmf(0, la))
+        return 1.0 - btts_yes
+    return None
+
+
+def apply_lambda_aware_adjustment(
+    prob: float,
+    market: str,
+    home_lambda: float,
+    away_lambda: float,
+    ctx: str = "",
+    strength: float = 0.25,
+) -> float:
+    """Soft-pull market probability toward Poisson-implied value at given lambdas."""
+    implied = _poisson_implied(market, home_lambda, away_lambda)
+    if implied is None:
+        return prob
+    adjusted = prob + strength * (implied - prob)
+    if ctx and abs(adjusted - prob) > 0.01:
+        logger.debug(
+            f"{ctx}: lambda_aware {market}: {prob*100:.1f}% -> {adjusted*100:.1f}%"
+            f" (implied={implied*100:.1f}%, lh={home_lambda:.3f}, la={away_lambda:.3f})"
+        )
+    return adjusted
+
+
 def get_confidence_tier(prob: float) -> str:
     """Get the confidence tier label for a probability."""
     for (low, high), tier in CONFIDENCE_TIERS.items():
@@ -566,11 +608,17 @@ def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bo
     underdog = "home" if model_home_lambda < model_away_lambda else "away"
     eh_prob = EuropeanHandicap.win_probability(model_home_lambda, model_away_lambda, 2, underdog)
     
+    # === LAMBDA-AWARE SOFT ADJUSTMENT ===
+    u25_pre_cap = apply_lambda_aware_adjustment(1.0 - o25, 'u25', model_home_lambda, model_away_lambda, ctx)
+    u35_pre_cap = apply_lambda_aware_adjustment(1.0 - o35, 'u35', model_home_lambda, model_away_lambda, ctx)
+    btts_pre_cap = apply_lambda_aware_adjustment(btts, 'btts_yes', model_home_lambda, model_away_lambda, ctx)
+    btts_no_pre_cap = apply_lambda_aware_adjustment(1.0 - btts, 'btts_no', model_home_lambda, model_away_lambda, ctx)
+
     # === APPLY CALIBRATION CAPS (Layer 4.1 OOS guardrails) ===
-    u25_capped = apply_calibration_cap(1.0 - o25, 'u25', ctx)
-    u35_capped = apply_calibration_cap(1.0 - o35, 'u35', ctx)
-    btts_capped = apply_calibration_cap(btts, 'btts_yes', ctx)
-    btts_no_capped = apply_calibration_cap(1.0 - btts, 'btts_no', ctx)
+    u25_capped = apply_calibration_cap(u25_pre_cap, 'u25', ctx)
+    u35_capped = apply_calibration_cap(u35_pre_cap, 'u35', ctx)
+    btts_capped = apply_calibration_cap(btts_pre_cap, 'btts_yes', ctx)
+    btts_no_capped = apply_calibration_cap(btts_no_pre_cap, 'btts_no', ctx)
     
     # New: Team Goal Caps
     h_u15_capped = apply_calibration_cap(res['home_under_1_5'], 'home_under_1_5', ctx)
