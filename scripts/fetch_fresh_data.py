@@ -1,5 +1,6 @@
 import os
 import re
+import subprocess
 import sys
 import unicodedata
 import requests
@@ -27,6 +28,7 @@ def current_season_year() -> int:
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed" / "matches"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+SCRIPTS_DIR = Path(__file__).resolve().parent
 
 
 def clean_team_name(name: str) -> str:
@@ -81,8 +83,19 @@ def matches_to_df(matches: list, league: str, season: int) -> pd.DataFrame:
             "match_id":    format(abs(hash(f"{m.get('utcDate','')}_{m['homeTeam']['name']}_{m['awayTeam']['name']}")), 'x')[:16],
         })
     return pd.DataFrame(rows)
+
+
+def run_post_fetch_script(script_name: str) -> None:
+    script_path = SCRIPTS_DIR / script_name
+    print(f"Running {script_name}...")
+    result = subprocess.run([sys.executable, str(script_path)], check=False)
+    if result.returncode != 0:
+        raise SystemExit(result.returncode)
+
+
 if __name__ == "__main__":
     season = current_season_year()
+    fetch_failed = False
     for league, code in LEAGUES.items():
         print(f"Fetching {league} {season}/{str(season+1)[2:]}...", end=" ")
         try:
@@ -97,3 +110,10 @@ if __name__ == "__main__":
             print(f"OK - {len(finished)} finished, {len(upcoming)} upcoming")
         except Exception as e:
             print(f"FAILED - {e}")
+            fetch_failed = True
+
+    if fetch_failed:
+        raise SystemExit(1)
+
+    run_post_fetch_script("sync_season_maps.py")
+    run_post_fetch_script("validate_team_names.py")
