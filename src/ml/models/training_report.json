@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-02T11:08:37.688514",
+  "generated_at": "2026-04-06T16:16:31.937887",
   "leagues": {
     "PL": {
       "match_outcome": {
@@ -8,44 +8,232 @@
         "brier_score": 0.6033
       },
       "home_goals": {
-        "mae": 1.0522,
-        "rmse": 1.3252,
-        "calibration_score": 0.1701
+        "mae": 1.0332,
+        "rmse": 1.2972,
+        "calibration_score": 0.1641
       },
       "home_goals_xgb": {
-        "mae": 1.0582,
-        "rmse": 1.3516,
-        "calibration_score": 0.1808
+        "mae": 1.0277,
+        "rmse": 1.3065,
+        "calibration_score": 0.1676
       },
       "away_goals": {
-        "mae": 0.9272,
-        "rmse": 1.1949,
-        "calibration_score": 0.1944
+        "mae": 0.9201,
+        "rmse": 1.1856,
+        "calibration_score": 0.1907
       },
       "away_goals_xgb": {
-        "mae": 0.9494,
-        "rmse": 1.237,
-        "calibration_score": 0.2074
+        "mae": 0.9237,
+        "rmse": 1.1969,
+        "calibration_score": 0.1932
       },
       "corners": {
-        "mae": 2.9513,
-        "rmse": 3.7034,
+        "mae": 2.8877,
+        "rmse": 3.615,
         "calibration_score": 0.0
       },
       "corners_xgb": {
-        "mae": 3.0161,
-        "rmse": 3.7821,
+        "mae": 2.9649,
+        "rmse": 3.7119,
         "calibration_score": 0.0
       },
       "cards": {
-        "mae": 1.8777,
-        "rmse": 2.4312,
-        "calibration_score": 0.0335
+        "mae": 1.8458,
+        "rmse": 2.3875,
+        "calibration_score": 0.0333
       },
       "cards_xgb": {
-        "mae": 2.02,
-        "rmse": 2.6096,
-        "calibration_score": 0.0371
+        "mae": 1.9421,
+        "rmse": 2.5168,
+        "calibration_score": 0.0346
+      }
+    },
+    "BL1": {
+      "match_outcome": {
+        "accuracy": 0.4685,
+        "log_loss": 1.0292,
+        "brier_score": 0.6163
+      },
+      "home_goals": {
+        "mae": 1.0991,
+        "rmse": 1.3646,
+        "calibration_score": 0.1722
+      },
+      "home_goals_xgb": {
+        "mae": 1.0942,
+        "rmse": 1.3648,
+        "calibration_score": 0.1732
+      },
+      "away_goals": {
+        "mae": 0.9684,
+        "rmse": 1.2172,
+        "calibration_score": 0.1851
+      },
+      "away_goals_xgb": {
+        "mae": 0.9657,
+        "rmse": 1.2271,
+        "calibration_score": 0.1879
+      },
+      "corners": {
+        "mae": 2.7547,
+        "rmse": 3.4032,
+        "calibration_score": 0.0
+      },
+      "corners_xgb": {
+        "mae": 2.8264,
+        "rmse": 3.5036,
+        "calibration_score": 0.0
+      },
+      "cards": {
+        "mae": 1.839,
+        "rmse": 2.3386,
+        "calibration_score": 0.0291
+      },
+      "cards_xgb": {
+        "mae": 1.9283,
+        "rmse": 2.488,
+        "calibration_score": 0.0306
+      }
+    },
+    "FL1": {
+      "match_outcome": {
+        "accuracy": 0.4722,
+        "log_loss": 1.0352,
+        "brier_score": 0.6208
+      },
+      "home_goals": {
+        "mae": 1.003,
+        "rmse": 1.2625,
+        "calibration_score": 0.1659
+      },
+      "home_goals_xgb": {
+        "mae": 0.9943,
+        "rmse": 1.2645,
+        "calibration_score": 0.1679
+      },
+      "away_goals": {
+        "mae": 0.9394,
+        "rmse": 1.1861,
+        "calibration_score": 0.2102
+      },
+      "away_goals_xgb": {
+        "mae": 0.936,
+        "rmse": 1.1845,
+        "calibration_score": 0.2125
+      },
+      "corners": {
+        "mae": 2.7244,
+        "rmse": 3.4361,
+        "calibration_score": 0.0
+      },
+      "corners_xgb": {
+        "mae": 2.7665,
+        "rmse": 3.5017,
+        "calibration_score": 0.0
+      },
+      "cards": {
+        "mae": 1.6115,
+        "rmse": 2.0842,
+        "calibration_score": 0.033
+      },
+      "cards_xgb": {
+        "mae": 1.657,
+        "rmse": 2.1476,
+        "calibration_score": 0.0331
+      }
+    },
+    "SA": {
+      "match_outcome": {
+        "accuracy": 0.4848,
+        "log_loss": 1.0336,
+        "brier_score": 0.6212
+      },
+      "home_goals": {
+        "mae": 0.9047,
+        "rmse": 1.1448,
+        "calibration_score": 0.186
+      },
+      "home_goals_xgb": {
+        "mae": 0.904,
+        "rmse": 1.1414,
+        "calibration_score": 0.188
+      },
+      "away_goals": {
+        "mae": 0.8421,
+        "rmse": 1.0595,
+        "calibration_score": 0.2078
+      },
+      "away_goals_xgb": {
+        "mae": 0.8362,
+        "rmse": 1.0653,
+        "calibration_score": 0.2116
+      },
+      "corners": {
+        "mae": 2.8522,
+        "rmse": 3.5908,
+        "calibration_score": 0.0
+      },
+      "corners_xgb": {
+        "mae": 2.9027,
+        "rmse": 3.6812,
+        "calibration_score": 0.0
+      },
+      "cards": {
+        "mae": 1.8229,
+        "rmse": 2.2909,
+        "calibration_score": 0.0297
+      },
+      "cards_xgb": {
+        "mae": 1.8017,
+        "rmse": 2.2825,
+        "calibration_score": 0.0296
+      }
+    },
+    "PD": {
+      "match_outcome": {
+        "accuracy": 0.493,
+        "log_loss": 1.0209,
+        "brier_score": 0.6122
+      },
+      "home_goals": {
+        "mae": 0.9296,
+        "rmse": 1.185,
+        "calibration_score": 0.1684
+      },
+      "home_goals_xgb": {
+        "mae": 0.9331,
+        "rmse": 1.201,
+        "calibration_score": 0.1739
+      },
+      "away_goals": {
+        "mae": 0.8486,
+        "rmse": 1.0788,
+        "calibration_score": 0.2151
+      },
+      "away_goals_xgb": {
+        "mae": 0.8454,
+        "rmse": 1.0883,
+        "calibration_score": 0.2202
+      },
+      "corners": {
+        "mae": 2.6024,
+        "rmse": 3.3144,
+        "calibration_score": 0.0
+      },
+      "corners_xgb": {
+        "mae": 2.6941,
+        "rmse": 3.4325,
+        "calibration_score": 0.0
+      },
+      "cards": {
+        "mae": 2.0813,
+        "rmse": 2.603,
+        "calibration_score": 0.017
+      },
+      "cards_xgb": {
+        "mae": 2.1291,
+        "rmse": 2.6745,
+        "calibration_score": 0.0173
       }
     }
   }
