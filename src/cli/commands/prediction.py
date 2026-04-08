@@ -1403,18 +1403,18 @@ def _safe_prob(p: Dict[str, Any], key: str) -> float:
 
 # --- UI ENHANCEMENT HELPERS ---
 
-LEAGUE_EMOJIS = {
-    "PL": "ðŸ´ó §ó ¢ó ¥ó ®ó §ó ¿",  # England
-    "BL1": "ðŸ‡©ðŸ‡ª",  # Germany
-    "SA": "ðŸ‡®ðŸ‡¹",   # Italy
-    "FL1": "ðŸ‡«ðŸ‡·",  # France
-    "PD": "ðŸ‡ªðŸ‡¸",   # Spain
+LEAGUE_PREFIXES = {
+    "PL": "[PL]",
+    "BL1": "[BL1]",
+    "SA": "[SA]",
+    "FL1": "[FL1]",
+    "PD": "[PD]",
 }
 
 
-def _get_league_emoji(lg: str) -> str:
-    """Get emoji for league code."""
-    return LEAGUE_EMOJIS.get(lg, "âš½")
+def _get_league_prefix(lg: str) -> str:
+    """Get an ASCII-safe league prefix for console titles."""
+    return LEAGUE_PREFIXES.get(lg, f"[{lg}]")
 
 
 def _color_confidence(prob: float) -> str:
@@ -1525,8 +1525,8 @@ def _render_output(
         p_lg = [p for p in preds if p['league'] == lg]
         gated_lg = [b for b in gated if b.get('league') == lg]
         lg_n = LeagueCode(lg).full_name if lg in LeagueCode.__members__ else lg
-        lg_emoji = _get_league_emoji(lg)
-        t = Table(title=f"{lg_emoji} [bold cyan]{lg_n} ({lg})[/bold cyan]", box=box.ROUNDED, show_lines=True)
+        lg_prefix = _get_league_prefix(lg)
+        t = Table(title=f"{lg_prefix} [bold cyan]{lg_n} ({lg})[/bold cyan]", box=box.ROUNDED, show_lines=True)
         
         # Define Thresholds Local Shortcuts
         TH_1X2 = Thresholds.GATE_PROB_1X2
@@ -1689,14 +1689,18 @@ def _render_output(
         # Summary row
         avg_edge = (total_edge / len(p_lg)) if p_lg else 0
         edge_color = "green" if avg_edge > 0.05 else "yellow" if avg_edge > 0 else "dim"
-        console.print(f"[dim]â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€[/dim]")
-        console.print(f"[bold]ðŸ“Š Summary:[/bold] {len(p_lg)} matches â”‚ [green]High Conf: {high_conf_count}[/green] â”‚ [{edge_color}]Avg Edge: {avg_edge:+.1%}[/{edge_color}]")
+        console.rule(style="dim")
+        console.print(
+            f"[bold]Summary:[/bold] {len(p_lg)} matches | "
+            f"[green]High Conf: {high_conf_count}[/green] | "
+            f"[{edge_color}]Avg Edge: {avg_edge:+.1%}[/{edge_color}]"
+        )
         console.print(f"[dim italic]Legend: [bold green]Green[/bold green]=High(>70%) [yellow]Yellow[/yellow]=Medium(55-70%) [dim]Gray[/dim]=Low(<55%)[/dim italic]")
-        console.print(f"[dim]Note: Double Chance shown for context only â€” not used in Suggested Slip.[/dim]\n")
+        console.print("[dim]Note: Double Chance shown for context only - not used in Suggested Slip.[/dim]\n")
     
     # 2. Gated Selections
     if gated:
-        gt = Table(title="[bold green]âœ… GATED SELECTIONS (High Value)[/bold green]", box=box.HEAVY_EDGE)
+        gt = Table(title="[bold green]GATED SELECTIONS (High Value)[/bold green]", box=box.HEAVY_EDGE)
         gt.add_column("Date", style="dim"); gt.add_column("Match"); gt.add_column("Selection", style="bold cyan")
         gt.add_column("Prob", justify="right"); gt.add_column("Score", justify="right")
         for b in gated:
