@@ -288,7 +288,7 @@ def _calculate_probabilities(match: pd.Series, suite: ModelSuite, league: str, i
     ctx = f"{match.get('home_team')}{MATCH_SEPARATOR}{match.get('away_team')}"
     
     # 1. Goals (Mandatory)
-    p.update(_calc_goals(match, suite, ctx))
+    p.update(_calc_goals(match, suite, ctx, league=league))
     
     # 2. Secondary Markets (Best Effort)
     res_corn, attr_corn = _calc_corners(match, suite, ctx, league, intensity_boost)
@@ -427,7 +427,7 @@ def _divergence_pct(a: float, b: float) -> float:
     return abs(a - b) / denom
 
 
-def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bool = True) -> Dict[str, Any]:
+def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bool = True, league: str | None = None) -> Dict[str, Any]:
     lgbm_feats = cast(List[str], suite['meta_goals']['features'])
     lh_lgbm = _predict_scalar(suite['mh_goals'], match, lgbm_feats, f"{ctx}:GoalsH:LGBM")
     la_lgbm = _predict_scalar(suite['ma_goals'], match, lgbm_feats, f"{ctx}:GoalsA:LGBM")
@@ -486,7 +486,7 @@ def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bo
     sim_top_scorelines: List[Dict[str, float | str]] = []
 
     if use_simulator:
-        sim = MatchSimulator(n_simulations=DEFAULT_N_SIMULATIONS, seed=42)
+        sim = MatchSimulator(n_simulations=DEFAULT_N_SIMULATIONS, seed=42, league=league)
         sim_res = sim.simulate(model_home_lambda, model_away_lambda)
 
         res = {
@@ -528,7 +528,7 @@ def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bo
     btts = btts_raw
     
     # Apply H2H O2.5 rate adjustment for Goals markets
-    if h2h_match_count >= 3 and h2h_goals_o25_rate is not None and not pd.isna(h2h_goals_o25_rate):
+    if h2h_match_count >= 6 and h2h_goals_o25_rate is not None and not pd.isna(h2h_goals_o25_rate):
         if abs(o25 - h2h_goals_o25_rate) > 0.15:
             h2h_weight = min(h2h_match_count / 5, 0.5)
             o25_adjusted = (1 - h2h_weight) * o25 + h2h_weight * h2h_goals_o25_rate
@@ -1351,7 +1351,7 @@ def _calculate_probabilities_v2(
     ctx = f"{match.get('home_team')}{MATCH_SEPARATOR}{match.get('away_team')}"
     
     # 1. Goals (Mandatory)
-    p.update(_calc_goals(match, suite, ctx, use_simulator=use_simulator))
+    p.update(_calc_goals(match, suite, ctx, use_simulator=use_simulator, league=league))
     
     # 2. Secondary Markets (Best Effort)
     res_corn, attr_corn = _calc_corners(match, suite, ctx, league, intensity_boost, warning_collector)

@@ -34,6 +34,13 @@ LAMBDA_MAX = 4.0
 # LogNormal(0, sigma) has mean=exp(sigma^2/2) ≈ 1.005 for sigma=0.1
 # Guarantees tempo > 0 (unlike Normal which can go negative).
 TEMPO_SIGMA = 0.1
+LEAGUE_TEMPO_SIGMA: dict[str, float] = {
+    "PL": 0.10,
+    "BL1": 0.11,
+    "FL1": 0.09,
+    "PD": 0.09,
+    "SA": 0.07,
+}
 
 # Max goals to track per team in scoreline matrix
 MAX_GOALS = 10
@@ -128,6 +135,7 @@ class MatchSimulator:
         max_goals: int = MAX_GOALS,
         top_scorelines: int = TOP_SCORELINES,
         tempo_sigma: float = TEMPO_SIGMA,
+        league: str | None = None,
         seed: Optional[int] = None,
     ) -> None:
         if n_simulations < 100:
@@ -136,7 +144,7 @@ class MatchSimulator:
         self.n_simulations = n_simulations
         self.max_goals = max_goals
         self.top_scorelines = top_scorelines
-        self.tempo_sigma = tempo_sigma
+        self.tempo_sigma = LEAGUE_TEMPO_SIGMA.get(league, tempo_sigma) if league else tempo_sigma
         self.rng = np.random.default_rng(seed)
 
     def simulate(
