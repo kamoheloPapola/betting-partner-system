@@ -48,6 +48,10 @@ class TestTeamNormalizationImproved:
             assert normalize_team_name("Arsenal", "UNKNOWN") == "ARSENAL"
             assert "No team data for league" in caplog.text
 
+    def test_current_season_aliases_cover_promoted_or_sparse_maps(self):
+        assert normalize_team_name("PISA", "SA", 2025) == "PISA"
+        assert normalize_team_name("PARIS FC", "FL1", 2025) == "PARIS FC"
+
     def test_empty_string_validation(self):
         from src.ingestion.odds_api.utils import normalize_odds_team
         with pytest.raises(ValueError, match="Team name cannot be empty"):
