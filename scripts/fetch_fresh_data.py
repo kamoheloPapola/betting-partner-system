@@ -1,5 +1,7 @@
 import os
+import re
 import sys
+import unicodedata
 import requests
 import pandas as pd
 from datetime import datetime
@@ -26,6 +28,18 @@ def current_season_year() -> int:
 DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "processed" / "matches"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+
+def clean_team_name(name: str) -> str:
+    """Normalize team name to match pipeline sanitizer rules."""
+    name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    name = name.upper()
+    name = name.replace("&", "AND")
+    name = re.sub(r"\bF\.?C\.?\b", "", name)
+    name = re.sub(r"\bA\.?F\.?C\.?\b", "", name)
+    name = re.sub(r"[^A-Z0-9 \-_\.]", "", name)
+    name = re.sub(r" +", " ", name).strip()
+    return name
+
 def fetch_matches(competition_code: str, season: int) -> list:
     url = f"{BASE}/competitions/{competition_code}/matches"
     r = requests.get(url, headers=HEADERS, params={"season": season}, timeout=30)
@@ -45,8 +59,8 @@ def matches_to_df(matches: list, league: str, season: int) -> pd.DataFrame:
             result = "H" if home_goals > away_goals else "A" if away_goals > home_goals else "D"
         rows.append({
             "date":        m.get("utcDate", "")[:10],
-            "home_team":   m["homeTeam"]["name"].upper(),
-            "away_team":   m["awayTeam"]["name"].upper(),
+            "home_team":   clean_team_name(m["homeTeam"]["name"]),
+            "away_team":   clean_team_name(m["awayTeam"]["name"]),
             "home_score":  home_goals,
             "away_score":  away_goals,
             "result":      result,
@@ -67,7 +81,6 @@ def matches_to_df(matches: list, league: str, season: int) -> pd.DataFrame:
             "match_id":    format(abs(hash(f"{m.get('utcDate','')}_{m['homeTeam']['name']}_{m['awayTeam']['name']}")), 'x')[:16],
         })
     return pd.DataFrame(rows)
-
 if __name__ == "__main__":
     season = current_season_year()
     for league, code in LEAGUES.items():
