@@ -4,7 +4,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.cli.commands.prediction import ModelSuite, _calculate_probabilities
+from src.cli.commands.prediction import (
+    ModelSuite,
+    _calculate_probabilities,
+    _calculate_probabilities_v2,
+)
 from src.features.pipeline import FeaturePipeline
 from src.simulation.match_simulator import DEFAULT_N_SIMULATIONS
 
@@ -67,3 +71,50 @@ def test_full_prediction_workflow_from_fixture_dataframe() -> None:
         assert probabilities["mc_n_simulations"] == DEFAULT_N_SIMULATIONS
         assert isinstance(probabilities["mc_top_scorelines"], list)
         assert len(probabilities["mc_top_scorelines"]) > 0
+
+
+def test_simulation_shifts_probabilities_vs_analytical() -> None:
+    sample_matches = pd.read_csv(FIXTURE_PATH)
+    sample_matches["date"] = pd.to_datetime(sample_matches["date"])
+    match = FeaturePipeline().transform(sample_matches).iloc[0]
+
+    goal_features = [
+        "home_rolling_goals_scored_5",
+        "home_rolling_goals_conceded_5",
+        "away_rolling_goals_scored_5",
+        "away_rolling_goals_conceded_5",
+    ]
+    suite: ModelSuite = {
+        "mh_goals": ConstantRegressor(1.6, goal_features, "home_goals"),
+        "ma_goals": ConstantRegressor(1.6, goal_features, "away_goals"),
+        "meta_goals": {"features": goal_features},
+    }
+
+    sim_probabilities, _ = _calculate_probabilities_v2(
+        match,
+        suite,
+        match["league"],
+        False,
+        {"missing_offsets": set(), "missing_card_offsets": set()},
+        use_simulator=True,
+    )
+    analytical_probabilities, _ = _calculate_probabilities_v2(
+        match,
+        suite,
+        match["league"],
+        False,
+        {"missing_offsets": set(), "missing_card_offsets": set()},
+        use_simulator=False,
+    )
+
+    assert sim_probabilities["goal_model_home_lambda"] == pytest.approx(1.6)
+    assert sim_probabilities["goal_model_away_lambda"] == pytest.approx(1.6)
+    assert analytical_probabilities["goal_model_home_lambda"] == pytest.approx(1.6)
+    assert analytical_probabilities["goal_model_away_lambda"] == pytest.approx(1.6)
+
+    assert abs(sim_probabilities["home"] - analytical_probabilities["home"]) >= 0.01
+    assert abs(sim_probabilities["draw"] - analytical_probabilities["draw"]) >= 0.01
+    assert (
+        abs(sim_probabilities["o25"] - analytical_probabilities["o25"]) >= 0.005
+        or abs(sim_probabilities["btts"] - analytical_probabilities["btts"]) >= 0.005
+    )
