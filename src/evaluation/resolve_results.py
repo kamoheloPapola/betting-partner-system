@@ -110,6 +110,7 @@ class AuthoritativeResolver:
         'HOME_WIN': 'home_win',
         'AWAY_WIN': 'away_win'
     }
+    VALID_LEAGUES: ClassVar[Set[str]] = {"PL", "BL1", "PD", "SA", "FL1", "UCL"}
 
     # Instance attributes (allows dependency injection)
     labeled_path: Optional[Path] = None
@@ -162,6 +163,7 @@ class AuthoritativeResolver:
         if not include_void:
             outcomes = outcomes[outcomes["outcome"].isin(["WON", "LOST"])]
 
+        outcomes["market"] = outcomes["market"].astype(str).str.upper()
         outcomes["outcome"] = outcomes["outcome"].map({"WON": 1, "LOST": 0})
         outcomes = outcomes.dropna(subset=["league", "market", "probability", "outcome"]).copy()
         outcomes["outcome"] = outcomes["outcome"].astype(int)
@@ -547,7 +549,7 @@ class AuthoritativeResolver:
         return {
             'match_hash': match_hash,
             'league': pred_row.get('league'),
-            'kickoff_date': pred_row['kickoff_date'],
+            'kickoff_date': res_date.isoformat(),
             'market': market,
             'probability': pred_row['predicted_probability'],
             'outcome': state,
@@ -599,10 +601,8 @@ class AuthoritativeResolver:
         
         for i in range(0, len(outcomes), batch_size):
             batch = outcomes[i:i+batch_size]
-            new_df = pd.DataFrame(batch)
-            ordered = [column for column in self.OUTCOME_COLUMNS if column in new_df.columns]
-            extras = [column for column in new_df.columns if column not in ordered]
-            new_df = new_df[ordered + extras]
+            normalized_batch = [self._normalize_outcome_row(row) for row in batch]
+            new_df = pd.DataFrame(normalized_batch, columns=self.OUTCOME_COLUMNS)
             
             # Determine mode appropriately: append always unless it's the very first write to a new file
             # If default_outcomes_path exists, process is purely additive.
@@ -616,7 +616,7 @@ class AuthoritativeResolver:
                  header = False
              
             new_df.to_csv(self.outcomes_path, mode=mode, header=header, index=False)
-            self._save_outcomes_batch_to_db(batch)
+            self._save_outcomes_batch_to_db(normalized_batch)
             total_saved += len(batch)
         
         logger.info(
@@ -639,6 +639,57 @@ class AuthoritativeResolver:
             if pd.isna(parsed):
                 return None
             return parsed.to_pydatetime()
+
+    def _normalize_outcome_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        missing = [column for column in self.OUTCOME_COLUMNS if column not in row]
+        extras = [column for column in row.keys() if column not in self.OUTCOME_COLUMNS]
+        if missing or extras:
+            raise ValueError(
+                f"Outcome row schema mismatch: missing={missing} extras={extras} row_keys={list(row.keys())}"
+            )
+
+        normalized: Dict[str, Any] = {column: row[column] for column in self.OUTCOME_COLUMNS}
+
+        normalized["prediction_id"] = str(normalized["prediction_id"]).strip()
+        normalized["match_hash"] = str(normalized["match_hash"]).strip()
+
+        league = str(normalized["league"]).strip().upper()
+        if league not in self.VALID_LEAGUES:
+            raise ValueError(f"Unknown league code in outcome row: {league}")
+        normalized["league"] = league
+
+        kickoff_date = self._parse_datetime(normalized["kickoff_date"])
+        if kickoff_date is None:
+            raise ValueError(f"Invalid kickoff_date in outcome row: {normalized['kickoff_date']}")
+        if kickoff_date.tzinfo is None:
+            kickoff_date = kickoff_date.replace(tzinfo=timezone.utc)
+        normalized["kickoff_date"] = kickoff_date.astimezone(timezone.utc).isoformat()
+
+        normalized["market"] = str(normalized["market"]).strip().lower()
+
+        try:
+            probability = float(normalized["probability"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid probability in outcome row: {normalized['probability']}") from exc
+        if not 0.0 <= probability <= 1.0:
+            raise ValueError(f"Probability out of bounds in outcome row: {probability}")
+        normalized["probability"] = probability
+
+        normalized["outcome"] = str(normalized["outcome"]).strip().upper()
+
+        resolved_at = self._parse_datetime(normalized["resolved_at"])
+        if resolved_at is None:
+            raise ValueError(f"Invalid resolved_at in outcome row: {normalized['resolved_at']}")
+        if resolved_at.tzinfo is None:
+            resolved_at = resolved_at.replace(tzinfo=timezone.utc)
+        normalized["resolved_at"] = resolved_at.astimezone(timezone.utc).isoformat()
+
+        if list(normalized.keys()) != self.OUTCOME_COLUMNS:
+            raise ValueError(
+                f"Outcome row column order mismatch: expected={self.OUTCOME_COLUMNS} actual={list(normalized.keys())}"
+            )
+
+        return normalized
 
     def _save_outcomes_batch_to_db(self, outcomes: List[Dict[str, Any]]) -> None:
         if not outcomes or not database_is_configured():

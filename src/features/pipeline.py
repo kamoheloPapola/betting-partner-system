@@ -567,7 +567,7 @@ class FeaturePipeline:
                 else:
                     fill_val = self.StaticPriors.ROLLING_GOALS
                     
-                team_df[col] = team_df[col].fillna(fill_val)
+                team_df[col] = team_df[col].fillna(fill_val).infer_objects(copy=False)
         
         # 3. Re-assemble to Match-Centric view
         # Use explicit whitelist (ISSUE #7)

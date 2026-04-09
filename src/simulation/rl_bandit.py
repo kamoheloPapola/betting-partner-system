@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 from pathlib import Path
@@ -13,6 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.config import DATA_DIR
+from src.core.constants import RESOLVER_LOOKBACK_DAYS
 from src.core.container import ServiceContainer
 from src.db.models import ResolvedPrediction
 from src.ml.calibration import calculate_ece
@@ -27,6 +29,7 @@ DEFAULT_WEIGHTS: Dict[str, float] = {
     "lambda_scale_away": 1.0,
 }
 ECE_BINS = 10
+MIN_ECE_UPDATE_ROWS = 30
 MARKET_BUCKET_ALIASES: Dict[str, set[str]] = {
     "1x2": {"home_win", "draw", "away_win"},
     "over_2_5": {"over_2_5", "goals_over_2_5", "over_2_5_goals"},
@@ -61,6 +64,7 @@ def _default_bucket_state() -> Dict[str, Any]:
         "last_reward": None,
         "ece_ema": 0.0,
         "reward_ema": 0.0,
+        "signed_ema": 0.0,
         "weights": dict(DEFAULT_WEIGHTS),
     }
 
@@ -79,11 +83,14 @@ def load_resolved_predictions_from_db(
 ) -> pd.DataFrame:
     """Load resolved predictions from the operational database."""
     active_container = container or ServiceContainer.get_instance()
+    cutoff = datetime.now(timezone.utc) - timedelta(days=RESOLVER_LOOKBACK_DAYS)
     try:
         with Session(active_container.engine) as session:
             rows = session.execute(
                 select(ResolvedPrediction).where(
-                    ResolvedPrediction.outcome.in_(("WON", "LOST"))
+                    ResolvedPrediction.outcome.in_(("WON", "LOST")),
+                    ResolvedPrediction.kickoff_date.isnot(None),
+                    ResolvedPrediction.kickoff_date >= cutoff,
                 )
             ).scalars().all()
     except Exception as exc:
@@ -112,8 +119,8 @@ def load_resolved_predictions_from_db(
     return frame
 
 
-def compute_bucket_ece_by_context(resolved_predictions: pd.DataFrame) -> Dict[str, float]:
-    """Aggregate ECE into league/market bandit buckets."""
+def compute_bucket_ece_by_context(resolved_predictions: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+    """Aggregate ECE and signed mean calibration error into league/market bandit buckets."""
     required = {"league", "market", "probability", "actual_outcome"}
     if resolved_predictions.empty or not required.issubset(set(resolved_predictions.columns)):
         return {}
@@ -128,12 +135,17 @@ def compute_bucket_ece_by_context(resolved_predictions: pd.DataFrame) -> Dict[st
     if valid.empty:
         return {}
 
-    ece_by_context: Dict[str, float] = {}
+    ece_by_context: Dict[str, Dict[str, Any]] = {}
     for (league, market_bucket), group in valid.groupby(["league", "market_bucket"]):
         probs = group["probability"].to_numpy(dtype=float)
         actuals = group["actual_outcome"].to_numpy(dtype=float)
         context = _build_context_key(str(league), str(market_bucket))
-        ece_by_context[context] = float(calculate_ece(actuals, probs, n_bins=ECE_BINS))
+        row_count = int(len(group))
+        ece_by_context[context] = {
+            "ece": float(calculate_ece(actuals, probs, n_bins=ECE_BINS)),
+            "mean_error": float(probs.mean() - actuals.mean()),
+            "row_count": row_count,
+        }
     return ece_by_context
 
 
@@ -173,24 +185,36 @@ class ContextualBandit:
             "lambda_scale_away": float(weights.get("lambda_scale_away", 1.0)),
         }
 
-    def update(self, context_key: str, ece: float) -> None:
+    def update(self, context_key: str, ece: float, mean_error: float = 0.0) -> None:
         bucket = self.state.setdefault(context_key, _default_bucket_state())
         reward = -float(ece)
         prev_reward_ema = float(bucket.get("reward_ema", 0.0))
         prev_ece_ema = float(bucket.get("ece_ema", 0.0))
+        prev_signed_ema = float(bucket.get("signed_ema", 0.0))
 
         reward_ema = ((1.0 - self.alpha) * prev_reward_ema) + (self.alpha * reward)
         ece_ema = ((1.0 - self.alpha) * prev_ece_ema) + (self.alpha * float(ece))
+        signed_ema = ((1.0 - self.alpha) * prev_signed_ema) + (self.alpha * float(mean_error))
 
         bucket["count"] = int(bucket.get("count", 0)) + 1
         bucket["last_ece"] = float(ece)
         bucket["last_reward"] = reward
         bucket["reward_ema"] = reward_ema
         bucket["ece_ema"] = ece_ema
+        bucket["signed_ema"] = signed_ema
+
+        # tempo_sigma_scale: pull toward 1.0 when ECE is high (reduce stochasticity)
+        tempo_scale = 1.0 - (ece_ema * 0.3)
+
+        # lambda scales: push directionally against signed calibration error
+        # overconfident (mean_error > 0) -> suppress lambdas
+        # underconfident (mean_error < 0) -> boost lambdas
+        lambda_adj = -signed_ema * 0.5
+
         bucket["weights"] = {
-            "tempo_sigma_scale": _clip_scale(1.0 + reward_ema),
-            "lambda_scale_home": _clip_scale(1.0 + (reward_ema / 2.0)),
-            "lambda_scale_away": _clip_scale(1.0 + (reward_ema / 2.0)),
+            "tempo_sigma_scale": _clip_scale(tempo_scale),
+            "lambda_scale_home": _clip_scale(1.0 + lambda_adj),
+            "lambda_scale_away": _clip_scale(1.0 + lambda_adj),
         }
 
     def save(self, path: Path) -> None:
@@ -238,7 +262,7 @@ class ContextualBandit:
                 }
             self.state[str(context_key)] = normalized
 
-    def refresh_from_resolved_predictions(self) -> Dict[str, float]:
+    def refresh_from_resolved_predictions(self) -> Dict[str, Dict[str, Any]]:
         """Load history, compute ECE per bucket, and update state."""
         resolved = load_resolved_predictions_from_db(ServiceContainer.get_instance())
         ece_by_context = compute_bucket_ece_by_context(resolved)
@@ -246,11 +270,21 @@ class ContextualBandit:
             logger.info("RL bandit cold start found no resolved prediction buckets to train.")
             return {}
 
-        for context_key, ece in ece_by_context.items():
-            self.update(context_key, ece)
+        applied_updates: Dict[str, Dict[str, Any]] = {}
+        for context_key, metrics in ece_by_context.items():
+            row_count = int(metrics.get("row_count", 0))
+            if row_count < MIN_ECE_UPDATE_ROWS:
+                logger.warning("Skipping ECE update for %s: only %d rows", context_key, row_count)
+                continue
+            self.update(
+                context_key,
+                ece=metrics["ece"],
+                mean_error=metrics["mean_error"],
+            )
+            applied_updates[context_key] = metrics
 
         logger.info(
             "RL bandit refreshed %s context bucket(s) from resolved predictions.",
-            len(ece_by_context),
+            len(applied_updates),
         )
-        return ece_by_context
+        return applied_updates

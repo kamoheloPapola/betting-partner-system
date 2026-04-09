@@ -71,6 +71,82 @@ def test_goal_ensemble_logs_warning_on_divergence(monkeypatch, caplog):
     assert any("match-xyz" in rec.message for rec in caplog.records)
 
 
+def test_calc_goals_applies_bl1_specific_btts_cap(monkeypatch):
+    monkeypatch.setattr(
+        prediction_module,
+        "apply_lambda_aware_adjustment",
+        lambda prob, market, home_lambda, away_lambda, ctx="", strength=0.25: 0.64 if market == "btts_yes" else prob,
+    )
+    monkeypatch.setattr(
+        prediction_module,
+        "apply_calibration_cap",
+        lambda prob, market, ctx="": prob,
+    )
+
+    bl1_result = _calc_goals(_match(), _suite(), "Home vs Away", use_simulator=False, league="BL1")
+    pl_result = _calc_goals(_match(), _suite(), "Home vs Away", use_simulator=False, league="PL")
+
+    assert bl1_result["btts"] == pytest.approx(0.58, abs=1e-8)
+    assert pl_result["btts"] == pytest.approx(0.64, abs=1e-8)
+
+
+def test_btts_no_is_complement_of_btts_yes(monkeypatch):
+    def fake_cap(prob: float, market: str, ctx: str = "") -> float:
+        if market == "btts_no":
+            raise AssertionError("btts_no should be derived from btts_yes, not capped independently")
+        if market == "btts_yes":
+            return 0.63
+        return prob
+
+    monkeypatch.setattr(prediction_module, "apply_calibration_cap", fake_cap)
+
+    result = _calc_goals(_match(), _suite(), "Home vs Away", use_simulator=False, league="PL")
+
+    assert result["btts"] == pytest.approx(0.63, abs=1e-8)
+    assert result["btts_no"] == pytest.approx(0.37, abs=1e-8)
+    assert result["btts"] + result["btts_no"] == pytest.approx(1.0, abs=1e-9)
+
+
+def test_o15_reanchored_when_u25_cap_fires(monkeypatch, caplog):
+    class _FakePoissonEngine:
+        def calculate_probabilities(self, home_lambda: float, away_lambda: float) -> dict:
+            return {
+                "home_win": 0.4,
+                "draw": 0.3,
+                "away_win": 0.3,
+                "over_2_5": 0.2,
+                "under_2_5": 0.8,
+                "over_1_5": 0.3,
+                "under_3_5": 0.9,
+                "btts_yes": 0.25,
+                "btts_no": 0.75,
+                "home_under_1_5": 0.8,
+                "away_under_1_5": 0.8,
+            }
+
+    def fake_adjust(prob: float, market: str, home_lambda: float, away_lambda: float, ctx: str = "", strength: float = 0.25) -> float:
+        if market == "u25":
+            return 0.70
+        return prob
+
+    def fake_cap(prob: float, market: str, ctx: str = "") -> float:
+        if market == "u25":
+            return 0.66
+        return prob
+
+    monkeypatch.setattr(prediction_module, "PoissonEngine", _FakePoissonEngine)
+    monkeypatch.setattr(prediction_module, "apply_lambda_aware_adjustment", fake_adjust)
+    monkeypatch.setattr(prediction_module, "apply_calibration_cap", fake_cap)
+
+    with caplog.at_level(logging.WARNING):
+        result = _calc_goals(_match(), _suite(), "Home vs Away", use_simulator=False, league="PL")
+
+    assert result["o25"] == pytest.approx(0.34, abs=1e-8)
+    assert result["over_1_5"] == pytest.approx(0.34, abs=1e-8)
+    assert result["over_1_5"] >= result["o25"]
+    assert "o15 re-anchored post u25-cap" in caplog.text
+
+
 def test_cards_divergence_sets_global_ensemble_flag(monkeypatch):
     monkeypatch.setattr(prediction_module, "GOALS_ENSEMBLE_LGBM_WEIGHT", 0.6)
     monkeypatch.setattr(prediction_module, "GOALS_ENSEMBLE_XGB_WEIGHT", 0.4)
@@ -135,3 +211,27 @@ def test_corners_divergence_sets_global_ensemble_flag(monkeypatch):
     probs, _ = _calculate_probabilities(match, suite, "PL")
     assert probs["ensemble_divergence"] is True
     assert probs["divergence_pct"] == pytest.approx(50.0, abs=1e-8)
+
+
+def test_corners_h2h_lift_is_capped():
+    """H2H corners blend cannot push mu_total up by more than 2.0."""
+    mu_model = 10.0
+    h2h_avg = 18.0  # extreme H2H history
+    h2h_weight = 0.4  # max weight (5+ matches)
+
+    blended = (1 - h2h_weight) * mu_model + h2h_weight * h2h_avg
+    capped = min(blended, mu_model + 2.0)
+
+    assert capped == 12.0
+    assert blended > capped
+
+
+def test_corners_h2h_negative_lift_uncapped():
+    """Negative H2H lift (low-scoring history) is never restricted."""
+    mu_model = 10.0
+    h2h_avg = 4.0  # very low H2H history
+    h2h_weight = 0.4
+
+    blended = (1 - h2h_weight) * mu_model + h2h_weight * h2h_avg
+
+    assert blended < mu_model

@@ -70,7 +70,7 @@ class Thresholds:
     BASE_U25: Final[float] = 0.50
     BASE_BTTS: Final[float] = 0.52
     BASE_DC: Final[float] = 0.66
-    BASE_TEAM_U15: Final[float] = 0.75
+    BASE_TEAM_U15: Final[float] = 0.60  # Corrected from 0.75 - prior value exceeded cap (0.80), making 8% edge unreachable
     BASE_CORN_U11: Final[float] = 0.65
     BASE_CARD_O25: Final[float] = 0.55
     BASE_CARD_U55: Final[float] = 0.78

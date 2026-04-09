@@ -28,6 +28,8 @@ __all__ = [
     "MAX_H2H_LIFT_DEFAULT",
     "MAX_H2H_LIFT_HIGH_SAMPLE",
     "H2H_HIGH_SAMPLE_THRESHOLD",
+    # Resolver Lookback Policy
+    "RESOLVER_LOOKBACK_DAYS",
 ]
 
 # =============================================================================
@@ -61,4 +63,12 @@ MATCH_SEPARATOR: Final[str] = " vs "          # Home vs Away display separator
 MAX_H2H_LIFT_DEFAULT: Final[float] = 0.05      # 5pp default cap (conservative)
 MAX_H2H_LIFT_HIGH_SAMPLE: Final[float] = 0.10  # 10pp cap for high-sample H2H
 H2H_HIGH_SAMPLE_THRESHOLD: Final[int] = 8      # Matches required for high sample
+
+# =============================================================================
+# RESOLVER LOOKBACK POLICY
+# =============================================================================
+# Extended from 90 to 120 days after SYSTEM STOP incident (rolling_90d drift).
+# Controls how far back the bandit loads resolved predictions for ECE training.
+# Increase if leagues have long fixture gaps (e.g. international breaks).
+RESOLVER_LOOKBACK_DAYS: Final[int] = 120
 

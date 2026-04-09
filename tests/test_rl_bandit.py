@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import copy
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 import src.cli.commands.prediction as prediction_module
 import src.ml.registry as registry_module
 import src.monitoring.drift_monitor as drift_monitor_module
 import src.simulation.rl_bandit as rl_bandit_module
+from src.core.constants import RESOLVER_LOOKBACK_DAYS
+from src.db.models import Base, ResolvedPrediction
 from src.simulation.match_simulator import MatchSimulator
-from src.simulation.rl_bandit import ContextualBandit
+from src.simulation.rl_bandit import ContextualBandit, load_resolved_predictions_from_db
 
 
 class _DummyProgress:
@@ -79,27 +84,155 @@ def test_cold_start_initializes_weights_to_one(monkeypatch, tmp_path):
 
 
 def test_update_moves_weights_in_correct_direction(tmp_path):
-    low_ece_bandit = ContextualBandit(
-        state_path=tmp_path / "low.json",
+    bandit = ContextualBandit(
+        state_path=tmp_path / "case1.json",
         auto_load=False,
         auto_bootstrap=False,
     )
-    high_ece_bandit = ContextualBandit(
-        state_path=tmp_path / "high.json",
+    context = bandit.context_key("PL", "1x2")
+
+    # Case 1: high ECE, no mean_error -> only tempo_sigma_scale moves, lambdas stay at 1.0
+    bandit.update(context, ece=0.4, mean_error=0.0)
+    weights = bandit.get_weights(context)
+    assert weights["tempo_sigma_scale"] < 1.0
+    assert weights["lambda_scale_home"] == pytest.approx(1.0, abs=1e-6)
+    assert weights["lambda_scale_away"] == pytest.approx(1.0, abs=1e-6)
+
+    # Case 2: overconfident (mean_error > 0) -> lambda scales suppressed below 1.0
+    bandit2 = ContextualBandit(
+        state_path=tmp_path / "case2.json",
         auto_load=False,
         auto_bootstrap=False,
     )
-    context = low_ece_bandit.context_key("PL", "1x2")
+    bandit2.update(context, ece=0.1, mean_error=0.3)
+    weights2 = bandit2.get_weights(context)
+    assert weights2["lambda_scale_home"] < 1.0
+    assert weights2["lambda_scale_away"] < 1.0
 
-    low_ece_bandit.update(context, ece=0.05)
-    high_ece_bandit.update(context, ece=0.40)
+    # Case 3: underconfident (mean_error < 0) -> lambda scales boosted above 1.0
+    bandit3 = ContextualBandit(
+        state_path=tmp_path / "case3.json",
+        auto_load=False,
+        auto_bootstrap=False,
+    )
+    bandit3.update(context, ece=0.1, mean_error=-0.3)
+    weights3 = bandit3.get_weights(context)
+    assert weights3["lambda_scale_home"] > 1.0
+    assert weights3["lambda_scale_away"] > 1.0
 
-    low_weights = low_ece_bandit.get_weights(context)
-    high_weights = high_ece_bandit.get_weights(context)
 
-    assert low_weights["tempo_sigma_scale"] > high_weights["tempo_sigma_scale"]
-    assert low_weights["lambda_scale_home"] > high_weights["lambda_scale_home"]
-    assert low_weights["lambda_scale_away"] > high_weights["lambda_scale_away"]
+def test_refresh_skips_thin_ece_buckets(monkeypatch, tmp_path, caplog):
+    resolved = pd.DataFrame(
+        [
+            {
+                "league": "PL",
+                "market": "btts_yes",
+                "probability": 0.6,
+                "actual_outcome": idx % 2,
+                "resolved_at": None,
+            }
+            for idx in range(29)
+        ]
+        + [
+            {
+                "league": "BL1",
+                "market": "btts_yes",
+                "probability": 0.6,
+                "actual_outcome": idx % 2,
+                "resolved_at": None,
+            }
+            for idx in range(30)
+        ]
+    )
+    monkeypatch.setattr(rl_bandit_module, "calculate_ece", lambda actuals, probs, n_bins: 0.2)
+    monkeypatch.setattr(
+        rl_bandit_module,
+        "load_resolved_predictions_from_db",
+        lambda container=None: resolved,
+    )
+    monkeypatch.setattr(
+        rl_bandit_module.ServiceContainer,
+        "get_instance",
+        classmethod(lambda cls: object()),
+    )
+
+    bandit = ContextualBandit(
+        state_path=tmp_path / "bandit.json",
+        auto_load=False,
+        auto_bootstrap=False,
+    )
+
+    with caplog.at_level("WARNING"):
+        updated = bandit.refresh_from_resolved_predictions()
+
+    skipped_context = bandit.context_key("PL", "btts_yes")
+    updated_context = bandit.context_key("BL1", "btts_yes")
+
+    assert f"Skipping ECE update for {skipped_context}: only 29 rows" in caplog.text
+    assert skipped_context not in bandit.state
+    assert updated_context in bandit.state
+    assert set(updated) == {updated_context}
+    assert updated[updated_context]["row_count"] == 30
+    assert bandit.state[updated_context]["count"] == 1
+
+
+def test_load_resolved_predictions_respects_lookback(tmp_path):
+    db_path = tmp_path / "resolved_predictions.db"
+    engine = create_engine(f"sqlite:///{db_path.as_posix()}")
+    Base.metadata.create_all(engine)
+
+    old_kickoff = datetime.now(timezone.utc) - timedelta(days=RESOLVER_LOOKBACK_DAYS + 10)
+    recent_kickoff = datetime.now(timezone.utc) - timedelta(days=5)
+    resolved_at = datetime.now(timezone.utc)
+
+    try:
+        with Session(engine) as session:
+            session.add_all(
+                [
+                    ResolvedPrediction(
+                        prediction_id="old_pred",
+                        match_hash="hash_old",
+                        league="PL",
+                        kickoff_date=old_kickoff,
+                        market="btts_yes",
+                        probability=0.61,
+                        outcome="WON",
+                        resolved_at=resolved_at,
+                    ),
+                    ResolvedPrediction(
+                        prediction_id="recent_pred",
+                        match_hash="hash_recent",
+                        league="PL",
+                        kickoff_date=recent_kickoff,
+                        market="btts_yes",
+                        probability=0.57,
+                        outcome="LOST",
+                        resolved_at=resolved_at,
+                    ),
+                    ResolvedPrediction(
+                        prediction_id="null_kickoff_pred",
+                        match_hash="hash_null",
+                        league="PL",
+                        kickoff_date=None,
+                        market="btts_yes",
+                        probability=0.52,
+                        outcome="WON",
+                        resolved_at=resolved_at,
+                    ),
+                ]
+            )
+            session.commit()
+
+        container = type("FakeContainer", (), {"engine": engine})()
+        result = load_resolved_predictions_from_db(container)
+
+        assert len(result) == 1
+        assert result.iloc[0]["league"] == "PL"
+        assert result.iloc[0]["market"] == "btts_yes"
+        assert result.iloc[0]["probability"] == pytest.approx(0.57)
+        assert result.iloc[0]["actual_outcome"] == 0
+    finally:
+        engine.dispose()
 
 
 def test_simulate_with_rl_weights_changes_output():

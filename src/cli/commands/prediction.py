@@ -469,7 +469,7 @@ def _divergence_pct(a: float, b: float) -> float:
     return abs(a - b) / denom
 
 
-def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bool = True, league: str | None = None) -> Dict[str, Any]:
+def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bool = True, league: str | None = None, rl_weights: Dict[str, float] | None = None) -> Dict[str, Any]:
     lgbm_feats = cast(List[str], suite['meta_goals']['features'])
     lh_lgbm = _predict_scalar(suite['mh_goals'], match, lgbm_feats, f"{ctx}:GoalsH:LGBM")
     la_lgbm = _predict_scalar(suite['ma_goals'], match, lgbm_feats, f"{ctx}:GoalsA:LGBM")
@@ -529,7 +529,7 @@ def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bo
 
     if use_simulator:
         sim = MatchSimulator(n_simulations=DEFAULT_N_SIMULATIONS, seed=42, league=league)
-        sim_res = sim.simulate(model_home_lambda, model_away_lambda)
+        sim_res = sim.simulate(model_home_lambda, model_away_lambda, rl_weights=rl_weights)
 
         res = {
             'home_win': sim_res.home_win_prob,
@@ -612,13 +612,27 @@ def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bo
     u25_pre_cap = apply_lambda_aware_adjustment(1.0 - o25, 'u25', model_home_lambda, model_away_lambda, ctx)
     u35_pre_cap = apply_lambda_aware_adjustment(1.0 - o35, 'u35', model_home_lambda, model_away_lambda, ctx)
     btts_pre_cap = apply_lambda_aware_adjustment(btts, 'btts_yes', model_home_lambda, model_away_lambda, ctx)
-    btts_no_pre_cap = apply_lambda_aware_adjustment(1.0 - btts, 'btts_no', model_home_lambda, model_away_lambda, ctx)
+    # Layer 4.1b - League-specific BTTS cap (BL1 lambda inflation guard)
+    # BL1 models learn historically accurate high-scoring patterns but
+    # overestimate BTTS. Cap at 0.58 until sample grows beyond 50 resolved rows.
+    # Reviewed: 2026-04-09. Revisit when BL1 btts_yes resolved N >= 50.
+    BTTS_LEAGUE_CAPS = {"BL1": 0.58}
+    if league and league in BTTS_LEAGUE_CAPS:
+        btts_pre_cap = min(btts_pre_cap, BTTS_LEAGUE_CAPS[league])
 
     # === APPLY CALIBRATION CAPS (Layer 4.1 OOS guardrails) ===
     u25_capped = apply_calibration_cap(u25_pre_cap, 'u25', ctx)
+    o25_final = 1.0 - u25_capped
+    o15_final = max(o15, o25_final)
+    if o15_final != o15:
+        logger.warning(
+            f"{ctx}: o15 re-anchored post u25-cap "
+            f"(o15={o15:.3f} < o25_final={o25_final:.3f})"
+        )
     u35_capped = apply_calibration_cap(u35_pre_cap, 'u35', ctx)
     btts_capped = apply_calibration_cap(btts_pre_cap, 'btts_yes', ctx)
-    btts_no_capped = apply_calibration_cap(btts_no_pre_cap, 'btts_no', ctx)
+    # btts_no is derived from btts_yes - btts_yes is the calibrated market
+    btts_no_capped = 1.0 - btts_capped
     
     # New: Team Goal Caps
     h_u15_capped = apply_calibration_cap(res['home_under_1_5'], 'home_under_1_5', ctx)
@@ -626,11 +640,11 @@ def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bo
     
     return {
         'home': res['home_win'], 'draw': res['draw'], 'away': res['away_win'],
-        'u25': u25_capped, 'o25': 1.0 - u25_capped, 
+        'u25': u25_capped, 'o25': o25_final, 
         'u35': u35_capped,
         'btts': btts_capped,
         'btts_no': btts_no_capped,
-        'over_1_5': o15, 
+        'over_1_5': o15_final, 
         'home_under_1_5': h_u15_capped, 
         'away_under_1_5': a_u15_capped,
         'eh_plus_2': eh_prob,
@@ -747,12 +761,25 @@ def _calc_corners(
             mu_total_model = mu_h + mu_a
             mu_total_blended = (1 - h2h_weight) * mu_total_model + h2h_weight * h2h_avg_corners
             
+            # Cap upward H2H lift to 2.0 corners (consistent with goals/cards lift cap policy)
+            # Negative lift (H2H history lower than model) is always allowed.
+            MAX_H2H_CORNERS_LIFT = 2.0
+            cap_active = False
+            if mu_total_blended > mu_total_model:
+                capped_total = min(mu_total_blended, mu_total_model + MAX_H2H_CORNERS_LIFT)
+                cap_active = capped_total < mu_total_blended
+                mu_total_blended = capped_total
+            
             # Scale individual means proportionally
             scale = mu_total_blended / mu_total_model if mu_total_model > 0 else 1.0
             mu_h = mu_h * scale
             mu_a = mu_a * scale
             
-            logger.info(f"{ctx}: H2H corner adjustment - total {mu_total_model:.1f} -> {mu_total_blended:.1f} (h2h_avg={h2h_avg_corners:.1f}, h2h_count={h2h_match_count}, weight={h2h_weight:.2f})")
+            logger.info(
+                f"{ctx}: H2H corner adjustment - total {mu_total_model:.1f} -> {mu_total_blended:.1f} "
+                f"(h2h_avg={h2h_avg_corners:.1f}, h2h_count={h2h_match_count}, weight={h2h_weight:.2f}, "
+                f"cap={'active' if cap_active else 'inactive'})"
+            )
             
             attr['h2h_corner_adjustment'] = {
                 'h2h_match_count': h2h_match_count,
@@ -1215,7 +1242,7 @@ def _run_predict_loop(
                         is_intensity = _is_high_intensity(match, lg)
                         
                         # Calculation Logic with consolidated warnings
-                        p, attr = _calculate_probabilities_v2(match, suite, lg, is_intensity, warning_collector, use_simulator=use_simulator)
+                        p, attr = _calculate_probabilities_v2(match, suite, lg, is_intensity, warning_collector, use_simulator=use_simulator, rl_bandit=rl_bandit)
                         
                         # Inject drift state into nested attribution dicts only.
                         # Some attribution keys (e.g. ensemble_divergence) are scalars.
@@ -1356,31 +1383,39 @@ def _run_rl_shadow_simulation(
     active_result: Dict[str, Any],
     bandit: ContextualBandit,
 ) -> None:
-    """Run a logged-only shadow Monte Carlo pass with bandit weights."""
+    """Log the delta between bandit-weighted and baseline MC output for monitoring."""
     try:
         home_lambda = float(active_result["goal_model_home_lambda"])
         away_lambda = float(active_result["goal_model_away_lambda"])
         context = bandit.context_key(league, RL_SHADOW_MARKET)
         weights = bandit.get_weights(context)
-        shadow_result = MatchSimulator(
+
+        # Baseline - no RL weights
+        baseline = MatchSimulator(
+            n_simulations=DEFAULT_N_SIMULATIONS,
+            seed=42,
+        ).simulate(home_lambda, away_lambda)
+
+        # Bandit-weighted
+        weighted = MatchSimulator(
             n_simulations=DEFAULT_N_SIMULATIONS,
             seed=42,
         ).simulate(home_lambda, away_lambda, rl_weights=weights)
+
         logger.info(
-            "[RL-SHADOW] match_id=%s context=%s weights=%s home=%.4f draw=%.4f away=%.4f over_2_5=%.4f btts_yes=%.4f applied=%s",
+            "[RL-DIFF] match_id=%s context=%s weights=%s home_delta=%.4f draw_delta=%.4f away_delta=%.4f over_2_5_delta=%.4f btts_delta=%.4f",
             match.get("match_id"),
             context,
             weights,
-            shadow_result.home_win_prob,
-            shadow_result.draw_prob,
-            shadow_result.away_win_prob,
-            shadow_result.over_2_5,
-            shadow_result.btts_prob,
-            shadow_result.rl_weights_applied,
+            weighted.home_win_prob - baseline.home_win_prob,
+            weighted.draw_prob - baseline.draw_prob,
+            weighted.away_win_prob - baseline.away_win_prob,
+            weighted.over_2_5 - baseline.over_2_5,
+            weighted.btts_prob - baseline.btts_prob,
         )
     except Exception as exc:
         logger.debug(
-            "RL shadow simulation skipped for %s: %s",
+            "RL diff simulation skipped for %s: %s",
             match.get("match_id"),
             exc,
         )
@@ -1391,7 +1426,8 @@ def _calculate_probabilities_v2(
     league: str, 
     intensity_boost: bool,
     warning_collector: Dict[str, set],
-    use_simulator: bool = True
+    use_simulator: bool = True,
+    rl_bandit=None,
 ) -> Tuple[MarketProbabilities, Dict[str, Any]]:
     """Local probability calculation that passes the warning collector."""
     p = {}
@@ -1399,7 +1435,11 @@ def _calculate_probabilities_v2(
     ctx = f"{match.get('home_team')}{MATCH_SEPARATOR}{match.get('away_team')}"
     
     # 1. Goals (Mandatory)
-    p.update(_calc_goals(match, suite, ctx, use_simulator=use_simulator, league=league))
+    rl_weights = None
+    if rl_bandit is not None:
+        context = rl_bandit.context_key(league, RL_SHADOW_MARKET)
+        rl_weights = rl_bandit.get_weights(context)
+    p.update(_calc_goals(match, suite, ctx, use_simulator=use_simulator, league=league, rl_weights=rl_weights))
     
     # 2. Secondary Markets (Best Effort)
     res_corn, attr_corn = _calc_corners(match, suite, ctx, league, intensity_boost, warning_collector)
