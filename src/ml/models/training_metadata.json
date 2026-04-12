@@ -1,35 +1,10 @@
 {
-  "generated_at": "2026-04-06T16:16:31.937877",
+  "generated_at": "2026-04-12T09:01:27.470979",
   "tracked_leagues": [
-    "PL",
     "BL1",
-    "FL1",
-    "SA",
     "PD"
   ],
   "leagues": {
-    "PL": {
-      "league": "PL",
-      "training_seasons": {
-        "train_and_val": "<=2022",
-        "test": ">=2023"
-      },
-      "feature_count": 30,
-      "models_trained": [
-        "match_outcome",
-        "home_goals",
-        "home_goals_xgb",
-        "away_goals",
-        "away_goals_xgb",
-        "corners",
-        "corners_xgb",
-        "cards",
-        "cards_xgb"
-      ],
-      "dataset_rows": 2460,
-      "train_rows": 1520,
-      "test_rows": 940
-    },
     "BL1": {
       "league": "BL1",
       "training_seasons": {
@@ -43,6 +18,8 @@
         "home_goals_xgb",
         "away_goals",
         "away_goals_xgb",
+        "home_corners",
+        "away_corners",
         "corners",
         "corners_xgb",
         "cards",
@@ -51,50 +28,6 @@
       "dataset_rows": 2277,
       "train_rows": 1530,
       "test_rows": 747
-    },
-    "FL1": {
-      "league": "FL1",
-      "training_seasons": {
-        "train_and_val": "<=2022",
-        "test": ">=2023"
-      },
-      "feature_count": 30,
-      "models_trained": [
-        "match_outcome",
-        "home_goals",
-        "home_goals_xgb",
-        "away_goals",
-        "away_goals_xgb",
-        "corners",
-        "corners_xgb",
-        "cards",
-        "cards_xgb"
-      ],
-      "dataset_rows": 2555,
-      "train_rows": 1799,
-      "test_rows": 756
-    },
-    "SA": {
-      "league": "SA",
-      "training_seasons": {
-        "train_and_val": "<=2022",
-        "test": ">=2023"
-      },
-      "feature_count": 30,
-      "models_trained": [
-        "match_outcome",
-        "home_goals",
-        "home_goals_xgb",
-        "away_goals",
-        "away_goals_xgb",
-        "corners",
-        "corners_xgb",
-        "cards",
-        "cards_xgb"
-      ],
-      "dataset_rows": 2444,
-      "train_rows": 1520,
-      "test_rows": 924
     },
     "PD": {
       "league": "PD",
@@ -109,6 +42,8 @@
         "home_goals_xgb",
         "away_goals",
         "away_goals_xgb",
+        "home_corners",
+        "away_corners",
         "corners",
         "corners_xgb",
         "cards",

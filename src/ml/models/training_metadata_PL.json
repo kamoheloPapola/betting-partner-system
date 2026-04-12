@@ -11,6 +11,8 @@
     "home_goals_xgb",
     "away_goals",
     "away_goals_xgb",
+    "home_corners",
+    "away_corners",
     "corners",
     "corners_xgb",
     "cards",

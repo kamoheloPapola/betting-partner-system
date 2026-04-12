@@ -24,6 +24,16 @@
     "rmse": 1.0883,
     "calibration_score": 0.2202
   },
+  "home_corners": {
+    "mae": 2.3472,
+    "rmse": 3.057,
+    "calibration_score": 0.0148
+  },
+  "away_corners": {
+    "mae": 1.8771,
+    "rmse": 2.3803,
+    "calibration_score": 0.0329
+  },
   "corners": {
     "mae": 2.6024,
     "rmse": 3.3144,
