@@ -1380,8 +1380,8 @@ def _get_pipeline_version_hash() -> str:
         if pipeline_path.exists():
             content = pipeline_path.read_bytes()
             return hashlib.sha256(content).hexdigest()[:12]
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Could not compute pipeline version hash: %s", exc)
     return "unknown"
 
 
