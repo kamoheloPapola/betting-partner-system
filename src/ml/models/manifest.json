@@ -284,6 +284,10 @@
     "version": "1.0.0"
   },
   "away_goals_v1.0.0_PL": {
+    "filename": "away_goals_model_PL.pkl",
+    "status": "productive",
+    "type": "lgbm_regressor_poisson",
+    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -316,24 +320,20 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "filename": "away_goals_model_PL.pkl",
-    "league": "PL",
     "metrics": {
-      "calibration_score": 0.2106,
-      "mae": 0.9584,
-      "rmse": 1.2459
+      "mae": 0.966,
+      "rmse": 1.2565,
+      "calibration_score": 0.214
     },
-    "name": "away_goals",
-    "registered_at": "2026-04-11T22:18:19.905316",
-    "sklearn_version": "1.8.0",
-    "status": "productive",
-    "target": "away_goals",
+    "training_date": "2026-04-12T20:01:31.151580",
+    "league": "PL",
     "temporal_validated": true,
-    "test_size": 940,
     "train_size": 1520,
-    "training_date": "2026-04-11T22:18:19.905299",
-    "type": "lgbm_regressor_poisson",
-    "version": "1.0.0"
+    "test_size": 940,
+    "registered_at": "2026-04-12T20:01:31.151604",
+    "name": "away_goals",
+    "version": "1.0.0",
+    "sklearn_version": "1.8.0"
   },
   "away_goals_v1.0.0_SA": {
     "features": [
@@ -596,6 +596,10 @@
     "version": "1.0.0"
   },
   "away_goals_xgb_v1.0.0_PL": {
+    "filename": "away_goals_xgb_v1_PL.joblib",
+    "status": "productive",
+    "type": "xgb_regressor_count_poisson",
+    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -628,24 +632,20 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "filename": "away_goals_xgb_v1_PL.joblib",
-    "league": "PL",
     "metrics": {
-      "calibration_score": 0.2555,
-      "mae": 1.0135,
-      "rmse": 1.3367
+      "mae": 1.0229,
+      "rmse": 1.3504,
+      "calibration_score": 0.2637
     },
-    "name": "away_goals_xgb",
-    "registered_at": "2026-04-11T22:18:21.163024",
-    "sklearn_version": "1.8.0",
-    "status": "productive",
-    "target": "away_goals",
+    "training_date": "2026-04-12T20:01:56.709526",
+    "league": "PL",
     "temporal_validated": true,
-    "test_size": 940,
     "train_size": 1520,
-    "training_date": "2026-04-11T22:18:21.163004",
-    "type": "xgb_regressor_count_poisson",
-    "version": "1.0.0"
+    "test_size": 940,
+    "registered_at": "2026-04-12T20:01:56.709555",
+    "name": "away_goals_xgb",
+    "version": "1.0.0",
+    "sklearn_version": "1.8.0"
   },
   "away_goals_xgb_v1.0.0_SA": {
     "features": [
@@ -2156,6 +2156,10 @@
     "version": "1.0.0"
   },
   "home_goals_v1.0.0_PL": {
+    "filename": "home_goals_model_PL.pkl",
+    "status": "productive",
+    "type": "lgbm_regressor_poisson",
+    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2188,24 +2192,20 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "filename": "home_goals_model_PL.pkl",
-    "league": "PL",
     "metrics": {
-      "calibration_score": 0.1882,
-      "mae": 1.0949,
-      "rmse": 1.3857
+      "mae": 1.1023,
+      "rmse": 1.3955,
+      "calibration_score": 0.1914
     },
-    "name": "home_goals",
-    "registered_at": "2026-04-11T22:18:17.853258",
-    "sklearn_version": "1.8.0",
-    "status": "productive",
-    "target": "home_goals",
+    "training_date": "2026-04-12T20:01:19.930481",
+    "league": "PL",
     "temporal_validated": true,
-    "test_size": 940,
     "train_size": 1520,
-    "training_date": "2026-04-11T22:18:17.853217",
-    "type": "lgbm_regressor_poisson",
-    "version": "1.0.0"
+    "test_size": 940,
+    "registered_at": "2026-04-12T20:01:19.930511",
+    "name": "home_goals",
+    "version": "1.0.0",
+    "sklearn_version": "1.8.0"
   },
   "home_goals_v1.0.0_SA": {
     "features": [
@@ -2468,6 +2468,10 @@
     "version": "1.0.0"
   },
   "home_goals_xgb_v1.0.0_PL": {
+    "filename": "home_goals_xgb_v1_PL.joblib",
+    "status": "productive",
+    "type": "xgb_regressor_count_poisson",
+    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2500,24 +2504,20 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "filename": "home_goals_xgb_v1_PL.joblib",
-    "league": "PL",
     "metrics": {
-      "calibration_score": 0.2229,
-      "mae": 1.1327,
-      "rmse": 1.4601
+      "mae": 1.1439,
+      "rmse": 1.475,
+      "calibration_score": 0.2298
     },
-    "name": "home_goals_xgb",
-    "registered_at": "2026-04-11T22:18:18.805232",
-    "sklearn_version": "1.8.0",
-    "status": "productive",
-    "target": "home_goals",
+    "training_date": "2026-04-12T20:01:25.233104",
+    "league": "PL",
     "temporal_validated": true,
-    "test_size": 940,
     "train_size": 1520,
-    "training_date": "2026-04-11T22:18:18.805203",
-    "type": "xgb_regressor_count_poisson",
-    "version": "1.0.0"
+    "test_size": 940,
+    "registered_at": "2026-04-12T20:01:25.233120",
+    "name": "home_goals_xgb",
+    "version": "1.0.0",
+    "sklearn_version": "1.8.0"
   },
   "home_goals_xgb_v1.0.0_SA": {
     "features": [
@@ -3050,6 +3050,10 @@
     "version": "1.0.0"
   },
   "match_outcome_v1.0.0_PL": {
+    "filename": "match_outcome_model_PL.pkl",
+    "status": "productive",
+    "type": "lgbm_classifier",
+    "target": "outcome",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3082,24 +3086,20 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "filename": "match_outcome_model_PL.pkl",
-    "league": "PL",
     "metrics": {
       "accuracy": 0.5181,
-      "brier_score": 0.6033,
-      "log_loss": 1.0102
+      "log_loss": 1.0102,
+      "brier_score": 0.6033
     },
-    "name": "match_outcome",
-    "registered_at": "2026-04-11T22:18:16.774000",
-    "sklearn_version": "1.8.0",
-    "status": "productive",
-    "target": "outcome",
+    "training_date": "2026-04-12T20:01:12.559359",
+    "league": "PL",
     "temporal_validated": true,
-    "test_size": 940,
     "train_size": 1520,
-    "training_date": "2026-04-11T22:18:16.773978",
-    "type": "lgbm_classifier",
-    "version": "1.0.0"
+    "test_size": 940,
+    "registered_at": "2026-04-12T20:01:12.559386",
+    "name": "match_outcome",
+    "version": "1.0.0",
+    "sklearn_version": "1.8.0"
   },
   "match_outcome_v1.0.0_SA": {
     "features": [
