@@ -12,8 +12,6 @@ services:
         sync: false
       - key: FOOTBALL_DATA_API_KEY
         sync: false
-      - key: SKIP_MODEL_LOCK_CHECK
-        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: MODELS_DIR
@@ -35,6 +33,4 @@ services:
       - key: MODELS_DIR
         value: "/app/models"
       - key: RENDER
-        value: "true"
-      - key: SKIP_MODEL_LOCK_CHECK
         value: "true"

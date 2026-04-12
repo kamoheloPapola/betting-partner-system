@@ -752,7 +752,7 @@ def init_db() -> None:
                 conn.exec_driver_sql(statement)
 
         console.print(
-            f"[green]Initialized database schema using {engine.dialect.name} at {engine.url}[/green]"
+            f"[green]Initialized database schema using {engine.dialect.name}[/green]"
         )
     except Exception as exc:
         logger.error("Database initialization failed", exc_info=True)
