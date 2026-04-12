@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -466,39 +467,39 @@ _enforce_locked_state()
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    import asyncio
+    import os
+
+    if os.getenv("RENDER"):
+
+        async def _warm() -> None:
+            await asyncio.sleep(10)
+            leagues = ["PL", "BL1", "FL1", "SA", "PD"]
+            for league in leagues:
+                try:
+                    key = prediction_cache_key(league)
+                    if prediction_cache.get(key) is None:
+                        predictor = Predictor()
+                        data = predictor.predict_upcoming(league=league)
+                        prediction_cache.set(key, data)
+                        logger.info("[startup] Cache warmed: %s (%d predictions)", league, len(data))
+                except Exception as exc:
+                    logger.warning("[startup] Cache warm failed for %s: %s", league, exc)
+            logger.info("[startup] Cache warm-up complete.")
+
+        asyncio.create_task(_warm())
+    yield
+
+
 app = FastAPI(
     title="Betting Partner API",
     version="2.1.0",
     description="Inference-only API for betting predictions",
+    lifespan=_lifespan,
 )
-
-
-@app.on_event("startup")
-async def warm_cache_on_boot() -> None:
-    """Background task: pre-warm prediction cache after server boots.
-    Only runs on Render (RENDER env var set). Skipped in local dev."""
-    import asyncio
-    import os
-
-    if not os.getenv("RENDER"):
-        return
-
-    async def _warm() -> None:
-        await asyncio.sleep(10)
-        leagues = ["PL", "BL1", "FL1", "SA", "PD"]
-        for league in leagues:
-            try:
-                key = prediction_cache_key(league)
-                if prediction_cache.get(key) is None:
-                    predictor = Predictor()
-                    data = predictor.predict_upcoming(league=league)
-                    prediction_cache.set(key, data)
-                    print(f"[startup] Cache warmed: {league} ({len(data)} predictions)")
-            except Exception as exc:
-                print(f"[startup] Cache warm failed for {league}: {exc}")
-        print("[startup] Cache warm-up complete.")
-
-    asyncio.create_task(_warm())
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
