@@ -5,53 +5,53 @@
     "brier_score": 0.6163
   },
   "home_goals": {
-    "mae": 1.0991,
-    "rmse": 1.3646,
-    "calibration_score": 0.1722
+    "mae": 1.1058,
+    "rmse": 1.383,
+    "calibration_score": 0.1767
   },
   "home_goals_xgb": {
-    "mae": 1.0942,
-    "rmse": 1.3648,
-    "calibration_score": 0.1732
+    "mae": 1.1041,
+    "rmse": 1.3936,
+    "calibration_score": 0.1803
   },
   "away_goals": {
-    "mae": 0.9684,
-    "rmse": 1.2172,
-    "calibration_score": 0.1851
+    "mae": 0.9797,
+    "rmse": 1.2402,
+    "calibration_score": 0.1893
   },
   "away_goals_xgb": {
-    "mae": 0.9657,
-    "rmse": 1.2271,
-    "calibration_score": 0.1879
+    "mae": 0.9828,
+    "rmse": 1.2625,
+    "calibration_score": 0.1999
   },
   "home_corners": {
-    "mae": 2.2452,
-    "rmse": 2.8983,
-    "calibration_score": 0.0129
+    "mae": 2.2674,
+    "rmse": 2.944,
+    "calibration_score": 0.0128
   },
   "away_corners": {
-    "mae": 1.9709,
-    "rmse": 2.519,
-    "calibration_score": 0.0354
+    "mae": 2.0118,
+    "rmse": 2.5772,
+    "calibration_score": 0.0356
   },
   "corners": {
-    "mae": 2.7547,
-    "rmse": 3.4032,
+    "mae": 2.7873,
+    "rmse": 3.438,
     "calibration_score": 0.0
   },
   "corners_xgb": {
-    "mae": 2.8264,
-    "rmse": 3.5036,
+    "mae": 2.8811,
+    "rmse": 3.5841,
     "calibration_score": 0.0
   },
   "cards": {
-    "mae": 1.839,
-    "rmse": 2.3386,
-    "calibration_score": 0.0291
+    "mae": 1.8696,
+    "rmse": 2.3792,
+    "calibration_score": 0.0292
   },
   "cards_xgb": {
-    "mae": 1.9283,
-    "rmse": 2.488,
-    "calibration_score": 0.0306
+    "mae": 1.9793,
+    "rmse": 2.5727,
+    "calibration_score": 0.0324
   }
 }
