@@ -1,4 +1,4 @@
-﻿"""
+"""
 Prediction CLI Commands.
 
 Commands for generating predictions, displaying forecasts, and running the
@@ -175,11 +175,11 @@ def _load_prediction_models(league_code: str) -> ModelSuite:
         "mh_goals_xgb": m_h_xgb if m_h_xgb is not None else m_h_lgbm,
         "ma_goals_xgb": m_a_xgb if m_a_xgb is not None else m_a_lgbm,
         "meta_goals_xgb": meta_xgb if meta_xgb.get("features") else meta_lgbm,
-        "mh_corn": _best_effort_load_model(reg, ["nb_home_corners_base", "poisson_home_corners_base"], league_code),
-        "ma_corn": _best_effort_load_model(reg, ["nb_away_corners_base", "poisson_away_corners_base"], league_code),
+        "mh_corn": _best_effort_load_model(reg, ["mh_corn"], league_code),
+        "ma_corn": _best_effort_load_model(reg, ["ma_corn"], league_code),
         "m_cards": _best_effort_load_model(reg, ["poisson_total_cards_base"], league_code),
-        "m_corners_lgbm": _best_effort_load_model(reg, ["corners"], league_code),
-        "m_corners_xgb": _best_effort_load_model(reg, ["corners_xgb"], league_code),
+        "m_corners_lgbm": _best_effort_load_model(reg, ["m_corners_lgbm", "corners"], league_code),
+        "m_corners_xgb": _best_effort_load_model(reg, ["m_corners_xgb", "corners_xgb"], league_code),
         "m_cards_lgbm": _best_effort_load_model(reg, ["cards"], league_code),
         "m_cards_xgb": _best_effort_load_model(reg, ["cards_xgb"], league_code),
     }
@@ -280,40 +280,6 @@ def _translate_features(row: pd.Series, feats: List[str], ctx: str) -> pd.Series
             else:
                 raise DataValidationError(f"Missing mandatory feature '{f}' for {ctx}")
     return pd.Series(out)
-
-def _calculate_probabilities(match: pd.Series, suite: ModelSuite, league: str, intensity_boost: bool = False) -> Tuple[MarketProbabilities, Dict[str, Any]]:
-    """Orchestrates market probability calculation with strict contracts."""
-    p = {}
-    attr = {}
-    ctx = f"{match.get('home_team')}{MATCH_SEPARATOR}{match.get('away_team')}"
-    
-    # 1. Goals (Mandatory)
-    p.update(_calc_goals(match, suite, ctx, league=league))
-    
-    # 2. Secondary Markets (Best Effort)
-    res_corn, attr_corn = _calc_corners(match, suite, ctx, league, intensity_boost)
-    res_card, attr_card = _calc_cards(match, suite, ctx, league, intensity_boost)
-    
-    p.update(res_corn)
-    p.update(res_card)
-    p.update(_calc_dc(p, ctx))
-
-    divergence_candidates = [
-        float(p.get("divergence_pct", 0.0) or 0.0),
-        float(attr_corn.get("divergence_pct", 0.0) or 0.0),
-        float(attr_card.get("divergence_pct", 0.0) or 0.0),
-    ]
-    p["ensemble_divergence"] = bool(
-        p.get("ensemble_divergence")
-        or attr_corn.get("ensemble_divergence")
-        or attr_card.get("ensemble_divergence")
-    )
-    p["divergence_pct"] = max(divergence_candidates)
-    
-    attr.update(attr_corn)
-    attr.update(attr_card)
-    
-    return _validate_market_probs(p), attr
 
 # === CONFIDENCE SEMANTICS (Downgraded based on OOS calibration) ===
 CONFIDENCE_STRONG = 0.75   # 75%+ = strong
@@ -469,7 +435,7 @@ def _divergence_pct(a: float, b: float) -> float:
     return abs(a - b) / denom
 
 
-def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bool = True, league: str | None = None, rl_weights: Dict[str, float] | None = None) -> Dict[str, Any]:
+def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, simulator: "MatchSimulator", league: str | None = None, rl_weights: Dict[str, float] | None = None) -> Dict[str, Any]:
     lgbm_feats = cast(List[str], suite['meta_goals']['features'])
     lh_lgbm = _predict_scalar(suite['mh_goals'], match, lgbm_feats, f"{ctx}:GoalsH:LGBM")
     la_lgbm = _predict_scalar(suite['ma_goals'], match, lgbm_feats, f"{ctx}:GoalsA:LGBM")
@@ -527,35 +493,31 @@ def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, use_simulator: bo
     sim_n: Optional[int] = None
     sim_top_scorelines: List[Dict[str, float | str]] = []
 
-    if use_simulator:
-        sim = MatchSimulator(n_simulations=DEFAULT_N_SIMULATIONS, seed=42, league=league)
-        sim_res = sim.simulate(model_home_lambda, model_away_lambda, rl_weights=rl_weights)
+    sim_res = simulator.simulate(model_home_lambda, model_away_lambda, rl_weights=rl_weights)
 
-        res = {
-            'home_win': sim_res.home_win_prob,
-            'draw': sim_res.draw_prob,
-            'away_win': sim_res.away_win_prob,
-            'over_2_5': sim_res.over_2_5,
-            'under_2_5': sim_res.under_2_5,
-            'over_1_5': sim_res.over_1_5,
-            'under_3_5': sim_res.under_3_5,
-            'btts_yes': sim_res.btts_prob,
-            'btts_no': 1.0 - sim_res.btts_prob,
-            'home_under_1_5': sim_res.home_under_1_5_prob,
-            'away_under_1_5': sim_res.away_under_1_5_prob,
-            'projected_home_goals': sim_res.expected_home_goals,
-            'projected_away_goals': sim_res.expected_away_goals,
-        }
-        sim_entropy = sim_res.entropy
-        sim_tail_mass = sim_res.tail_mass
-        sim_match_type = sim_res.match_type
-        sim_n = sim_res.n_simulations
-        sim_top_scorelines = [
-            {"score": f"{home}-{away}", "probability": prob}
-            for (home, away), prob in sim_res.scoreline_probs.items()
-        ]
-    else:
-        res = PoissonEngine().calculate_probabilities(model_home_lambda, model_away_lambda)
+    res = {
+        'home_win': sim_res.home_win_prob,
+        'draw': sim_res.draw_prob,
+        'away_win': sim_res.away_win_prob,
+        'over_2_5': sim_res.over_2_5,
+        'under_2_5': sim_res.under_2_5,
+        'over_1_5': sim_res.over_1_5,
+        'under_3_5': sim_res.under_3_5,
+        'btts_yes': sim_res.btts_prob,
+        'btts_no': 1.0 - sim_res.btts_prob,
+        'home_under_1_5': sim_res.home_under_1_5_prob,
+        'away_under_1_5': sim_res.away_under_1_5_prob,
+        'projected_home_goals': sim_res.expected_home_goals,
+        'projected_away_goals': sim_res.expected_away_goals,
+    }
+    sim_entropy = sim_res.entropy
+    sim_tail_mass = sim_res.tail_mass
+    sim_match_type = sim_res.match_type
+    sim_n = sim_res.n_simulations
+    sim_top_scorelines = [
+        {"score": f"{home}-{away}", "probability": prob}
+        for (home, away), prob in sim_res.scoreline_probs.items()
+    ]
     
     # === H2H ADJUSTMENT FOR GOALS ===
     h2h_match_count = match.get('h2h_match_count', 0)
@@ -809,8 +771,39 @@ def _calc_corners(
         attr["ensemble_divergence"] = corners_divergence
         attr["divergence_pct"] = float(corners_divergence_pct * 100.0)
         
-        # === SOFT CAP (Confidence-Aware) for O7.5 ===
+        # === ISOTONIC CALIBRATION (applied before soft cap) ===
         corn_o75_raw = res['corners_over_7_5']
+        corn_u11_raw_nb = res['corners_under_11_5']
+
+        # Load and apply corn_o75 calibrator if available
+        cal_o75_file = suite['mh_corn'].meta.get('calibrator_corn_o75_filename') if suite.get('mh_corn') else None
+        if cal_o75_file:
+            cal_o75_path = MODELS_DIR / cal_o75_file
+            cal_o75 = load_binary_calibrator_artifact(cal_o75_path)
+            if cal_o75 and cal_o75.get('calibrator'):
+                try:
+                    corn_o75_raw = float(apply_binary_calibrator(
+                        cal_o75['calibrator'], cal_o75['type'],
+                        np.array([corn_o75_raw], dtype=float)
+                    )[0])
+                except Exception as exc:
+                    logger.debug("%s: corn_o75 calibration apply failed: %s", ctx, exc)
+
+        # Load and apply corn_u11 calibrator if available
+        cal_u11_file = suite['mh_corn'].meta.get('calibrator_corn_u11_filename') if suite.get('mh_corn') else None
+        if cal_u11_file:
+            cal_u11_path = MODELS_DIR / cal_u11_file
+            cal_u11 = load_binary_calibrator_artifact(cal_u11_path)
+            if cal_u11 and cal_u11.get('calibrator'):
+                try:
+                    corn_u11_raw_nb = float(apply_binary_calibrator(
+                        cal_u11['calibrator'], cal_u11['type'],
+                        np.array([corn_u11_raw_nb], dtype=float)
+                    )[0])
+                except Exception as exc:
+                    logger.debug("%s: corn_u11 calibration apply failed: %s", ctx, exc)
+
+        # === SOFT CAP (Confidence-Aware) for O7.5 ===
         conf_calc = get_confidence_calculator()
         conf_res = conf_calc.calculate(
             prob=corn_o75_raw,
@@ -822,9 +815,21 @@ def _calc_corners(
             days_since_h2h=match.get('days_since_last_h2h', 0)
         )
         corn_o75 = apply_soft_cap(corn_o75_raw, conf_res.confidence, 'corn_o75')
+
+        corn_u11_raw = corn_u11_raw_nb
+        conf_u11 = get_confidence_calculator().calculate(
+            prob=corn_u11_raw,
+            market='corn_u11',
+            league=league,
+            mu=mu_h + mu_a,
+            variance=v_h + v_a,
+            h2h_count=match.get('h2h_match_count', 0),
+            days_since_h2h=match.get('days_since_last_h2h', 0)
+        )
+        corn_u11 = apply_soft_cap(corn_u11_raw, conf_u11.confidence, 'corn_u11')
         
         return {
-            'corn_u11': res['corners_under_11_5'], 
+            'corn_u11': corn_u11, 
             'corn_o75': corn_o75,
             'conf_o75': conf_res.confidence,
             'corn_1x2_h': res['corners_home_win'], 
@@ -1098,8 +1103,8 @@ def show_predictions(
                 context=f"show_predictions[{lg_val or 'PL'}]",
             )
 
-            date_filter = DateFilter.ALL if all else date
-            df_target = filter_matches_by_date(df, date_filter, show_all=all, user_timezone=tz)
+            date_filter = date
+            df_target = filter_matches_by_date(df, date_filter, show_all=False, user_timezone=tz)
             if df_target.empty:
                 filter_label = date_filter.value if isinstance(date_filter, DateFilter) else str(date_filter)
                 console.print(
@@ -1121,6 +1126,9 @@ def show_predictions(
             gated, stats = SelectionGate().process(_prepare_bets(results))
             _render_output(results, gated, stats, console)
             rendered_any = True
+
+            # Persist predictions to CSV for resolver
+            _persist_predictions(results, current_league)
 
         if not rendered_any:
             return
@@ -1210,31 +1218,55 @@ def _run_predict_loop(
                     live_registry._logged_smart_routing = logged_smart_routing
                 matches = df[df['league'] == lg]
                 
-                # Fetch drift state once per league run
+                # Fetch drift state once per league run — league-scoped first, global fallback
                 try:
                     orchestrator = DriftOrchestrator()
-                    orchestrator.load_global_state()
-                    if orchestrator.global_status == DriftOrchestrator.GO:
-                        drift_state = "OK"
-                    elif orchestrator.global_status == DriftOrchestrator.WATCH:
-                        drift_state = "WATCH"
+                    league_state_file = (
+                        Path(__file__).resolve().parents[3]
+                        / "data" / "drift" / f"{lg}_drift_status.json"
+                    )
+                    if league_state_file.exists():
+                        # Use per-league state — SA STOP must not block PL
+                        league_status = orchestrator.evaluate_league_drift(lg)
+                        if league_status == DriftOrchestrator.GO:
+                            drift_state = "OK"
+                        elif league_status == DriftOrchestrator.WATCH:
+                            drift_state = "WATCH"
+                        else:
+                            drift_state = "STOP"
+                        logger.debug("[%s] Using league-scoped drift state: %s", lg, drift_state)
                     else:
-                        drift_state = "STOP"
+                        # No league file yet — fall back to global state (fails open)
+                        orchestrator.load_global_state()
+                        if orchestrator.global_status == DriftOrchestrator.GO:
+                            drift_state = "OK"
+                        elif orchestrator.global_status == DriftOrchestrator.WATCH:
+                            drift_state = "WATCH"
+                        else:
+                            drift_state = "STOP"
+                        logger.debug("[%s] No league drift file — using global state: %s", lg, drift_state)
                 except Exception:
                     drift_state = "UNKNOWN"
 
-                # === CRITICAL GATE: DRIFT STOP HARD-BLOCK ===
+                # === CRITICAL GATE: DRIFT STOP HARD-BLOCK (league-scoped) ===
                 if drift_state == "STOP":
-                    logger.error(f"[{lg}] DRIFT STOP HARD_BLOCK: Predictions blocked due to drift alert!")
+                    logger.error(
+                        "[%s] DRIFT STOP HARD_BLOCK: League-scoped drift STOP — predictions blocked.", lg
+                    )
                     console.print(
                         f"[red bold]âŒ DRIFT STOP: {lg} predictions blocked. "
-                        "Run 'inspect-drift' or 'check-drift' to diagnose.[/red bold]"
+                        f"Run 'inspect-drift' or 'check-drift --league {lg}' to diagnose.[/red bold]"
                     )
-                    continue  # Skip this league entirely
+                    continue  # Skip this league only — other leagues unaffected
                 elif drift_state == "UNKNOWN":
-                    logger.warning(f"[{lg}] Drift state UNKNOWN - proceeding with caution")
+                    logger.warning("[%s] Drift state UNKNOWN - proceeding with caution", lg)
 
                 task_id = progress.add_task(f"[cyan]Predicting {lg}...", total=len(matches))
+                simulator = MatchSimulator(
+                    n_simulations=DEFAULT_N_SIMULATIONS,
+                    seed=42,
+                    league=lg,
+                )
                 
                 for _, match in matches.iterrows():
                     try:
@@ -1242,7 +1274,16 @@ def _run_predict_loop(
                         is_intensity = _is_high_intensity(match, lg)
                         
                         # Calculation Logic with consolidated warnings
-                        p, attr = _calculate_probabilities_v2(match, suite, lg, is_intensity, warning_collector, use_simulator=use_simulator, rl_bandit=rl_bandit)
+                        p, attr = _calculate_probabilities_v2(
+                            match,
+                            suite,
+                            lg,
+                            is_intensity,
+                            warning_collector,
+                            simulator=simulator,
+                            use_simulator=use_simulator,
+                            rl_bandit=rl_bandit,
+                        )
                         
                         # Inject drift state into nested attribution dicts only.
                         # Some attribution keys (e.g. ensemble_divergence) are scalars.
@@ -1377,6 +1418,115 @@ def _persist_shadow_log(shadow_log: List[Dict[str, Any]]) -> None:
         logger.error(f"Failed to persist shadow log: {e}")
 
 
+def _persist_predictions(
+    results: List[Dict[str, Any]],
+    league: str,
+) -> None:
+    """
+    Persist prediction results to data/predictions/ as a CSV file.
+    One row per market per match. Called after _run_predict_loop completes.
+    The resolver reads these files to resolve WON/LOST/VOID outcomes.
+    """
+    if not results:
+        return
+
+    PRED_DIR = DATA_DIR / "predictions"
+    PRED_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Markets to persist — must match resolver's MARKET_ALIASES targets
+    # Keys are the keys in the res dict from _run_predict_loop
+    MARKET_MAP = {
+        'u25':             'under_2_5',
+        'o25':             'over_2_5',
+        'home_under_1_5':  'home_under_1_5',
+        'away_under_1_5':  'away_under_1_5',
+        'corn_u11':        'corn_u11',
+        'corn_o75':        'corn_o75',
+        'corn_home_u25':   'corn_home_u25',
+        'corn_home_o25':   'corn_home_o25',
+        'corn_home_u35':   'corn_home_u35',
+        'corn_home_o35':   'corn_home_o35',
+        'corn_home_u45':   'corn_home_u45',
+        'corn_home_o45':   'corn_home_o45',
+        'corn_home_u55':   'corn_home_u55',
+        'corn_home_o55':   'corn_home_o55',
+        'corn_away_u25':   'corn_away_u25',
+        'corn_away_o25':   'corn_away_o25',
+        'corn_away_u35':   'corn_away_u35',
+        'corn_away_o35':   'corn_away_o35',
+        'corn_away_u45':   'corn_away_u45',
+        'corn_away_o45':   'corn_away_o45',
+        'corn_away_u55':   'corn_away_u55',
+        'corn_away_o55':   'corn_away_o55',
+        'card_u45':        'cards_u4.5',
+        'card_o25':        'cards_o2.5',
+    }
+
+    rows = []
+    prediction_date = datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+
+    for res in results:
+        if res.get('league', '').upper() != league.upper():
+            continue
+
+        match_hash = str(res.get('match_id', ''))
+        if not match_hash:
+            continue
+
+        kickoff = res.get('time', '')
+        if hasattr(kickoff, 'isoformat'):
+            kickoff_str = kickoff.isoformat()
+        else:
+            kickoff_str = str(kickoff)
+
+        base = {
+            'match_hash':       match_hash,
+            'prediction_date':  prediction_date,
+            'league':           res.get('league', league),
+            'home_team':        res.get('home_team', ''),
+            'away_team':        res.get('away_team', ''),
+            'kickoff_date_utc': kickoff_str,
+        }
+
+        for res_key, market_name in MARKET_MAP.items():
+            prob = res.get(res_key)
+            if prob is None or not isinstance(prob, (int, float)):
+                continue
+            if pd.isna(prob):
+                continue
+            rows.append({
+                **base,
+                'market':               market_name,
+                'predicted_probability': float(prob),
+            })
+
+    if not rows:
+        logger.warning("No prediction rows to persist for league %s", league)
+        return
+
+    df = pd.DataFrame(rows)
+    today = datetime.now().strftime('%Y%m%d')
+    filename = PRED_DIR / f"predictions_{league}_{today}.csv"
+
+    # Append to existing file if present (same-day re-runs)
+    if filename.exists():
+        existing = pd.read_csv(filename, encoding='utf-8')
+        # Dedup on match_hash + market — keep newest
+        combined = pd.concat([existing, df], ignore_index=True)
+        combined = combined.drop_duplicates(
+            subset=['match_hash', 'market'], keep='last'
+        )
+        df = combined
+
+    tmp = filename.with_suffix('.tmp')
+    df.to_csv(tmp, index=False, encoding='utf-8')
+    tmp.replace(filename)
+    logger.info(
+        "Persisted %d prediction rows for %s to %s",
+        len(df), league, filename.name
+    )
+
+
 def _run_rl_shadow_simulation(
     match: pd.Series,
     league: str,
@@ -1426,6 +1576,7 @@ def _calculate_probabilities_v2(
     league: str, 
     intensity_boost: bool,
     warning_collector: Dict[str, set],
+    simulator: "MatchSimulator",
     use_simulator: bool = True,
     rl_bandit=None,
 ) -> Tuple[MarketProbabilities, Dict[str, Any]]:
@@ -1439,7 +1590,7 @@ def _calculate_probabilities_v2(
     if rl_bandit is not None:
         context = rl_bandit.context_key(league, RL_SHADOW_MARKET)
         rl_weights = rl_bandit.get_weights(context)
-    p.update(_calc_goals(match, suite, ctx, use_simulator=use_simulator, league=league, rl_weights=rl_weights))
+    p.update(_calc_goals(match, suite, ctx, simulator=simulator, league=league, rl_weights=rl_weights))
     
     # 2. Secondary Markets (Best Effort)
     res_corn, attr_corn = _calc_corners(match, suite, ctx, league, intensity_boost, warning_collector)
@@ -1606,7 +1757,7 @@ def _render_output(
     """
     # 1. Prediction Tables
     term_width = _get_terminal_width()
-    is_narrow = term_width < 110  # Lower threshold for modern terminals
+    is_narrow = term_width < 110
     gate = SelectionGate()
     
     for lg in sorted({p['league'] for p in preds}):
@@ -1645,19 +1796,15 @@ def _render_output(
 
         # Balanced columns - Corners are priority, hide BTTS/DC if very narrow
         t.add_column("Date", style="dim", width=6)
-        t.add_column("Match", width=22 if not is_narrow else 18)
-        t.add_column("Win Prob (1X2)", justify="center")
-        
-        if not is_narrow:
-            t.add_column("Dbl Chance", justify="center")
-            t.add_column("Handicap", justify="center") # New Column
-            
-        t.add_column("Total Goals", justify="center")  # Shows O2.5, U2.5, U3.5
-        t.add_column("Both to Score", justify="center")
-        t.add_column("Corners 1X2", justify="center")
-        t.add_column("Corners", justify="center")
-        t.add_column("Cards", justify="center")
-        t.add_column("Team Goals U1.5", justify="center")
+        t.add_column("Match", width=24)
+        t.add_column("1X2", justify="center")
+        t.add_column("xG", justify="center", style="dim", no_wrap=True)
+        t.add_column("T", justify="center", width=5, no_wrap=True)
+        t.add_column("Goals O/U2.5", justify="center")
+        t.add_column("C-1X2", justify="center", no_wrap=True)
+        t.add_column("Corners", justify="center", no_wrap=True)
+        t.add_column("Cards", justify="center", no_wrap=True)
+        t.add_column("TG U1.5", justify="center", no_wrap=True)
         
         # Stats tracking for summary
         high_conf_count = sum(
@@ -1701,6 +1848,17 @@ def _render_output(
                 elif pd_prob == m1x2: s_1x2 = s_1x2.replace(f"D:{_p(pd_prob)}", f"[green]D:{_p(pd_prob)}[/green]")
                 else: s_1x2 = s_1x2.replace(f"A:{_p(pa)}", f"[green]A:{_p(pa)}[/green]")
 
+            # xG and match type
+            xg_h = p.get('expected_home_goals')
+            xg_a = p.get('expected_away_goals')
+            if xg_h is not None and xg_a is not None:
+                s_xg = f"{xg_h:.1f}-{xg_a:.1f}"
+            else:
+                s_xg = "-"
+            mc_type = p.get('mc_match_type', '')
+            type_map = {'high_uncertainty': '[yellow]UNC[/yellow]', 'balanced': '[cyan]BAL[/cyan]', 'predictable': '[dim]PRD[/dim]'}
+            s_type = type_map.get(mc_type, '-')
+
             
             # DC String
             best_dc = max(p.get('dc_1x', 0), p.get('dc_x2', 0), p.get('dc_12', 0))
@@ -1717,11 +1875,11 @@ def _render_output(
                 team_short = "H" if underdog == "home" else "A"
                 s_handicap = f"{team_short}+2 {_c(peh2, 0.75)}"
             
-            # Goals String
+            # Goals String — explicit threshold labels
             po25, pu25 = _safe_prob(p, 'o25'), _safe_prob(p, 'u25')
-            s_goals = f"O:{_c(po25, TH_GOALS)} U:{_c(pu25, TH_GOALS)}"
+            s_goals = f"O2.5:{_c(po25, TH_GOALS)} U2.5:{_c(pu25, TH_GOALS)}"
             
-            # U3.5 (new low-variance market) - Add to goals display
+            # U3.5 (new low-variance market) - inline append
             pu35 = _safe_prob(p, 'u35')
             if pu35 > 0.70:
                 s_goals += f" [bold green]U3.5:{pu35:.0%}[/bold green]"
@@ -1731,10 +1889,7 @@ def _render_output(
             # BTTS String - Show both Yes and No for slip selection visibility
             pbtts_yes = _safe_prob(p, 'btts')
             pbtts_no = _safe_prob(p, 'btts_no')
-            if pbtts_no > 0.60:
-                s_btts = f"Y:{_c(pbtts_yes, TH_BTTS)} [green]N:{pbtts_no:.0%}[/green]"
-            else:
-                s_btts = f"Y:{_c(pbtts_yes, TH_BTTS)} N:{pbtts_no:.0%}"
+            s_btts = f"Y:{_c(pbtts_yes, TH_BTTS)}"
             
             # Corn 1X2 - Manual check
             ch, ca = p.get('corn_1x2_h', 0), p.get('corn_1x2_a', 0)
@@ -1759,18 +1914,11 @@ def _render_output(
             total_edge += (best_prob - 0.5)  # Simple edge calculation
 
             # Build row based on terminal width
-            if is_narrow:
-                t.add_row(
-                    p['time'].strftime('%m-%d'), p['match'], 
-                    s_1x2, s_goals, s_btts,
-                    s_corn_1x2, s_corn_str, card_str, t_u15_str
-                )
-            else:
-                t.add_row(
-                    p['time'].strftime('%m-%d'), p['match'], 
-                    s_1x2, s_dc, s_handicap, s_goals, s_btts,
-                    s_corn_1x2, s_corn_str, card_str, t_u15_str
-                )
+            t.add_row(
+                p['time'].strftime('%m-%d'), p['match'],
+                s_1x2, s_xg, s_type,
+                s_goals, s_corn_1x2, s_corn_str, card_str, t_u15_str
+            )
         
         console.print(t)
         
@@ -1778,10 +1926,40 @@ def _render_output(
         avg_edge = (total_edge / len(p_lg)) if p_lg else 0
         edge_color = "green" if avg_edge > 0.05 else "yellow" if avg_edge > 0 else "dim"
         console.rule(style="dim")
+        # Market breakdown from gated selections for this league
+        market_counts: Dict[str, int] = {}
+        best_pick = None
+        best_prob = 0.0
+        for b in gated_lg:
+            sel = str(b.get('selection', ''))
+            # Normalise to market type: "H U1.5" -> "U1.5", "Cards O2.5" -> "Cards",
+            # "Corn U11.5" -> "Corners", "DC" -> "DC", "O2.5" -> "Goals O2.5"
+            sel_upper = sel.upper()
+            if 'U1.5' in sel_upper:
+                mkt = 'U1.5'
+            elif 'CORN' in sel_upper:
+                mkt = 'Corners'
+            elif 'CARD' in sel_upper:
+                mkt = 'Cards'
+            elif 'DC' in sel_upper:
+                mkt = 'DC'
+            elif 'O2.5' in sel_upper or 'O25' in sel_upper:
+                mkt = 'Goals O2.5'
+            elif 'HANDICAP' in sel_upper or 'AH' in sel_upper:
+                mkt = 'Handicap'
+            else:
+                mkt = sel.split()[0] if sel else 'Other'
+            market_counts[mkt] = market_counts.get(mkt, 0) + 1
+            if float(b.get('probability', 0)) > best_prob:
+                best_prob = float(b['probability'])
+                best_pick = f"{b['match']} → {sel} {best_prob:.0%}"
+        market_str = " | ".join(f"{k}:{v}" for k, v in sorted(market_counts.items()))
         console.print(
             f"[bold]Summary:[/bold] {len(p_lg)} matches | "
             f"[green]High Conf: {high_conf_count}[/green] | "
             f"[{edge_color}]Avg Edge: {avg_edge:+.1%}[/{edge_color}]"
+            + (f" | Markets: {market_str}" if market_str else "")
+            + (f"\n[dim]Best pick: {best_pick}[/dim]" if best_pick else "")
         )
         console.print(f"[dim italic]Legend: [bold green]Green[/bold green]=High(>70%) [yellow]Yellow[/yellow]=Medium(55-70%) [dim]Gray[/dim]=Low(<55%)[/dim italic]")
         console.print("[dim]Note: Double Chance shown for context only - not used in Suggested Slip.[/dim]\n")
@@ -1790,9 +1968,25 @@ def _render_output(
     if gated:
         gt = Table(title="[bold green]GATED SELECTIONS (High Value)[/bold green]", box=box.HEAVY_EDGE)
         gt.add_column("Date", style="dim"); gt.add_column("Match"); gt.add_column("Selection", style="bold cyan")
-        gt.add_column("Prob", justify="right"); gt.add_column("Score", justify="right")
+        gt.add_column("Prob", justify="right")
+        gt.add_column("CI ±", justify="right", style="dim")
+        gt.add_column("Edge", justify="right")
+        gt.add_column("Score", justify="right")
         for b in gated:
-            gt.add_row(b['time'].strftime('%m-%d %H:%M'), b['match'], b['selection'], f"{b['probability']:.1%}", f"{b['gate_score']:.3f}")
+            prob = float(b['probability'])
+            n = 50000
+            ci = 1.645 * (prob * (1 - prob) / n) ** 0.5
+            edge = prob - 0.50
+            edge_color = "green" if edge >= 0.20 else "yellow" if edge >= 0.10 else "dim"
+            gt.add_row(
+                b['time'].strftime('%m-%d %H:%M'),
+                b['match'],
+                b['selection'],
+                f"{prob:.1%}",
+                f"{ci*100:.1f}%",
+                f"[{edge_color}]{edge:+.1%}[/{edge_color}]",
+                f"{b['gate_score']:.3f}",
+            )
         console.print(gt)
         
     # 3. Forbidden Fruit
