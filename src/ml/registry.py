@@ -104,6 +104,7 @@ class ModelRegistry:
         return cls._instance
 
     def __init__(self) -> None:
+        self._logged_smart_routing: set[str] = set()
         if self._manifest_cache is None:
             self._load_manifest()
 
@@ -237,12 +238,15 @@ class ModelRegistry:
         return None
 
     def _save_manifest_file(self) -> None:
+        import os as _os
         # ensure dir exists
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Save primary
-        with open(self.MANIFEST_FILE, "w", encoding="utf-8") as f:
+        # Atomic write: write to .tmp then rename to prevent corruption
+        tmp_path = self.MANIFEST_FILE.with_suffix(".tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(self.manifest, f, indent=2)
+        _os.replace(tmp_path, self.MANIFEST_FILE)
 
         # Create backup
         self._save_backup()
@@ -789,8 +793,7 @@ class ModelRegistry:
                 )
                 return local_meta
 
-            logged_smart_routing = getattr(self, "_logged_smart_routing", None)
-            if logged_smart_routing is None or league not in logged_smart_routing:
+            if league not in self._logged_smart_routing:
                 logger.warning(
                     "Smart Routing: Promoted local model overridden by Global for %s "
                     "(n=%s, local_ece=%.4f > guardrail=%.4f from global_ece=%.4f)",
@@ -800,8 +803,7 @@ class ModelRegistry:
                     promoted_guardrail,
                     global_score,
                 )
-                if logged_smart_routing is not None:
-                    logged_smart_routing.add(league)
+                self._logged_smart_routing.add(league)
             return global_meta
             
         # Fallback: If local is under-trained, compare scores
