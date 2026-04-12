@@ -428,7 +428,6 @@ def check_drift(
         def _evaluate_metrics(metrics: dict[str, float]) -> str:
             if league:
                 league_metrics = dict(metrics)
-                league_metrics.pop("mean_conf", None)
                 evaluated_status = monitor.evaluate_league_drift(league, league_metrics)
                 monitor.persist_league_state(league)
                 return evaluated_status
