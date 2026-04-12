@@ -23,7 +23,6 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     schedule: "0 6 * * *"
-    plan: free
     dockerCommand: /bin/bash /app/scripts/daily.sh
     envVars:
       - key: FOOTBALL_DATA_API_KEY
