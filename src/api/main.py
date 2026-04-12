@@ -323,7 +323,15 @@ def _load_or_compute_predictions(league: Optional[str]) -> List[Dict[str, Any]]:
     cache_key = prediction_cache_key(league)
     cached_predictions = prediction_cache.get(cache_key)
     if isinstance(cached_predictions, list):
-        return cached_predictions
+        drift_status = _read_prediction_guard_status()
+        if drift_status == DriftOrchestrator.STOP:
+            logger.warning(
+                "Cache invalidated for league=%s: drift status is STOP.",
+                league or "ALL",
+            )
+            prediction_cache.delete(cache_key)
+        else:
+            return cached_predictions
 
     predictor = Predictor()
     raw_predictions = predictor.predict_upcoming(league=league)
@@ -338,12 +346,19 @@ def _generate_forbidden_fruit_slip(
     min_prob: float,
     max_selections: int,
 ) -> ForbiddenFruitSlipResponse:
+    drift_status = _read_prediction_guard_status()
     cache_key = slip_cache_key(league, min_prob, max_selections)
     cached_slip = prediction_cache.get(cache_key)
     if isinstance(cached_slip, ForbiddenFruitSlipResponse):
-        return cached_slip
+        if drift_status == DriftOrchestrator.STOP:
+            logger.warning(
+                "Slip cache invalidated for league=%s: drift status is STOP.",
+                league or "ALL",
+            )
+            prediction_cache.delete(cache_key)
+        else:
+            return cached_slip
 
-    drift_status = _read_prediction_guard_status()
     league_label = str(league or "ALL").upper()
     if drift_status == DriftOrchestrator.STOP:
         response = ForbiddenFruitSlipResponse(

@@ -59,6 +59,9 @@ class PredictionCache:
             else:
                 self._store.clear()
 
+    def delete(self, key: str) -> None:
+        self.invalidate(key)
+
     def stats(self) -> Dict[str, Any]:
         with self._lock:
             now = time.monotonic()
