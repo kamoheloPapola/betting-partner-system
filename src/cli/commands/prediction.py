@@ -1255,7 +1255,11 @@ def _run_predict_loop(
                             drift_state = "STOP"
                         logger.debug("[%s] No league drift file — using global state: %s", lg, drift_state)
                 except Exception:
-                    drift_state = "UNKNOWN"
+                    logger.error(
+                        "[%s] DRIFT GATE FAIL-CLOSED: Could not load drift state — blocking predictions.",
+                        lg,
+                    )
+                    drift_state = "STOP"
 
                 # === CRITICAL GATE: DRIFT STOP HARD-BLOCK (league-scoped) ===
                 if drift_state == "STOP":
@@ -1267,9 +1271,6 @@ def _run_predict_loop(
                         f"Run 'inspect-drift' or 'check-drift --league {lg}' to diagnose.[/red bold]"
                     )
                     continue  # Skip this league only — other leagues unaffected
-                elif drift_state == "UNKNOWN":
-                    logger.warning("[%s] Drift state UNKNOWN - proceeding with caution", lg)
-
                 task_id = progress.add_task(f"[cyan]Predicting {lg}...", total=len(matches))
                 simulator = MatchSimulator(
                     n_simulations=DEFAULT_N_SIMULATIONS,
