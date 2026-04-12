@@ -305,12 +305,18 @@ def _migrate_resolved_predictions() -> int:
             }
         )
 
+    # Deduplicate on prediction_id - keep last occurrence (most recent resolution)
+    seen: dict[str, dict] = {}
+    for row in rows:
+        seen[row["prediction_id"]] = row
+    rows = list(seen.values())
     migrated = len(rows)
-    if not rows:
-        print(f"[ok] Migrated {migrated} resolved prediction rows from {outcomes_path}")
-        return migrated
 
-    print(f"[bulk] Inserting {migrated} resolved prediction rows...")
+    if not migrated:
+        print(f"[ok] Migrated 0 resolved prediction rows from {outcomes_path}")
+        return 0
+
+    print(f"[bulk] Inserting {migrated} resolved prediction rows (after dedup)...")
     with Session(get_engine()) as session:
         for chunk_index, chunk in enumerate(_chunked(rows, 500), start=1):
             insert_stmt = pg_insert(ResolvedPrediction).values(chunk)
