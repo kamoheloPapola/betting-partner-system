@@ -442,15 +442,14 @@ def check_drift(
             scored = scored.dropna(subset=["probability", "outcome"])
 
             if not scored.empty:
-                # AuthoritativeResolver may already normalize outcomes to numeric 0/1.
-                if pd.api.types.is_numeric_dtype(scored["outcome"]):
-                    # Numeric outcomes: 1=WON, 0=LOST -- keep only binary settled rows
-                    scored["hit"] = pd.to_numeric(scored["outcome"], errors="coerce")
-                    scored = scored[scored["hit"].isin([0.0, 1.0])]
+                # Outcomes may be stored as numeric 0/1 or strings WON/LOST
+                outcome_col = scored["outcome"]
+                if pd.api.types.is_numeric_dtype(outcome_col):
+                    scored["hit"] = pd.to_numeric(outcome_col, errors="coerce")
+                    scored.loc[~scored["hit"].isin([0.0, 1.0]), "hit"] = float("nan")
                 else:
-                    # String outcomes: map to numeric, VOID rows will be NaN and dropped
                     outcome_map = {"WON": 1.0, "LOST": 0.0, "PUSH": 0.5, "VOID": float("nan")}
-                    scored["hit"] = scored["outcome"].astype(str).str.upper().map(outcome_map)
+                    scored["hit"] = outcome_col.astype(str).str.upper().map(outcome_map)
                 scored = scored.dropna(subset=["hit"])
 
                 if not scored.empty:
@@ -462,7 +461,11 @@ def check_drift(
                         "mean_conf": float(probs.mean()),
                     }
                     status = _evaluate_metrics(metrics)
-                    alerts = list(monitor.global_alerts)
+                    alerts = [
+                        f"HIT_RATE: {metrics['hit_rate']:.3f}",
+                        f"ECE: {metrics['ece']:.3f}",
+                        f"MEAN_CONF: {metrics['mean_conf']:.3f}",
+                    ]
                 else:
                     status = _evaluate_current_state()
             else:

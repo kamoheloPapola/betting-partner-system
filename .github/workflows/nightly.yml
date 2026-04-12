@@ -82,13 +82,18 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Fetch Fresh Data
-        run: python scripts/fetch_fresh_data.py
-
       - name: Run Nightly Pipeline
         id: nightly_pipeline
-        continue-on-error: true
-        run: python scripts/nightly_pipeline.py
+        run: |
+          set +e
+          python scripts/nightly_pipeline.py
+          status=$?
+          set -e
+          if [ "$status" -eq 2 ]; then
+            echo "::warning::Nightly pipeline drift-blocked (exit code 2)."
+            exit 0
+          fi
+          exit "$status"
 
       - name: Upload Bandit State Artifacts
         if: always()

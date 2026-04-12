@@ -211,7 +211,10 @@ class ModelRegistry:
 
         if file_total != db_total:
             return (file_manifest, "file") if file_total < db_total else (db_manifest, "db")
-
+        # When coverage is equal, prefer DB manifest if database is configured —
+        # DB is the source of truth when explicitly configured.
+        if database_is_configured() and db_manifest is not None:
+            return db_manifest, "db"
         return file_manifest, "file"
 
     def _save_manifest(self) -> None:

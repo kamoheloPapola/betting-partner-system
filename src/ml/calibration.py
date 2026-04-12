@@ -530,7 +530,7 @@ def apply_soft_cap(prob: float, confidence: float, market: str) -> float:
         return prob
         
     # Strict clamping order
-    ceiling = min(max(raw_ceiling, 0.72), 0.90)
+    ceiling = min(max(raw_ceiling, 0.72), 0.82)
     
     if prob > ceiling:
         logger.info(

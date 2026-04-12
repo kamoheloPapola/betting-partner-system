@@ -5,7 +5,8 @@ import pandas as pd
 import pytest
 
 import src.cli.commands.prediction as prediction_module
-from src.cli.commands.prediction import _calc_goals, _calculate_probabilities
+from src.cli.commands.prediction import _calc_goals, _calculate_probabilities_v2
+from src.simulation.match_simulator import MatchSimulator, DEFAULT_N_SIMULATIONS
 
 
 class ConstantModel:
@@ -46,12 +47,23 @@ def _match() -> pd.Series:
     )
 
 
+def _simulator() -> MatchSimulator:
+    return MatchSimulator(n_simulations=DEFAULT_N_SIMULATIONS, seed=42)
+
+
+@pytest.fixture(autouse=True)
+def _restore_prediction_logger(monkeypatch):
+    monkeypatch.setattr(prediction_module.logger, "level", logging.NOTSET)
+    monkeypatch.setattr(prediction_module.logger, "disabled", False)
+    monkeypatch.setattr(prediction_module.logger, "propagate", True)
+
+
 def test_goal_ensemble_weighted_lambda(monkeypatch):
     monkeypatch.setattr(prediction_module, "GOALS_ENSEMBLE_LGBM_WEIGHT", 0.6)
     monkeypatch.setattr(prediction_module, "GOALS_ENSEMBLE_XGB_WEIGHT", 0.4)
     monkeypatch.setattr(prediction_module, "GOALS_ENSEMBLE_DIVERGENCE_THRESHOLD", 0.2)
 
-    result = _calc_goals(_match(), _suite(), "Home vs Away", use_simulator=False)
+    result = _calc_goals(_match(), _suite(), "Home vs Away", simulator=_simulator(), use_simulator=False)
 
     assert result["goal_model_home_lambda"] == pytest.approx(1.6, abs=1e-8)
     assert result["goal_model_away_lambda"] == pytest.approx(1.4, abs=1e-8)
@@ -65,7 +77,7 @@ def test_goal_ensemble_logs_warning_on_divergence(monkeypatch, caplog):
     monkeypatch.setattr(prediction_module, "GOALS_ENSEMBLE_DIVERGENCE_THRESHOLD", 0.2)
 
     with caplog.at_level(logging.WARNING):
-        _calc_goals(_match(), _suite(), "Home vs Away", use_simulator=False)
+        _calc_goals(_match(), _suite(), "Home vs Away", simulator=_simulator(), use_simulator=False)
 
     assert any("GOALS_ENSEMBLE_DIVERGENCE" in rec.message for rec in caplog.records)
     assert any("match-xyz" in rec.message for rec in caplog.records)
@@ -83,8 +95,8 @@ def test_calc_goals_applies_bl1_specific_btts_cap(monkeypatch):
         lambda prob, market, ctx="": prob,
     )
 
-    bl1_result = _calc_goals(_match(), _suite(), "Home vs Away", use_simulator=False, league="BL1")
-    pl_result = _calc_goals(_match(), _suite(), "Home vs Away", use_simulator=False, league="PL")
+    bl1_result = _calc_goals(_match(), _suite(), "Home vs Away", simulator=_simulator(), use_simulator=False, league="BL1")
+    pl_result = _calc_goals(_match(), _suite(), "Home vs Away", simulator=_simulator(), use_simulator=False, league="PL")
 
     assert bl1_result["btts"] == pytest.approx(0.58, abs=1e-8)
     assert pl_result["btts"] == pytest.approx(0.64, abs=1e-8)
@@ -100,7 +112,7 @@ def test_btts_no_is_complement_of_btts_yes(monkeypatch):
 
     monkeypatch.setattr(prediction_module, "apply_calibration_cap", fake_cap)
 
-    result = _calc_goals(_match(), _suite(), "Home vs Away", use_simulator=False, league="PL")
+    result = _calc_goals(_match(), _suite(), "Home vs Away", simulator=_simulator(), use_simulator=False, league="PL")
 
     assert result["btts"] == pytest.approx(0.63, abs=1e-8)
     assert result["btts_no"] == pytest.approx(0.37, abs=1e-8)
@@ -139,7 +151,7 @@ def test_o15_reanchored_when_u25_cap_fires(monkeypatch, caplog):
     monkeypatch.setattr(prediction_module, "apply_calibration_cap", fake_cap)
 
     with caplog.at_level(logging.WARNING):
-        result = _calc_goals(_match(), _suite(), "Home vs Away", use_simulator=False, league="PL")
+        result = _calc_goals(_match(), _suite(), "Home vs Away", simulator=_simulator(), use_simulator=False, league="PL")
 
     assert result["o25"] == pytest.approx(0.34, abs=1e-8)
     assert result["over_1_5"] == pytest.approx(0.34, abs=1e-8)
@@ -174,7 +186,15 @@ def test_cards_divergence_sets_global_ensemble_flag(monkeypatch):
         }
     )
 
-    probs, _ = _calculate_probabilities(match, suite, "PL")
+    simulator = MatchSimulator(n_simulations=DEFAULT_N_SIMULATIONS, seed=42)
+    probs, attr = _calculate_probabilities_v2(
+        match, suite, "PL",
+        intensity_boost=False,
+        warning_collector={"missing_offsets": set(), "missing_card_offsets": set()},
+        simulator=simulator,
+        use_simulator=False,
+    )
+    probs.update(attr)
     assert probs["ensemble_divergence"] is True
     assert probs["divergence_pct"] == pytest.approx(50.0, abs=1e-8)
 
@@ -208,7 +228,15 @@ def test_corners_divergence_sets_global_ensemble_flag(monkeypatch):
         }
     )
 
-    probs, _ = _calculate_probabilities(match, suite, "PL")
+    simulator = MatchSimulator(n_simulations=DEFAULT_N_SIMULATIONS, seed=42)
+    probs, attr = _calculate_probabilities_v2(
+        match, suite, "PL",
+        intensity_boost=False,
+        warning_collector={"missing_offsets": set(), "missing_card_offsets": set()},
+        simulator=simulator,
+        use_simulator=False,
+    )
+    probs.update(attr)
     assert probs["ensemble_divergence"] is True
     assert probs["divergence_pct"] == pytest.approx(50.0, abs=1e-8)
 

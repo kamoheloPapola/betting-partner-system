@@ -96,6 +96,7 @@ class DriftOrchestrator:
 
         # Per-league drift state (keyed by league string)
         self._league_status: Dict[str, str] = {}
+        self._league_metrics: Dict[str, Dict[str, Any]] = {}
 
         # Global drift state
         self.global_status: str = self.GO
@@ -297,6 +298,12 @@ class DriftOrchestrator:
 
         new_status = self.STOP if alerts else self.GO
         self._league_status[league] = new_status
+        self._league_metrics[league] = {
+            "hit_rate": hr,
+            "ece": ece,
+            "mean_conf": mconf,
+            "alerts": alerts,
+        }
 
         self._emit_stop_transition(
             scope="league",
@@ -316,6 +323,7 @@ class DriftOrchestrator:
             "date": evaluated_at[:10],
             "evaluated_at": evaluated_at,
             "status": self._league_status.get(league, self.GO),
+            "metrics": self._league_metrics.get(league, {}),
         }
         with open(state_file, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, indent=2)
@@ -335,6 +343,7 @@ class DriftOrchestrator:
             with open(state_file, "r", encoding="utf-8") as fh:
                 data = json.load(fh)
             self._league_status[league] = self._normalize_state(data.get("status", self.GO))
+            self._league_metrics[league] = data.get("metrics", {})
         except Exception as exc:
             logger.error("Failed to load league drift state for %s: %s", league, exc)
             # Fail open for per-league — do not punish all leagues for one bad file

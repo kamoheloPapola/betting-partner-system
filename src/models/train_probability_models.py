@@ -19,6 +19,8 @@ from sklearn.metrics import (
 from xgboost import XGBRegressor
 
 from src.config import DATA_DIR, MODELS_DIR
+from src.ml.calibration import fit_best_binary_calibrator, save_binary_calibrator_artifact
+from src.ml.distributions import NegativeBinomialEngine
 from src.ml.registry import ModelRegistry
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -424,6 +426,57 @@ class ProbabilityModelTrainer:
         logger.info("%s XGB Metrics on Test: %s", name, metrics)
         return model, metrics
 
+    def _fit_and_save_corners_calibrators(
+        self,
+        model_h,
+        model_a,
+        X_test: pd.DataFrame,
+        y_test_h: pd.Series,
+        y_test_a: pd.Series,
+        league: str,
+    ) -> Dict[str, Optional[str]]:
+        """
+        Fit isotonic calibrators for corn_o75 and corn_u11 markets.
+        Returns dict of {market: calibrator_filename} for manifest registration.
+        """
+        from src.config import Thresholds
+        result: Dict[str, Optional[str]] = {"corn_o75": None, "corn_u11": None}
+        try:
+            mu_h = np.maximum(0.05, model_h.predict(X_test))
+            mu_a = np.maximum(0.05, model_a.predict(X_test))
+            nb = NegativeBinomialEngine()
+            probs_o75, probs_u11 = [], []
+            for mh, ma in zip(mu_h, mu_a):
+                v_h = mh * 1.3
+                v_a = ma * 1.3
+                r = nb.calculate_probabilities(float(mh), float(v_h), float(ma), float(v_a))
+                probs_o75.append(r.get("corners_over_7_5", 0.5))
+                probs_u11.append(r.get("corners_under_11_5", 0.5))
+
+            total_h = np.asarray(y_test_h, dtype=float)
+            total_a = np.asarray(y_test_a, dtype=float)
+            total = total_h + total_a
+
+            y_o75 = (total > 7.5).astype(float)
+            y_u11 = (total < 11.5).astype(float)
+
+            for market, probs_raw, y_bin in [
+                ("corn_o75", np.array(probs_o75), y_o75),
+                ("corn_u11", np.array(probs_u11), y_u11),
+            ]:
+                cal = fit_best_binary_calibrator(probs_raw, y_bin)
+                if cal is None:
+                    logger.warning("Corners calibrator fit failed for %s [%s] — skipping", market, league)
+                    continue
+                cal_filename = f"corners_{market}_cal_{league}.pkl"
+                cal_path = MODELS_DIR / "calibrators" / cal_filename
+                save_binary_calibrator_artifact(cal_path, cal)
+                result[market] = str(Path("calibrators") / cal_filename)
+                logger.info("Saved corners calibrator: %s [%s] ECE-winner=%s", market, league, cal.get("type"))
+        except Exception as exc:
+            logger.warning("Corners calibrator fitting failed for %s: %s", league, exc)
+        return result
+
     def _register_model(
         self,
         name: str,
@@ -435,6 +488,7 @@ class ProbabilityModelTrainer:
         league: Optional[str],
         train_size: int,
         test_size: int,
+        corn_cal_filenames: Optional[Dict[str, Optional[str]]] = None,
     ) -> str:
         metadata: Dict[str, Any] = {
             "filename": filename,
@@ -449,6 +503,10 @@ class ProbabilityModelTrainer:
             "train_size": int(train_size),
             "test_size": int(test_size),
         }
+        if corn_cal_filenames:
+            for market, cal_file in corn_cal_filenames.items():
+                if cal_file:
+                    metadata[f"calibrator_{market}_filename"] = cal_file
         self.registry.register_model(name, MODEL_VERSION, metadata)
 
         manifest_key = f"{name}_v{MODEL_VERSION}_{league if league is not None else 'None'}"
@@ -616,6 +674,82 @@ class ProbabilityModelTrainer:
             test_size=len(away_test_idx),
         )
 
+        # 4a) Home corners
+        hcorn_train_idx, hcorn_test_idx = self._target_masks(X_train_full, X_test, df_scope, "home_corners")
+        self._require_non_empty_masks(hcorn_train_idx, hcorn_test_idx, "home_corners", league)
+        hcorn_file = self._append_league_suffix("home_corners_model.pkl", league)
+        hcorn_path = self.models_dir / hcorn_file
+        hcorn_model, hcorn_metrics = self.train_count_model(
+            f"Home Corners [{league}]",
+            X_train_full.loc[hcorn_train_idx],
+            df_scope.loc[hcorn_train_idx, "home_corners"],
+            X_test.loc[hcorn_test_idx],
+            df_scope.loc[hcorn_test_idx, "home_corners"],
+            existing_model_path=hcorn_path,
+            full_retrain=full_retrain,
+        )
+        joblib.dump(hcorn_model, hcorn_path)
+        report["home_corners"] = hcorn_metrics
+        models_trained.append("home_corners")
+
+        # 4b) Away corners (train before calibration so both models are available)
+        acorn_train_idx, acorn_test_idx = self._target_masks(X_train_full, X_test, df_scope, "away_corners")
+        self._require_non_empty_masks(acorn_train_idx, acorn_test_idx, "away_corners", league)
+        acorn_file = self._append_league_suffix("away_corners_model.pkl", league)
+        acorn_path = self.models_dir / acorn_file
+        acorn_model, acorn_metrics = self.train_count_model(
+            f"Away Corners [{league}]",
+            X_train_full.loc[acorn_train_idx],
+            df_scope.loc[acorn_train_idx, "away_corners"],
+            X_test.loc[acorn_test_idx],
+            df_scope.loc[acorn_test_idx, "away_corners"],
+            existing_model_path=acorn_path,
+            full_retrain=full_retrain,
+        )
+        joblib.dump(acorn_model, acorn_path)
+        report["away_corners"] = acorn_metrics
+        models_trained.append("away_corners")
+
+        # Fit corners probability calibrators using shared test set
+        shared_test_idx = hcorn_test_idx.intersection(acorn_test_idx)
+        corn_cal_filenames: Dict[str, Optional[str]] = {"corn_o75": None, "corn_u11": None}
+        if len(shared_test_idx) >= 50:
+            corn_cal_filenames = self._fit_and_save_corners_calibrators(
+                model_h=hcorn_model,
+                model_a=acorn_model,
+                X_test=X_test.loc[shared_test_idx],
+                y_test_h=df_scope.loc[shared_test_idx, "home_corners"],
+                y_test_a=df_scope.loc[shared_test_idx, "away_corners"],
+                league=league,
+            )
+        else:
+            logger.warning("Corners calibration skipped for %s: shared test set too small (%d rows)", league, len(shared_test_idx))
+
+        self._register_model(
+            name="mh_corn",
+            filename=hcorn_file,
+            model_type="lgbm_regressor_poisson",
+            target="home_corners",
+            metrics=hcorn_metrics,
+            features=features,
+            league=league,
+            train_size=len(hcorn_train_idx),
+            test_size=len(hcorn_test_idx),
+            corn_cal_filenames=corn_cal_filenames,
+        )
+        self._register_model(
+            name="ma_corn",
+            filename=acorn_file,
+            model_type="lgbm_regressor_poisson",
+            target="away_corners",
+            metrics=acorn_metrics,
+            features=features,
+            league=league,
+            train_size=len(acorn_train_idx),
+            test_size=len(acorn_test_idx),
+            corn_cal_filenames=corn_cal_filenames,
+        )
+
         # 4) Total corners
         corners_train_idx, corners_test_idx = self._target_masks(X_train_full, X_test, df_scope, "total_corners")
         self._require_non_empty_masks(corners_train_idx, corners_test_idx, "total_corners", league)
@@ -644,6 +778,17 @@ class ProbabilityModelTrainer:
             train_size=len(corners_train_idx),
             test_size=len(corners_test_idx),
         )
+        self._register_model(
+            name="m_corners_lgbm",
+            filename=corners_file,
+            model_type="lgbm_regressor_poisson",
+            target="total_corners",
+            metrics=corners_metrics,
+            features=features,
+            league=league,
+            train_size=len(corners_train_idx),
+            test_size=len(corners_test_idx),
+        )
 
         corners_xgb_file = self._append_league_suffix("corners_xgb_v1.joblib", league)
         corners_xgb_path = self.models_dir / corners_xgb_file
@@ -662,6 +807,17 @@ class ProbabilityModelTrainer:
         models_trained.append("corners_xgb")
         self._register_model(
             name="corners_xgb",
+            filename=corners_xgb_file,
+            model_type="xgb_regressor_tweedie",
+            target="total_corners",
+            metrics=corners_xgb_metrics,
+            features=features,
+            league=league,
+            train_size=len(corners_train_idx),
+            test_size=len(corners_test_idx),
+        )
+        self._register_model(
+            name="m_corners_xgb",
             filename=corners_xgb_file,
             model_type="xgb_regressor_tweedie",
             target="total_corners",

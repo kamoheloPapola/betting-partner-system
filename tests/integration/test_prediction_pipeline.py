@@ -6,11 +6,10 @@ import pytest
 
 from src.cli.commands.prediction import (
     ModelSuite,
-    _calculate_probabilities,
     _calculate_probabilities_v2,
 )
 from src.features.pipeline import FeaturePipeline
-from src.simulation.match_simulator import DEFAULT_N_SIMULATIONS
+from src.simulation.match_simulator import DEFAULT_N_SIMULATIONS, MatchSimulator
 
 
 FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "sample_matches.csv"
@@ -56,7 +55,20 @@ def test_full_prediction_workflow_from_fixture_dataframe() -> None:
     }
 
     for _, row in features.iterrows():
-        probabilities, attribution = _calculate_probabilities(row, suite, row["league"])
+        simulator = MatchSimulator(
+            n_simulations=DEFAULT_N_SIMULATIONS,
+            seed=42,
+            league=row["league"],
+        )
+        probabilities, attribution = _calculate_probabilities_v2(
+            row,
+            suite,
+            row["league"],
+            False,
+            {"missing_offsets": set(), "missing_card_offsets": set()},
+            simulator=simulator,
+            use_simulator=True,
+        )
 
         assert attribution == {}
         assert probabilities["home"] + probabilities["draw"] + probabilities["away"] == pytest.approx(1.0, abs=1e-6)
@@ -89,6 +101,11 @@ def test_simulation_shifts_probabilities_vs_analytical() -> None:
         "ma_goals": ConstantRegressor(1.6, goal_features, "away_goals"),
         "meta_goals": {"features": goal_features},
     }
+    simulator = MatchSimulator(
+        n_simulations=DEFAULT_N_SIMULATIONS,
+        seed=42,
+        league=match["league"],
+    )
 
     sim_probabilities, _ = _calculate_probabilities_v2(
         match,
@@ -96,6 +113,7 @@ def test_simulation_shifts_probabilities_vs_analytical() -> None:
         match["league"],
         False,
         {"missing_offsets": set(), "missing_card_offsets": set()},
+        simulator,
         use_simulator=True,
     )
     analytical_probabilities, _ = _calculate_probabilities_v2(
@@ -104,6 +122,7 @@ def test_simulation_shifts_probabilities_vs_analytical() -> None:
         match["league"],
         False,
         {"missing_offsets": set(), "missing_card_offsets": set()},
+        simulator,
         use_simulator=False,
     )
 

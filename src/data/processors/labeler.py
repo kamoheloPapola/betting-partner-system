@@ -101,7 +101,32 @@ class Labeler:
             labeled_df = pd.DataFrame()
             new_rows = master_df.copy()
 
+        missing_label_cols = self._missing_label_columns(labeled_df)
         if new_rows.empty:
+            if missing_label_cols:
+                logger.info(
+                    "Backfilling %d missing label column(s): %s",
+                    len(missing_label_cols),
+                    missing_label_cols,
+                )
+                labels = self._compute_labels(master_df)
+                labels_by_hash = labels.set_index('match_hash')
+                final_df = labeled_df.copy()
+                for col in missing_label_cols:
+                    final_df[col] = final_df['match_hash'].map(labels_by_hash[col])
+
+                self.labeled_path.parent.mkdir(parents=True, exist_ok=True)
+                tmp_path = self.labeled_path.with_suffix(".tmp")
+                final_df.to_csv(tmp_path, index=False)
+                os.replace(tmp_path, self.labeled_path)
+
+                return LabelingResult(
+                    total_processed=len(master_df),
+                    new_labels=0,
+                    skipped=len(master_df),
+                    labeled_path=self.labeled_path
+                )
+
             logger.info("No new matches to label.")
             return LabelingResult(
                 total_processed=len(master_df),
@@ -119,7 +144,9 @@ class Labeler:
         self.labeled_path.parent.mkdir(parents=True, exist_ok=True)
         
         final_df = pd.concat([labeled_df, labels], ignore_index=True)
-        final_df.to_csv(self.labeled_path, index=False)
+        tmp_path = self.labeled_path.with_suffix(".tmp")
+        final_df.to_csv(tmp_path, index=False)
+        os.replace(tmp_path, self.labeled_path)
         
         logger.info(f"Generated labels for {len(labels)} new matches.")
         
@@ -169,6 +196,16 @@ class Labeler:
                 "Master results contain duplicate match_hash values",
                 context={"duplicate_count": len(duplicates), "examples": duplicates[:5]}
             )
+
+    def _missing_label_columns(self, labeled_df: pd.DataFrame) -> List[str]:
+        """Return configured market label columns absent from the labeled file."""
+        expected = [
+            market_name
+            for markets in MARKET_DEFINITIONS.values()
+            for market_name in markets.keys()
+            if market_name != 'dependencies'
+        ]
+        return [col for col in expected if col not in labeled_df.columns]
 
     def _compute_labels(self, df: pd.DataFrame) -> pd.DataFrame:
         """

@@ -226,9 +226,11 @@ class ModelTrainer:
 
         model.save(save_path)
 
-        # 8.5 Fit post-hoc calibrator on validation split only (never test).
+        # 8.5 Fit post-hoc calibrator on validation split when available (never test).
         calibrator_meta = self._fit_posthoc_calibrator(
             model=model,
+            X_train=X_train,
+            y_train=y_train,
             X_val=X_val_clean,
             y_val=y_val,
             model_type=model_type,
@@ -453,6 +455,8 @@ class ModelTrainer:
         self,
         *,
         model: BaseModel,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
         X_val: pd.DataFrame,
         y_val: pd.Series,
         model_type: str,
@@ -460,9 +464,25 @@ class ModelTrainer:
     ) -> Optional[Dict[str, Any]]:
         """
         Fit and persist the best post-hoc calibrator using validation data only.
+
+        When the validation split is empty, use the earliest 20% of the training
+        rows as a calibration-only fallback. This never changes model fitting or
+        the held-out test set.
         """
         try:
-            if len(X_val) == 0 or len(y_val) == 0:
+            if len(X_val) == 0:
+                if len(X_train) == 0 or len(y_train) == 0:
+                    return None
+
+                fallback_n = max(1, int(np.ceil(len(X_train) * 0.2)))
+                X_val = X_train.iloc[:fallback_n]
+                y_val = y_train.iloc[:fallback_n]
+                logger.warning(
+                    "Val split empty for calibration — using training holdout fallback (n=%s)",
+                    fallback_n,
+                )
+
+            if len(y_val) == 0:
                 return None
 
             val_preds = model.predict(X_val)

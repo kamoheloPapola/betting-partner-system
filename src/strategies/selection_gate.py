@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 # Default Double Chance baseline (high probability market)
 DC_BASELINE_OVERRIDE = 0.70
 
-# Cached drift status to avoid repeated checks
-_DRIFT_STATUS_CACHE: Optional[str] = None
+# Cached drift status keyed by league — avoids repeated checks per league
+_DRIFT_STATUS_CACHE: Dict[str, str] = {}
 class SelectionGate:
     """
     Production-Grade Selection Gate (v1.0).
@@ -181,24 +181,24 @@ class SelectionGate:
                 
             # GATE 4: Market Drift (ECE-based detection)
             # Check if the drift guardrail has flagged degraded model performance
+            # Cache is keyed by league — a STOP in one league does not block others.
             global _DRIFT_STATUS_CACHE
-            
-            # Action 3: Drift Enforcement Sync (MANDATORY)
-            # Read-through drift status if previous status was STOP or if cache is empty.
-            # Caching is allowed ONLY for non-critical states (OK, WARN).
-            if _DRIFT_STATUS_CACHE is None or _DRIFT_STATUS_CACHE == "STOP":
+            league_key = str(p.get('league', 'GLOBAL'))
+            cached = _DRIFT_STATUS_CACHE.get(league_key)
+            if cached is None or cached == "STOP":
                 try:
                     drift_guard = DriftGuardrail()
-                    _DRIFT_STATUS_CACHE = drift_guard.check_drift()
-                    logger.debug(f"Drift status read: {_DRIFT_STATUS_CACHE}")
+                    cached = drift_guard.check_drift(league=league_key)
+                    _DRIFT_STATUS_CACHE[league_key] = cached
+                    logger.debug(f"Drift status read for {league_key}: {cached}")
                 except Exception as e:
-                    logger.warning(f"Drift check failed: {e}, assuming OK")
-                    _DRIFT_STATUS_CACHE = "OK"
-            
-            if _DRIFT_STATUS_CACHE not in ("OK", "GO", "WATCH", "WARN"):
-                # STOP, FAIL, CRITICAL all block predictions
+                    logger.warning(f"Drift check failed for {league_key}: {e}, assuming OK")
+                    cached = "OK"
+                    _DRIFT_STATUS_CACHE[league_key] = cached
+            if cached not in ("OK", "GO", "WATCH", "WARN"):
+                # STOP, FAIL, CRITICAL all block predictions for this league only
                 stats['GATE_4_DRIFT_BLOCKED'] += 1
-                p['rejection_reason'] = f"DRIFT_BLOCKED (status={_DRIFT_STATUS_CACHE})"
+                p['rejection_reason'] = f"DRIFT_BLOCKED (league={league_key}, status={cached})"
                 continue
             
             # Passed Individual Gates

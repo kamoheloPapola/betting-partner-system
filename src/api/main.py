@@ -35,6 +35,7 @@ from src.api.routes.frontend import router as frontend_router
 from src.config import DATA_DIR, MODELS_DIR
 from src.config.model_state import get_model_state, is_locked
 from src.core.exceptions import ConfigurationError, DataValidationError
+from src.ml.model_db import ModelHistoryDB
 from src.ml.registry import ModelRegistry
 from src.monitoring.drift_orchestrator import DriftOrchestrator
 from src.monitoring.telemetry import capture_alert, capture_exception, init_sentry
@@ -45,6 +46,13 @@ from src.strategies.slip_builder import ForbiddenFruitSlipBuilder
 logger = logging.getLogger(__name__)
 _LAST_GLOBAL_DRIFT_STATUS: Optional[str] = None
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
+DEFAULT_TRAINING_LEAGUES = ["PL", "BL1", "FL1", "SA", "PD"]
+MODEL_CONFIGS = [
+    {"name": "poisson_home_base"},
+    {"name": "poisson_away_base"},
+    {"name": "nb_home_corners_base"},
+    {"name": "nb_away_corners_base"},
+]
 
 try:
     from sentry_sdk.integrations.fastapi import FastApiIntegration

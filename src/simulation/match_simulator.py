@@ -106,6 +106,10 @@ class SimulationResult:
 
     # --- Uncertainty ---
     entropy: float
+    scoreline_entropy: float
+    home_win_ci_90: float
+    draw_ci_90: float
+    away_win_ci_90: float
     match_type: str  # "high_uncertainty", "balanced", or "predictable"
 
     # --- Coverage ---
@@ -171,11 +175,17 @@ class MatchSimulator:
         # 2. Tempo correlation: log-normal shared noise factor per simulation.
         #    Models the reality that games have shared tempo (open vs defensive).
         #    LogNormal guarantees tempo > 0, unlike Normal which can go negative.
-        tempo = self.rng.lognormal(mean=0.0, sigma=tempo_sigma, size=self.n_simulations)
+        # Asymmetric tempo: shared component drives correlation,
+        # independent components allow divergence per team.
+        sigma_shared = tempo_sigma * 0.8
+        sigma_ind = tempo_sigma * 0.4
+        shared = self.rng.lognormal(mean=0.0, sigma=sigma_shared, size=self.n_simulations)
+        home_tempo = shared * self.rng.lognormal(mean=0.0, sigma=sigma_ind, size=self.n_simulations)
+        away_tempo = shared * self.rng.lognormal(mean=0.0, sigma=sigma_ind, size=self.n_simulations)
 
         # 3. Per-simulation lambdas
-        home_lambdas = home_xg * tempo
-        away_lambdas = away_xg * tempo
+        home_lambdas = home_xg * home_tempo
+        away_lambdas = away_xg * away_tempo
 
         # 4. Draw goals from Poisson distributions (vectorized)
         home_goals = self.rng.poisson(home_lambdas)
@@ -192,6 +202,10 @@ class MatchSimulator:
         home_win_prob = float(np.mean(home_goals > away_goals))
         draw_prob = float(np.mean(home_goals == away_goals))
         away_win_prob = float(np.mean(home_goals < away_goals))
+        # 90% confidence intervals (Bernoulli normal approximation)
+        home_win_ci_90 = float(1.645 * np.sqrt(home_win_prob * (1 - home_win_prob) / n))
+        draw_ci_90 = float(1.645 * np.sqrt(draw_prob * (1 - draw_prob) / n))
+        away_win_ci_90 = float(1.645 * np.sqrt(away_win_prob * (1 - away_win_prob) / n))
 
         # --- Over/Under (integer thresholds: >2 means ≥3, i.e. over 2.5) ---
         over_1_5 = float(np.mean(total_goals > 1))
@@ -218,16 +232,25 @@ class MatchSimulator:
         # --- Tail mass: probability not captured by top scorelines ---
         tail_mass = round(1.0 - sum(scoreline_probs.values()), 4)
 
-        # --- Entropy (1X2 distribution uncertainty) ---
+        # --- Scoreline entropy (measures goal volume diversity, not competitiveness) ---
+        size = self.max_goals + 1
+        counts_flat = np.zeros(size * size, dtype=np.int64)
+        np.add.at(counts_flat,
+                  home_goals_capped * size + away_goals_capped, 1)
+        probs_flat = counts_flat[counts_flat > 0] / n
+        scoreline_entropy = float(scipy_entropy(probs_flat, base=2))
+
+        # --- 1X2 entropy (measures competitive uncertainty — used for match_type) ---
         p_1x2 = np.array([home_win_prob, draw_prob, away_win_prob])
-        # Filter zeros to avoid log(0)
         p_1x2_nonzero = p_1x2[p_1x2 > 0]
         match_entropy = float(scipy_entropy(p_1x2_nonzero, base=2))
 
-        # --- Entropy classification ---
-        if match_entropy > ENTROPY_HIGH_UNCERTAINTY:
+        # --- Match type classification based on 1X2 entropy ---
+        # 1X2 entropy range: 0 (certain) to log2(3)=1.585 (perfectly balanced).
+        # Thresholds: predictable < 1.2 <= balanced < 1.5 <= high_uncertainty
+        if match_entropy > 1.5:
             match_type = "high_uncertainty"
-        elif match_entropy > ENTROPY_BALANCED:
+        elif match_entropy > 1.2:
             match_type = "balanced"
         else:
             match_type = "predictable"
@@ -257,6 +280,10 @@ class MatchSimulator:
             home_under_1_5_prob=home_under_1_5_prob,
             away_under_1_5_prob=away_under_1_5_prob,
             entropy=match_entropy,
+            scoreline_entropy=scoreline_entropy,
+            home_win_ci_90=home_win_ci_90,
+            draw_ci_90=draw_ci_90,
+            away_win_ci_90=away_win_ci_90,
             match_type=match_type,
             tail_mass=tail_mass,
             n_simulations=self.n_simulations,

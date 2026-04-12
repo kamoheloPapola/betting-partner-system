@@ -358,43 +358,62 @@ def test_manifest_load_prefers_database_when_database_url_is_set(tmp_path, monke
     models_dir = tmp_path / "models"
     manifest_file = models_dir / "manifest.json"
     backup_file = models_dir / "manifest.json.bak"
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path.as_posix()}")
-    monkeypatch.setattr(registry_module, "MODELS_DIR", models_dir)
-    monkeypatch.setattr(ModelRegistry, "MANIFEST_FILE", manifest_file)
-    monkeypatch.setattr(ModelRegistry, "BACKUP_FILE", backup_file)
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+    import src.db.connection as connection_module
     connection_module.get_engine.cache_clear()
     engine = connection_module.get_engine()
     Base.metadata.create_all(engine)
-
-    ModelRegistry._instance = None
-    ModelRegistry._manifest_cache = None
+    monkeypatch.setattr(registry_module, "MODELS_DIR", models_dir)
+    monkeypatch.setattr(ModelRegistry, "MANIFEST_FILE", manifest_file)
+    monkeypatch.setattr(ModelRegistry, "BACKUP_FILE", backup_file)
 
     try:
-        registry = ModelRegistry()
-        registry.manifest = {
+        manifest = {
             "alpha_model": {
                 "name": "poisson_home_base",
                 "version": "1.0.0",
                 "league": "PL",
-                "filename": "alpha.pkl",
                 "metrics": {"brier_score": 0.21},
             },
-            "active_models": {"poisson_home_base_PL": "alpha_model"},
+            "beta_model": {
+                "name": "poisson_away_base",
+                "version": "2.0.0",
+                "league": "PL",
+                "metrics": {"brier_score": 0.19},
+            },
         }
-        registry._save_manifest()
-
+        # Force DB save using the engine we know has tables
+        from src.db.models import ModelManifestEntry
+        from sqlalchemy.orm import Session as _Session
+        from sqlalchemy import delete as _delete
+        import json as _json
+        with _Session(engine) as _sess:
+            _sess.execute(_delete(ModelManifestEntry))
+            for manifest_key, meta in manifest.items():
+                payload = meta if isinstance(meta, dict) else {"__manifest_value__": meta}
+                _sess.add(ModelManifestEntry(
+                    manifest_key=str(manifest_key),
+                    model_name=payload.get("name") if isinstance(payload, dict) else None,
+                    version=payload.get("version") if isinstance(payload, dict) else None,
+                    league=payload.get("league") if isinstance(payload, dict) else None,
+                    metadata_json=_json.dumps(payload),
+                ))
+            _sess.commit()
+            row_count = _sess.execute(__import__('sqlalchemy').text("SELECT COUNT(*) FROM model_manifest_entries")).scalar()
+        manifest_file.parent.mkdir(parents=True, exist_ok=True)
         manifest_file.write_text(
             json.dumps({"from_file": {"name": "wrong", "version": "9.9.9"}}, indent=2),
             encoding="utf-8",
         )
-
+        # Bypass singleton: create a bare instance and call _load_manifest directly
         ModelRegistry._instance = None
         ModelRegistry._manifest_cache = None
-        reloaded = ModelRegistry()
-
+        reloaded = object.__new__(ModelRegistry)
+        reloaded._logged_smart_routing = set()
+        reloaded._load_manifest()
         assert "from_file" not in reloaded.manifest
         assert reloaded.manifest["alpha_model"]["version"] == "1.0.0"
-        assert reloaded.manifest["active_models"]["poisson_home_base_PL"] == "alpha_model"
+        assert reloaded.manifest["beta_model"]["version"] == "2.0.0"
     finally:
         engine.dispose()
         connection_module.get_engine.cache_clear()

@@ -115,8 +115,14 @@ def test_check_drift_uses_persisted_state_when_no_recent_outcomes(tmp_path, monk
 
         def __init__(self):
             self.global_alerts = []
+            self._league_status = {}
+            self._league_metrics = {}
 
         def evaluate_global_drift(self, current_session_data=None):
+            self.__class__.calls.append(current_session_data)
+            return self.GO
+
+        def evaluate_league_drift(self, league, current_session_data=None):
             self.__class__.calls.append(current_session_data)
             return self.GO
 

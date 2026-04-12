@@ -1,5 +1,7 @@
 from fastapi.testclient import TestClient
 
+from src.api.cache import prediction_cache
+from src.api.cache import prediction_cache_key, slip_cache_key
 from src.api.main import app
 from src.core.exceptions import ConfigurationError
 
@@ -57,6 +59,9 @@ def test_league_slips_endpoint_returns_latest_recommendations(monkeypatch):
 
 
 def test_league_slips_endpoint_returns_503_on_model_environment_mismatch(monkeypatch):
+    prediction_cache.invalidate(prediction_cache_key("PL"))
+    prediction_cache.invalidate(slip_cache_key("PL", 0.65, 4))
+
     def fake_predict_upcoming(self, league="PL", limit=None):
         raise ConfigurationError("sklearn 1.8.0 required")
 
@@ -72,6 +77,8 @@ def test_league_slips_endpoint_returns_503_on_model_environment_mismatch(monkeyp
 
 
 def test_league_slips_endpoint_returns_blocked_response_when_drift_stops_predictions(monkeypatch):
+    prediction_cache.invalidate(slip_cache_key("PL", 0.65, 4))
+
     def fail_if_called(self, league="PL", limit=None):
         raise AssertionError("predict_upcoming should not run when drift blocks slip generation")
 

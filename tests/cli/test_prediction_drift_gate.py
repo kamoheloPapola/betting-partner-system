@@ -50,6 +50,10 @@ class _FakeOrchestrator:
     def load_global_state(self) -> None:
         self.load_calls += 1
 
+    def evaluate_league_drift(self, league, current_session_data=None):
+        self.load_calls += 1
+        return self.GO
+
 
 def test_run_predict_loop_reads_persisted_global_drift_state(monkeypatch):
     monkeypatch.setattr(prediction_module, "Progress", _DummyProgress)
@@ -58,7 +62,7 @@ def test_run_predict_loop_reads_persisted_global_drift_state(monkeypatch):
     monkeypatch.setattr(
         prediction_module,
         "_calculate_probabilities_v2",
-        lambda match, suite, lg, is_intensity, warning_collector, use_simulator=True: (
+        lambda match, suite, lg, is_intensity, warning_collector, simulator=None, use_simulator=True, rl_bandit=None: (
             {"home": 0.55},
             {"core": {}},
         ),

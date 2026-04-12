@@ -55,7 +55,22 @@ class DriftGuardrail:
         )
         self._sync_from_orchestrator()
 
-    def check_drift(self, current_session_data: Optional[Dict[str, Any]] = None) -> str:
+    def check_drift(
+        self,
+        current_session_data: Optional[Dict[str, Any]] = None,
+        league: Optional[str] = None,
+    ) -> str:
+        """
+        Return drift status as "OK" | "WATCH" | "STOP".
+
+        When `league` is provided, evaluates and returns the per-league drift
+        status from the league-scoped state file. The global state is not
+        touched. When `league` is None, falls back to global evaluation
+        (original behaviour preserved).
+        """
+        if league is not None:
+            raw = self._orchestrator.evaluate_league_drift(league, current_session_data)
+            return self._to_legacy_status(raw)
         self._orchestrator.evaluate_global_drift(current_session_data)
         self._sync_from_orchestrator()
         return self.status
@@ -88,4 +103,3 @@ class DriftGuardrail:
         if status == DriftOrchestrator.WATCH:
             return "WATCH"
         return "STOP"
-

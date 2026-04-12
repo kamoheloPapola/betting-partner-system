@@ -275,9 +275,9 @@ class MPIG:
             raise IntegrityError(
                 f"Drift Guard triggered STOP. Alerts: {self.drift_guard.alerts}"
             )
-        elif status == "CAUTION":
+        elif status in ("WATCH", "CAUTION"):
             logger.warning(
-                f"MPIG Phase 6: Drift Guard shows CAUTION. "
+                f"MPIG Phase 6: Drift Guard shows {status}. "
                 f"Alerts: {self.drift_guard.alerts}"
             )
             self.results["drift_warnings"] = self.drift_guard.alerts

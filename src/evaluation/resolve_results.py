@@ -103,12 +103,56 @@ class AuthoritativeResolver:
     ]
     
     MARKET_ALIASES: ClassVar[Dict[str, str]] = {
+        # 1x2
+        'HOME_WIN': 'home_win',
+        'AWAY_WIN': 'away_win',
+
+        # Goals / team goals
         'HOME_TG_U1.5': 'home_under_1_5',
         'AWAY_TG_U1.5': 'away_under_1_5',
-        'CORNERS_U11.5': 'under_11_5_corners',
-        'cards_under_5_5': 'total_cards_under_5_5',
-        'HOME_WIN': 'home_win',
-        'AWAY_WIN': 'away_win'
+
+        # Total corners — main markets
+        'CORNERS_U11.5': 'corners_under_11_5',
+        'corners_u11.5': 'corners_under_11_5',
+        'corn_u11': 'corners_under_11_5',
+        'corners_under_11_5': 'corners_under_11_5',
+        'corn_o75': 'corners_over_7_5',
+        'corners_over_7_5': 'corners_over_7_5',
+
+        # Home corners lines
+        'corn_home_u25': 'home_corners_under_2_5',
+        'corn_home_o25': 'home_corners_over_2_5',
+        'corn_home_u35': 'home_corners_under_3_5',
+        'corn_home_o35': 'home_corners_over_3_5',
+        'corn_home_u45': 'home_corners_under_4_5',
+        'corn_home_o45': 'home_corners_over_4_5',
+        'corn_home_u55': 'home_corners_under_5_5',
+        'corn_home_o55': 'home_corners_over_5_5',
+        'corn_home_u65': 'home_corners_under_6_5',
+        'corn_home_o65': 'home_corners_over_6_5',
+
+        # Away corners lines
+        'corn_away_u25': 'away_corners_under_2_5',
+        'corn_away_o25': 'away_corners_over_2_5',
+        'corn_away_u35': 'away_corners_under_3_5',
+        'corn_away_o35': 'away_corners_over_3_5',
+        'corn_away_u45': 'away_corners_under_4_5',
+        'corn_away_o45': 'away_corners_over_4_5',
+        'corn_away_u55': 'away_corners_under_5_5',
+        'corn_away_o55': 'away_corners_over_5_5',
+        'corn_away_u65': 'away_corners_under_6_5',
+        'corn_away_o65': 'away_corners_over_6_5',
+
+        # Cards
+        'cards_u4.5': 'total_cards_under_4_5',
+        'card_u45': 'total_cards_under_4_5',
+        'CARDS_U4.5': 'total_cards_under_4_5',
+        'cards_o2.5': 'cards_over_2_5',
+        'cards_under_5_5': 'cards_under_5_5',
+
+        # Double chance
+        'HOME_DC': 'home_dc',
+        'AWAY_DC': 'away_dc',
     }
     VALID_LEAGUES: ClassVar[Set[str]] = {"PL", "BL1", "PD", "SA", "FL1", "UCL"}
 
@@ -598,10 +642,24 @@ class AuthoritativeResolver:
         
         # Batch save to manage memory and partial writes
         total_saved = 0
+        tmp_path = self.outcomes_path.with_suffix(".tmp")
+        if tmp_path.exists():
+            tmp_path.unlink()
+        if self.outcomes_path.exists():
+            tmp_path.write_bytes(self.outcomes_path.read_bytes())
         
         for i in range(0, len(outcomes), batch_size):
             batch = outcomes[i:i+batch_size]
-            normalized_batch = [self._normalize_outcome_row(row) for row in batch]
+            normalized_batch = []
+            for row in batch:
+                try:
+                    normalized_batch.append(self._normalize_outcome_row(row))
+                except ValueError as exc:
+                    logger.warning(
+                        "Skipping invalid outcome row (match_hash=%s): %s",
+                        row.get("match_hash"),
+                        exc,
+                    )
             new_df = pd.DataFrame(normalized_batch, columns=self.OUTCOME_COLUMNS)
             
             # Determine mode appropriately: append always unless it's the very first write to a new file
@@ -615,9 +673,14 @@ class AuthoritativeResolver:
                  mode = 'a'
                  header = False
              
-            new_df.to_csv(self.outcomes_path, mode=mode, header=header, index=False)
+            new_df.to_csv(tmp_path, mode=mode, header=header, index=False)
             self._save_outcomes_batch_to_db(normalized_batch)
             total_saved += len(batch)
+        if tmp_path.exists():
+            if self.outcomes_path.exists() and (tmp_path.stat().st_size == 0):
+                tmp_path.unlink()
+            else:
+                os.replace(tmp_path, self.outcomes_path)
         
         logger.info(
             f"Resolved predictions",
@@ -715,6 +778,8 @@ class AuthoritativeResolver:
                 session.commit()
         except Exception as exc:
             logger.warning("Failed to persist resolved predictions to database: %s", exc)
+        
+MARKET_ALIASES = AuthoritativeResolver.MARKET_ALIASES
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

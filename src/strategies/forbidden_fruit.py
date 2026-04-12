@@ -6,8 +6,10 @@ CSS-based slip construction, and drift guardrail enforcement.
 This is the core strategy orchestrator for competitive selection.
 """
 import itertools
+import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -33,6 +35,26 @@ from src.ml.confidence import get_confidence_calculator, get_action_tier
 __all__ = ["ForbiddenFruitEvaluator", "ForbiddenFruitEngine"]
 
 logger = logging.getLogger(__name__)
+
+
+def log_prediction(prediction: dict) -> None:
+    """Persist a prediction as a JSONL record without affecting prediction flow."""
+    try:
+        log_path = (
+            Path(__file__).resolve().parents[2]
+            / "data"
+            / "predictions"
+            / "predictions_log.jsonl"
+        )
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "timestamp": f"{datetime.utcnow().isoformat()}Z",
+            **prediction,
+        }
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, default=str) + "\n")
+    except Exception:
+        pass
 
 # === Strategy Constants ===
 # Gate relaxation for surging underdogs
@@ -192,8 +214,20 @@ class ForbiddenFruitEvaluator:
              return []
         
         # Audit Assertion: All probabilities must be valid
+        validated_markets = []
         for m in all_markets:
-            assert 0.0 <= m['conf'] <= 1.0, f"Probability violation in {m['market_name']}: {m['conf']}"
+            if not (0.0 <= m['conf'] <= 1.0):
+                logger.error(
+                    "Probability violation in %s: %s - skipping",
+                    m['market_name'],
+                    m['conf'],
+                )
+                continue
+            validated_markets.append(m)
+        all_markets = validated_markets
+
+        if not all_markets:
+            return []
         
         # Dissonance Flagging
         dissonance = self._check_dissonance(all_markets)
@@ -693,8 +727,13 @@ class ForbiddenFruitEngine:
                 # Registry coverage check
                 league_code = c.get('league')
                 if league_code:
-                    assert self._registry.get_coverage_status(league_code) != "UNKNOWN", \
-                        f"Market '{m_name}' for league '{league_code}' is not backed by a registered model."
+                    if self._registry.get_coverage_status(league_code) == "UNKNOWN":
+                        logger.warning(
+                            "Skipping market '%s': league '%s' has no registered model",
+                            m_name,
+                            league_code,
+                        )
+                        continue
                 pool.append(c)
                 
         return pool
@@ -916,7 +955,17 @@ class ForbiddenFruitEngine:
                 }
             )
 
-        return self.edge_engine.rank_opportunities(opportunities)
+        ranked_opportunities = self.edge_engine.rank_opportunities(opportunities)
+        for prediction in ranked_opportunities:
+            log_prediction(
+                {
+                    **prediction,
+                    "home_team": match.get("home_team"),
+                    "away_team": match.get("away_team"),
+                    "match_date": match.get("date"),
+                }
+            )
+        return ranked_opportunities
 
     def calibrated_selection(
         self,

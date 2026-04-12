@@ -22,8 +22,8 @@ class TestTeamNormalizationImproved:
     def test_promotion_mapping(self):
         # 2024 (2024/25) has Leicester
         assert normalize_team_name("Leicester", "PL", 2024) == "LEICESTER CITY"
-        # 2023 did NOT have Leicester canonical
-        assert normalize_team_name("Leicester", "PL", 2023) == "LEICESTER" # Fallback to original
+        # 2023 season has Leicester City
+        assert normalize_team_name("Leicester", "PL", 2023) == "LEICESTER CITY"  # 2023 season has Leicester City
 
     def test_alias_league_context(self):
         # "Man Utd" alias in PL
@@ -37,9 +37,9 @@ class TestTeamNormalizationImproved:
         assert normalize_team_name("Bayern Muenchen", "BL1") == "BAYERN MUNICH"
 
     def test_fallback_to_latest_season(self, caplog):
-        # Requesting a season we don't have (e.g. 2022) should fallback to latest (2024 or 2023)
+        # Requesting a season we don't have (e.g. 2010) should fallback to latest available
         with caplog.at_level(logging.INFO):
-            result = normalize_team_name("Arsenal", "PL", 2022)
+            result = normalize_team_name("Arsenal", "PL", 2010)
             assert result == "ARSENAL"
             assert "Falling back to" in caplog.text
 

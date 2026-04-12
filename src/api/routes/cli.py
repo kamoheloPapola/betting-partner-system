@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import subprocess
 import sys
 from datetime import datetime
@@ -16,6 +17,13 @@ from src.predictions.predictor import Predictor
 
 router = APIRouter(prefix="/cli", tags=["cli"])
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+logger = logging.getLogger(__name__)
+
+if not (PROJECT_ROOT / "scripts").is_dir():
+    raise RuntimeError(
+        f"PROJECT_ROOT resolved to {PROJECT_ROOT} but scripts/ dir not found. "
+        "Check file location - cli.py expects to live at src/api/routes/cli.py"
+    )
 
 
 def _manifest_models(registry: ModelRegistry) -> List[Dict[str, Any]]:
@@ -200,13 +208,14 @@ def cli_train(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, An
                 capture_output=True,
                 text=True,
                 timeout=300,
-                cwd=PROJECT_ROOT,
+                cwd=str(PROJECT_ROOT),
             )
             if result.returncode == 0:
                 log.append(f"[OK]   {league} training complete")
             else:
-                stderr = result.stderr or result.stdout or "Unknown training error."
-                log.append(f"[ERR]  {league}: {stderr[:200]}")
+                error_msg = (result.stderr or result.stdout or "Unknown error")[:500]
+                log.append(f"[ERR] {league}: {error_msg}")
+                logger.error("Training failed for %s: %s", league, error_msg)
         except Exception as exc:
             log.append(f"[ERR]  {league}: {str(exc)}")
 

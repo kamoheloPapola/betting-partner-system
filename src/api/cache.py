@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional
 MODEL_HEALTH_CACHE_KEY = "model_health"
 
 
-def prediction_cache_key(league: Optional[str]) -> str:
+def prediction_cache_key(league: Optional[str], limit: Optional[int] = None) -> str:
     league_key = str(league or "ALL").strip().upper() or "ALL"
     return f"predictions_{league_key}"
 

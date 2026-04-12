@@ -51,7 +51,7 @@ class Thresholds:
     # =========================================================================
     GATE_PROB_GOALS: Final[float] = 0.74
     GATE_PROB_O15: Final[float] = 0.76
-    GATE_PROB_CORNERS: Final[float] = 0.72
+    GATE_PROB_CORNERS: Final[float] = 0.85
     GATE_PROB_CARDS: Final[float] = 0.70
     GATE_PROB_DC: Final[float] = 0.77
     GATE_PROB_1X2: Final[float] = 0.73

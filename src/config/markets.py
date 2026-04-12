@@ -35,7 +35,7 @@ def _generate_team_corner_markets() -> Dict[str, Any]:
     
     for team in ['home', 'away']:
         col = f'{team}_corners'
-        for line in [2.5, 3.5, 4.5, 5.5]:
+        for line in [2.5, 3.5, 4.5, 5.5, 6.5]:
             line_str = str(line).replace('.', '_')
             # Default argument binding prevents late binding issues
             markets[f'{team}_corners_under_{line_str}'] = (
@@ -95,6 +95,13 @@ MARKET_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         'cards_over_2_5': lambda df: (df['home_cards'] + df['away_cards']) > Thresholds.CARDS_O25_LINE,
         'cards_over_3_5': lambda df: (df['home_cards'] + df['away_cards']) > 3.5,
         'dependencies': ['home_cards', 'away_cards']
+    },
+
+    # --- Double Chance Markets ---
+    'double_chance': {
+        'home_dc': lambda df: (df['home_goals'] > df['away_goals']) | (df['home_goals'] == df['away_goals']),
+        'away_dc': lambda df: (df['away_goals'] > df['home_goals']) | (df['home_goals'] == df['away_goals']),
+        'dependencies': ['home_goals', 'away_goals']
     },
 }
 

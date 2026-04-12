@@ -23,6 +23,7 @@ A production-grade, AI-driven football betting system that generates data-driven
 
 3. Setup Environment Variables:
    Copy `.env.example` to `.env` and fill in keys.
+   Set `MODELS_DIR` in your `.env` to override the default model storage location (`src/ml/models`). See `.env.example` for all configurable variables.
 
 ## Architecture
 

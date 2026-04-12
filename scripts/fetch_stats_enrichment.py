@@ -133,11 +133,11 @@ def _zero(value: int | None) -> int:
     return 0 if value is None or pd.isna(value) else int(value)
 
 
-def enrich_league(league: str, season: int, api_league_id: int) -> tuple[int, int]:
+def enrich_league(league: str, season: int, api_league_id: int) -> tuple[int, int, bool]:
     processed_path = DATA_DIR / f"{league}_{season}.csv"
     if not processed_path.exists():
         logger.warning("Processed CSV missing for %s %s: %s", league, season, processed_path)
-        return (0, 0)
+        return (0, 0, False)
 
     processed_df = pd.read_csv(processed_path, encoding="utf-8")
 
@@ -161,10 +161,10 @@ def enrich_league(league: str, season: int, api_league_id: int) -> tuple[int, in
         },
     )
     if fixtures_payload is None:
-        return (0, 0)
+        return (0, 0, True)
     if fixtures_payload.get("results", 0) == 0:
         logger.info("No finished fixtures for %s %s in %s to %s", league, season, from_date, to_date)
-        return (0, 0)
+        return (0, 0, False)
 
     fixtures = fixtures_payload.get("response", [])
     enriched_count = 0
@@ -257,7 +257,7 @@ def enrich_league(league: str, season: int, api_league_id: int) -> tuple[int, in
     if master_df is not None and master_mutated:
         _atomic_write_csv(master_df, MASTER_PATH)
 
-    return (enriched_count, len(fixtures))
+    return (enriched_count, len(fixtures), False)
 
 
 def current_season_year() -> int:
@@ -273,13 +273,16 @@ def main() -> int:
         season = current_season_year()
         total_enriched = 0
         total_fixtures = 0
+        api_failures = 0
         for league, api_league_id in LEAGUE_IDS.items():
-            enriched, fixtures = enrich_league(league, season, api_league_id)
+            enriched, fixtures, failed = enrich_league(league, season, api_league_id)
             total_enriched += enriched
             total_fixtures += fixtures
-            print(f"{league}: {enriched}/{fixtures} fixtures enriched")
-        print(f"Total: {total_enriched}/{total_fixtures} enriched")
-        return 0 if total_enriched >= 0 else 1
+            if failed:
+                api_failures += 1
+            print(f"{league}: {enriched}/{fixtures} fixtures enriched{' [API FAILURE]' if failed else ''}")
+        print(f"Total: {total_enriched}/{total_fixtures} enriched, {api_failures} API failure(s)")
+        return 1 if api_failures > 0 else 0
     except Exception as exc:
         logger.error("Unhandled exception in stats enrichment: %s", exc)
         return 1

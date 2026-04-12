@@ -435,7 +435,7 @@ def _divergence_pct(a: float, b: float) -> float:
     return abs(a - b) / denom
 
 
-def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, simulator: "MatchSimulator", league: str | None = None, rl_weights: Dict[str, float] | None = None) -> Dict[str, Any]:
+def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, simulator: "MatchSimulator", league: str | None = None, rl_weights: Dict[str, float] | None = None, use_simulator: bool = True) -> Dict[str, Any]:
     lgbm_feats = cast(List[str], suite['meta_goals']['features'])
     lh_lgbm = _predict_scalar(suite['mh_goals'], match, lgbm_feats, f"{ctx}:GoalsH:LGBM")
     la_lgbm = _predict_scalar(suite['ma_goals'], match, lgbm_feats, f"{ctx}:GoalsA:LGBM")
@@ -493,31 +493,40 @@ def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, simulator: "Match
     sim_n: Optional[int] = None
     sim_top_scorelines: List[Dict[str, float | str]] = []
 
-    sim_res = simulator.simulate(model_home_lambda, model_away_lambda, rl_weights=rl_weights)
-
-    res = {
-        'home_win': sim_res.home_win_prob,
-        'draw': sim_res.draw_prob,
-        'away_win': sim_res.away_win_prob,
-        'over_2_5': sim_res.over_2_5,
-        'under_2_5': sim_res.under_2_5,
-        'over_1_5': sim_res.over_1_5,
-        'under_3_5': sim_res.under_3_5,
-        'btts_yes': sim_res.btts_prob,
-        'btts_no': 1.0 - sim_res.btts_prob,
-        'home_under_1_5': sim_res.home_under_1_5_prob,
-        'away_under_1_5': sim_res.away_under_1_5_prob,
-        'projected_home_goals': sim_res.expected_home_goals,
-        'projected_away_goals': sim_res.expected_away_goals,
-    }
-    sim_entropy = sim_res.entropy
-    sim_tail_mass = sim_res.tail_mass
-    sim_match_type = sim_res.match_type
-    sim_n = sim_res.n_simulations
-    sim_top_scorelines = [
-        {"score": f"{home}-{away}", "probability": prob}
-        for (home, away), prob in sim_res.scoreline_probs.items()
-    ]
+    if use_simulator:
+        sim_res = simulator.simulate(model_home_lambda, model_away_lambda, rl_weights=rl_weights)
+        res = {
+            'home_win': sim_res.home_win_prob,
+            'draw': sim_res.draw_prob,
+            'away_win': sim_res.away_win_prob,
+            'over_2_5': sim_res.over_2_5,
+            'under_2_5': sim_res.under_2_5,
+            'over_1_5': sim_res.over_1_5,
+            'under_3_5': sim_res.under_3_5,
+            'btts_yes': sim_res.btts_prob,
+            'btts_no': 1.0 - sim_res.btts_prob,
+            'home_under_1_5': sim_res.home_under_1_5_prob,
+            'away_under_1_5': sim_res.away_under_1_5_prob,
+            'projected_home_goals': sim_res.expected_home_goals,
+            'projected_away_goals': sim_res.expected_away_goals,
+        }
+        sim_entropy = sim_res.entropy
+        sim_tail_mass = sim_res.tail_mass
+        sim_match_type = sim_res.match_type
+        sim_n = sim_res.n_simulations
+        sim_top_scorelines = [
+            {"score": f"{home}-{away}", "probability": prob}
+            for (home, away), prob in sim_res.scoreline_probs.items()
+        ]
+    else:
+        res = PoissonEngine().calculate_probabilities(model_home_lambda, model_away_lambda)
+        # Normalise key name: PoissonEngine uses btts_yes, downstream code uses btts_yes too
+        # but sim path used btts_prob attribute - res dict is already correct
+        sim_entropy = None
+        sim_tail_mass = None
+        sim_match_type = None
+        sim_n = None
+        sim_top_scorelines = []
     
     # === H2H ADJUSTMENT FOR GOALS ===
     h2h_match_count = match.get('h2h_match_count', 0)
@@ -1590,7 +1599,7 @@ def _calculate_probabilities_v2(
     if rl_bandit is not None:
         context = rl_bandit.context_key(league, RL_SHADOW_MARKET)
         rl_weights = rl_bandit.get_weights(context)
-    p.update(_calc_goals(match, suite, ctx, simulator=simulator, league=league, rl_weights=rl_weights))
+    p.update(_calc_goals(match, suite, ctx, simulator=simulator, league=league, rl_weights=rl_weights, use_simulator=use_simulator))
     
     # 2. Secondary Markets (Best Effort)
     res_corn, attr_corn = _calc_corners(match, suite, ctx, league, intensity_boost, warning_collector)
