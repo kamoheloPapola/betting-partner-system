@@ -214,15 +214,22 @@ def _normalize_guard_status(status: Any) -> str:
         return DriftOrchestrator.GO
     if normalized in {DriftOrchestrator.GO, DriftOrchestrator.WATCH, DriftOrchestrator.STOP}:
         return normalized
-    return "UNKNOWN"
+    return DriftOrchestrator.STOP
 
 
 def _read_prediction_guard_status() -> str:
     try:
-        return _normalize_guard_status(DriftGuardrail().check_drift())
+        guard = DriftGuardrail()
+        status = _normalize_guard_status(guard.check_drift())
+        _report_drift_stop_transition({
+            "status": status,
+            "evaluated_at": guard.evaluated_at,
+            "alerts": guard.alerts,
+        })
+        return status
     except Exception as exc:
-        logger.warning("Prediction drift guard status unavailable: %s", exc)
-        return "UNKNOWN"
+        logger.error("Prediction drift guard status unavailable — failing closed: %s", exc)
+        return DriftOrchestrator.STOP
 
 
 def _empty_predictions_message(*, league: str, drift_status: str, total_predictions: int) -> Optional[str]:

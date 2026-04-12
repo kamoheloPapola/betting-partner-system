@@ -148,9 +148,9 @@ class AuthoritativeResolver:
         'corn_away_o65': 'away_corners_over_6_5',
 
         # Cards
-        'cards_u4.5': 'total_cards_under_4_5',
-        'card_u45': 'total_cards_under_4_5',
-        'CARDS_U4.5': 'total_cards_under_4_5',
+        'cards_u4.5': 'cards_under_4_5',
+        'card_u45': 'cards_under_4_5',
+        'CARDS_U4.5': 'cards_under_4_5',
         'cards_o2.5': 'cards_over_2_5',
         'cards_under_5_5': 'cards_under_5_5',
 

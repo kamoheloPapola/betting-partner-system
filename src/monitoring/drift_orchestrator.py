@@ -332,8 +332,8 @@ class DriftOrchestrator:
         """
         Load per-league drift state from file.
 
-        Fails OPEN (GO) — a missing league file means no data yet, not a fault.
-        This is intentionally different from load_global_state which fails closed.
+        Missing file -> GO (no data yet, not a fault).
+        Corrupt/unreadable file -> STOP (fail closed - bad state file is a fault).
         """
         state_file = self._league_state_file(league)
         if not state_file.exists():
@@ -345,9 +345,12 @@ class DriftOrchestrator:
             self._league_status[league] = self._normalize_state(data.get("status", self.GO))
             self._league_metrics[league] = data.get("metrics", {})
         except Exception as exc:
-            logger.error("Failed to load league drift state for %s: %s", league, exc)
-            # Fail open for per-league — do not punish all leagues for one bad file
-            self._league_status[league] = self.GO
+            logger.error(
+                "Failed to load league drift state for %s - failing closed: %s",
+                league,
+                exc,
+            )
+            self._league_status[league] = self.STOP
 
     def append_drift_alerts(
         self,
