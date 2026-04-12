@@ -305,7 +305,7 @@ def _prepare_drift_data(df: pd.DataFrame) -> pd.DataFrame:
         )
     
     # Remove rows with missing corner data
-    # 🛡️ Phase 10: Settled Outcomes Only
+    # Phase 10: Settled Outcomes Only
     # Ensure we only learn from finished matches
     from src.config.leagues import FINISHED_STATUSES
     if 'status' in df.columns:

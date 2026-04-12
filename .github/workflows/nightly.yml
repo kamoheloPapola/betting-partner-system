@@ -39,7 +39,6 @@ jobs:
       # - SPECIALIST_ENSEMBLE_XGB_WEIGHT
       # - SPECIALIST_ENSEMBLE_DIVERGENCE_THRESHOLD
       # - PREDICTION_SYSTEM_LOG_FILE
-      # - SKIP_MODEL_LOCK_CHECK
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
       FOOTBALL_DATA_ORG_KEY: ${{ secrets.FOOTBALL_DATA_ORG_KEY || secrets.FOOTBALL_DATA_API_KEY }}
@@ -66,8 +65,6 @@ jobs:
       SPECIALIST_ENSEMBLE_XGB_WEIGHT: ${{ secrets.SPECIALIST_ENSEMBLE_XGB_WEIGHT || '0.4' }}
       SPECIALIST_ENSEMBLE_DIVERGENCE_THRESHOLD: ${{ secrets.SPECIALIST_ENSEMBLE_DIVERGENCE_THRESHOLD || '0.20' }}
       PREDICTION_SYSTEM_LOG_FILE: ${{ secrets.PREDICTION_SYSTEM_LOG_FILE || 'prediction_system.log' }}
-      SKIP_MODEL_LOCK_CHECK: ${{ secrets.SKIP_MODEL_LOCK_CHECK || 'false' }}
-
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
