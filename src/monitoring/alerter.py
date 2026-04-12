@@ -34,6 +34,14 @@ class AlertConfig:
     @property
     def slack_webhook(self) -> Optional[str]:
         return os.environ.get("SLACK_WEBHOOK_URL")
+
+    @property
+    def ntfy_topic(self) -> Optional[str]:
+        return os.environ.get("NTFY_TOPIC")
+
+    @property
+    def ntfy_enabled(self) -> bool:
+        return bool(self.ntfy_topic)
     
     @property
     def email_enabled(self) -> bool:
@@ -157,6 +165,9 @@ class Alerter:
         
         if self.config.slack_webhook:
             sent = self._send_slack(formatted, severity) or sent
+
+        if self.config.ntfy_enabled:
+            sent = self._send_ntfy(formatted, severity) or sent
         
         if self.config.email_enabled and severity == "CRITICAL":
             sent = self._send_email(message, formatted) or sent
@@ -220,6 +231,36 @@ class Alerter:
         except Exception as e:
             logger.error(f"Unexpected Slack error: {e}")
         
+        return False
+
+    def _send_ntfy(self, message: str, severity: str) -> bool:
+        """Send alert via ntfy."""
+        try:
+            topic = self.config.ntfy_topic
+            if not topic:
+                return False
+
+            req = Request(
+                f"https://ntfy.sh/{topic}",
+                data=message.encode("utf-8"),
+                headers={
+                    "Title": f"Betting System {severity}",
+                    "Priority": "high" if severity == "CRITICAL" else "default",
+                    "Content-Type": "text/plain; charset=utf-8",
+                },
+            )
+
+            with urlopen(req, timeout=10) as resp:
+                if resp.status == 200:
+                    logger.info("ntfy alert sent successfully")
+                    return True
+
+            logger.error("ntfy alert failed with status %s", resp.status)
+        except URLError as e:
+            logger.error(f"ntfy alert failed: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected ntfy error: {e}")
+
         return False
     
     def _send_email(self, subject: str, body: str) -> bool:
