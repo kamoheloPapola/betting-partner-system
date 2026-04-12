@@ -8,7 +8,7 @@ This is the core strategy orchestrator for competitive selection.
 import itertools
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -48,13 +48,13 @@ def log_prediction(prediction: dict) -> None:
         )
         log_path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
-            "timestamp": f"{datetime.utcnow().isoformat()}Z",
+            "timestamp": f"{datetime.now(timezone.utc).isoformat()}",
             **prediction,
         }
         with log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, default=str) + "\n")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Failed to log prediction: %s", exc)
 
 # === Strategy Constants ===
 # Gate relaxation for surging underdogs

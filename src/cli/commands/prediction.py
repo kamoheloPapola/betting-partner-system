@@ -1117,7 +1117,7 @@ def show_predictions(
             if df_target.empty:
                 filter_label = date_filter.value if isinstance(date_filter, DateFilter) else str(date_filter)
                 console.print(
-                    f"[yellow][!] No matches found for {lg_val or current_league} with filter: {filter_label}[/yellow]"
+                    f"[yellow][!] No matches found for filter: {filter_label} ({lg_val or current_league})[/yellow]"
                 )
                 continue
 
