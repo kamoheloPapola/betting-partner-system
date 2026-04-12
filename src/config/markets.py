@@ -91,6 +91,7 @@ MARKET_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     'cards': {
         'home_cards_over_1_5': lambda df: df['home_cards'] > 1.5,
         'away_cards_over_1_5': lambda df: df['away_cards'] > 1.5,
+        'cards_under_4_5': lambda df: (df['home_cards'] + df['away_cards']) < 4.5,
         'cards_under_5_5': lambda df: (df['home_cards'] + df['away_cards']) <= Thresholds.CARDS_U55_LINE,
         'cards_over_2_5': lambda df: (df['home_cards'] + df['away_cards']) > Thresholds.CARDS_O25_LINE,
         'cards_over_3_5': lambda df: (df['home_cards'] + df['away_cards']) > 3.5,

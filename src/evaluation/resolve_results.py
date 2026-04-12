@@ -108,8 +108,12 @@ class AuthoritativeResolver:
         'AWAY_WIN': 'away_win',
 
         # Goals / team goals
-        'HOME_TG_U1.5': 'home_under_1_5',
-        'AWAY_TG_U1.5': 'away_under_1_5',
+        'HOME_TG_U1.5': 'home_goals_under_1_5',
+        'AWAY_TG_U1.5': 'away_goals_under_1_5',
+        'home_under_1_5': 'home_goals_under_1_5',
+        'away_under_1_5': 'away_goals_under_1_5',
+        'over_2_5': 'goals_over_2_5',
+        'under_2_5': 'goals_under_2_5',
 
         # Total corners — main markets
         'CORNERS_U11.5': 'corners_under_11_5',

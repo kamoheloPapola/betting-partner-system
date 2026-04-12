@@ -1446,8 +1446,8 @@ def _persist_predictions(
     # Markets to persist — must match resolver's MARKET_ALIASES targets
     # Keys are the keys in the res dict from _run_predict_loop
     MARKET_MAP = {
-        'u25':             'under_2_5',
-        'o25':             'over_2_5',
+        'u25':             'goals_under_2_5',
+        'o25':             'goals_over_2_5',
         'home_under_1_5':  'home_under_1_5',
         'away_under_1_5':  'away_under_1_5',
         'corn_u11':        'corn_u11',
@@ -1729,12 +1729,12 @@ def _prepare_bets(preds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         pool.extend([
             {**p, 'market': 'home_win', 'probability': _safe_prob(p, 'home'), 'selection': 'HOME', 'match_id': m_id},
             {**p, 'market': 'away_win', 'probability': _safe_prob(p, 'away'), 'selection': 'AWAY', 'match_id': m_id},
-            {**p, 'market': 'over_2_5', 'probability': _safe_prob(p, 'o25'), 'selection': 'O2.5', 'match_id': m_id},
+            {**p, 'market': 'goals_over_2_5', 'probability': _safe_prob(p, 'o25'), 'selection': 'O2.5', 'match_id': m_id},
             {**p, 'market': 'btts_yes', 'probability': _safe_prob(p, 'btts'), 'selection': 'BTTS', 'match_id': m_id},
             
             # Expanded Markets (User Request)
-            {**p, 'market': 'home_under_1_5', 'probability': _safe_prob(p, 'home_under_1_5'), 'selection': 'H U1.5', 'match_id': m_id},
-            {**p, 'market': 'away_under_1_5', 'probability': _safe_prob(p, 'away_under_1_5'), 'selection': 'A U1.5', 'match_id': m_id},
+            {**p, 'market': 'home_goals_under_1_5', 'probability': _safe_prob(p, 'home_under_1_5'), 'selection': 'H U1.5', 'match_id': m_id},
+            {**p, 'market': 'away_goals_under_1_5', 'probability': _safe_prob(p, 'away_under_1_5'), 'selection': 'A U1.5', 'match_id': m_id},
             {**p, 'market': 'cards_over_2_5', 'probability': _safe_prob(p, 'card_o25'), 'selection': 'Cards O2.5', 'match_id': m_id},
         ])
         
