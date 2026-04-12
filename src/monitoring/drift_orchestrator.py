@@ -94,6 +94,9 @@ class DriftOrchestrator:
         self.confidence_state_file.parent.mkdir(parents=True, exist_ok=True)
         self.alerts_file.parent.mkdir(parents=True, exist_ok=True)
 
+        # Per-league drift state (keyed by league string)
+        self._league_status: Dict[str, str] = {}
+
         # Global drift state
         self.global_status: str = self.GO
         self.global_alerts: List[str] = []
@@ -203,6 +206,10 @@ class DriftOrchestrator:
             **self.baseline_metadata,
         }
 
+    def reload_baselines(self) -> Dict[str, float]:
+        self.baselines = self._load_baselines()
+        return dict(self.baselines)
+
     def persist_global_state(self) -> None:
         evaluated_at = datetime.now(timezone.utc).isoformat()
         self.global_evaluated_at = evaluated_at
@@ -247,6 +254,91 @@ class DriftOrchestrator:
             self.global_metrics_included = set()
             self.global_evaluated_at = None
             self.global_legacy_date = None
+
+    # ------------------------------------------------------------------
+    # Per-league drift state
+    # ------------------------------------------------------------------
+
+    def _league_state_file(self, league: str) -> Path:
+        """Return the per-league state file path."""
+        return DATA_DIR / "drift" / f"{league}_drift_status.json"
+
+    def evaluate_league_drift(
+        self, league: str, current_session_data: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Evaluate drift for a specific league and return STOP/WATCH/GO.
+
+        If current_session_data is None, reads persisted league state only.
+        """
+        if current_session_data is not None:
+            self._evaluate_league_metrics(league, current_session_data)
+            self.persist_league_state(league)
+        else:
+            self.load_league_state(league)
+        return self._league_status.get(league, self.GO)
+
+    def _evaluate_league_metrics(self, league: str, data: Dict[str, Any]) -> None:
+        """Compute league-scoped drift status from raw metrics dict."""
+        previous_status = self._league_status.get(league, self.GO)
+        alerts: List[str] = []
+
+        hr = float(data.get("hit_rate", 0.0))
+        if hr < (self.baselines["hit_rate"] + self.GLOBAL_THRESHOLDS["hit_rate_stop"]):
+            alerts.append(f"HIT_RATE_DRIFT: {hr:.2f} (Baseline {self.baselines['hit_rate']})")
+
+        ece = float(data.get("ece", 0.0))
+        if ece > (self.baselines["ece"] + self.GLOBAL_THRESHOLDS["ece_stop"]):
+            alerts.append(f"CALIBRATION_DRIFT: {ece:.3f} (Baseline {self.baselines['ece']})")
+
+        mconf = float(data.get("mean_conf", 0.0))
+        if mconf > (self.baselines["mean_conf"] + self.GLOBAL_THRESHOLDS["conf_inflation_stop"]):
+            alerts.append(f"CONFIDENCE_INFLATION: {mconf:.2f} (Baseline {self.baselines['mean_conf']})")
+
+        new_status = self.STOP if alerts else self.GO
+        self._league_status[league] = new_status
+
+        self._emit_stop_transition(
+            scope="league",
+            subject=league,
+            previous_status=previous_status,
+            new_status=new_status,
+            context={"alerts": alerts},
+        )
+
+    def persist_league_state(self, league: str) -> None:
+        """Write per-league drift state to its dedicated JSON file."""
+        evaluated_at = datetime.now(timezone.utc).isoformat()
+        state_file = self._league_state_file(league)
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "league": league,
+            "date": evaluated_at[:10],
+            "evaluated_at": evaluated_at,
+            "status": self._league_status.get(league, self.GO),
+        }
+        with open(state_file, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2)
+
+    def load_league_state(self, league: str) -> None:
+        """
+        Load per-league drift state from file.
+
+        Fails OPEN (GO) — a missing league file means no data yet, not a fault.
+        This is intentionally different from load_global_state which fails closed.
+        """
+        state_file = self._league_state_file(league)
+        if not state_file.exists():
+            self._league_status[league] = self.GO
+            return
+        try:
+            with open(state_file, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            self._league_status[league] = self._normalize_state(data.get("status", self.GO))
+        except Exception as exc:
+            logger.error("Failed to load league drift state for %s: %s", league, exc)
+            # Fail open for per-league — do not punish all leagues for one bad file
+            self._league_status[league] = self.GO
 
     def append_drift_alerts(
         self,

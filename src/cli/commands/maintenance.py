@@ -420,8 +420,22 @@ def check_drift(
         alerts: list[str] = []
         status = DriftOrchestrator.GO
 
+        def _evaluate_current_state() -> str:
+            if league:
+                return monitor.evaluate_league_drift(league)
+            return monitor.evaluate_global_drift()
+
+        def _evaluate_metrics(metrics: dict[str, float]) -> str:
+            if league:
+                league_metrics = dict(metrics)
+                league_metrics.pop("mean_conf", None)
+                evaluated_status = monitor.evaluate_league_drift(league, league_metrics)
+                monitor.persist_league_state(league)
+                return evaluated_status
+            return monitor.evaluate_global_drift(metrics)
+
         if use_persisted_state:
-            status = monitor.evaluate_global_drift()
+            status = _evaluate_current_state()
         elif {"probability", "outcome"}.issubset(predictions.columns):
             scored = predictions[["probability", "outcome"]].copy()
             scored["probability"] = pd.to_numeric(scored["probability"], errors="coerce")
@@ -430,9 +444,12 @@ def check_drift(
             if not scored.empty:
                 # AuthoritativeResolver may already normalize outcomes to numeric 0/1.
                 if pd.api.types.is_numeric_dtype(scored["outcome"]):
+                    # Numeric outcomes: 1=WON, 0=LOST -- keep only binary settled rows
                     scored["hit"] = pd.to_numeric(scored["outcome"], errors="coerce")
+                    scored = scored[scored["hit"].isin([0.0, 1.0])]
                 else:
-                    outcome_map = {"WON": 1.0, "LOST": 0.0, "PUSH": 0.5, "VOID": 0.5}
+                    # String outcomes: map to numeric, VOID rows will be NaN and dropped
+                    outcome_map = {"WON": 1.0, "LOST": 0.0, "PUSH": 0.5, "VOID": float("nan")}
                     scored["hit"] = scored["outcome"].astype(str).str.upper().map(outcome_map)
                 scored = scored.dropna(subset=["hit"])
 
@@ -444,19 +461,20 @@ def check_drift(
                         "ece": _calculate_binned_ece(probs, hits),
                         "mean_conf": float(probs.mean()),
                     }
-                    status = monitor.evaluate_global_drift(metrics)
+                    status = _evaluate_metrics(metrics)
                     alerts = list(monitor.global_alerts)
                 else:
-                    status = monitor.evaluate_global_drift()
+                    status = _evaluate_current_state()
             else:
-                status = monitor.evaluate_global_drift()
+                status = _evaluate_current_state()
         else:
-            status = monitor.evaluate_global_drift()
+            status = _evaluate_current_state()
 
+        status_scope = "LEAGUE" if league else "GLOBAL"
         if status == DriftOrchestrator.STOP and not alerts:
-            alerts = ["GLOBAL_STOP: DriftOrchestrator returned STOP state"]
+            alerts = [f"{status_scope}_STOP: DriftOrchestrator returned STOP state"]
         elif status == DriftOrchestrator.WATCH and not alerts:
-            alerts = ["GLOBAL_WATCH: DriftOrchestrator returned WATCH state"]
+            alerts = [f"{status_scope}_WATCH: DriftOrchestrator returned WATCH state"]
 
         if alerts:
             monitor.append_drift_alerts(alerts, league=league, status=status)
@@ -619,6 +637,92 @@ def sync_models(
         logger.error("Model sync failed", exc_info=True)
         console.print(f"[red]{type(exc).__name__}: {exc}[/red]")
         raise typer.Exit(code=1) from exc
+
+
+@app.command("check-models")
+def check_models() -> None:
+    """
+    Validate manifest coverage: check every active_models entry resolves
+    to an artifact file that exists on disk. Reports missing and stale models
+    per league. Exit code 1 if any artifacts are missing.
+    """
+    import json
+    from pathlib import Path
+    from src.config import DATA_DIR
+
+    MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "ml" / "models"
+    MANIFEST_PATH = MODELS_DIR / "manifest.json"
+    LEAGUES = ["PL", "BL1", "FL1", "SA", "PD"]
+    # Model keys expected per league in active_models
+    EXPECTED_SUFFIXES = [
+        "match_outcome", "home_goals", "home_goals_xgb",
+        "away_goals", "away_goals_xgb",
+        "corners", "corners_xgb", "cards", "cards_xgb",
+        "mh_corn", "ma_corn", "m_corners_lgbm", "m_corners_xgb",
+    ]
+
+    if not MANIFEST_PATH.exists():
+        typer.echo(f"[ERROR] Manifest not found: {MANIFEST_PATH}", err=True)
+        raise typer.Exit(1)
+
+    try:
+        manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    except Exception as exc:
+        typer.echo(f"[ERROR] Failed to parse manifest: {exc}", err=True)
+        raise typer.Exit(1)
+
+    active = manifest.get("active_models", {})
+    if not active:
+        typer.echo("[ERROR] active_models section missing or empty in manifest.", err=True)
+        raise typer.Exit(1)
+
+    missing: list[str] = []
+    found: list[str] = []
+    not_in_active: list[str] = []
+
+    for league in LEAGUES:
+        for suffix in EXPECTED_SUFFIXES:
+            key = f"{suffix}_{league}"
+            artifact_key = active.get(key)
+            if artifact_key is None:
+                not_in_active.append(f"  [{league}] {key} — not in active_models")
+                continue
+            meta = manifest.get(artifact_key)
+            if not isinstance(meta, dict):
+                missing.append(f"  [{league}] {key} → {artifact_key} — no manifest entry")
+                continue
+            filename = meta.get("filename")
+            if not filename:
+                missing.append(f"  [{league}] {key} → {artifact_key} — no filename in entry")
+                continue
+            artifact_path = MODELS_DIR / filename
+            if not artifact_path.exists():
+                missing.append(f"  [{league}] {key} → {filename} — FILE MISSING on disk")
+            else:
+                found.append(f"  [{league}] {key} → {filename} OK")
+
+    typer.echo(f"\n=== Model Coverage Check ===")
+    typer.echo(f"Manifest : {MANIFEST_PATH}")
+    typer.echo(f"Models dir: {MODELS_DIR}")
+    typer.echo(f"Leagues  : {', '.join(LEAGUES)}")
+    typer.echo(f"Checks   : {len(LEAGUES) * len(EXPECTED_SUFFIXES)} expected slots\n")
+
+    if found:
+        typer.echo(f"[OK] {len(found)} artifacts present on disk")
+
+    if not_in_active:
+        typer.echo(f"\n[WARN] {len(not_in_active)} keys not registered in active_models:")
+        for line in not_in_active:
+            typer.echo(line)
+
+    if missing:
+        typer.echo(f"\n[FAIL] {len(missing)} missing artifacts:")
+        for line in missing:
+            typer.echo(line)
+        typer.echo("\nRun training to regenerate missing models.")
+        raise typer.Exit(1)
+    else:
+        typer.echo("\n[PASS] All registered artifacts present on disk.")
 
 
 @app.command("init-db")
