@@ -332,7 +332,20 @@ def _load_or_compute_predictions(league: Optional[str]) -> List[Dict[str, Any]]:
     cached_predictions = prediction_cache.get(cache_key)
     if isinstance(cached_predictions, list):
         drift_status = _read_prediction_guard_status()
-        if drift_status == DriftOrchestrator.STOP:
+        league_stop = False
+        if league and drift_status != DriftOrchestrator.STOP:
+            try:
+                orchestrator = DriftOrchestrator()
+                orchestrator.load_league_state(league)
+                if orchestrator._league_status.get(league) == DriftOrchestrator.STOP:
+                    league_stop = True
+                    logger.warning(
+                        "Cache invalidated for league=%s: league-scoped drift is STOP.",
+                        league,
+                    )
+            except Exception as exc:
+                logger.warning("Could not check league drift state for cache: %s", exc)
+        if drift_status == DriftOrchestrator.STOP or league_stop:
             logger.warning(
                 "Cache invalidated for league=%s: drift status is STOP.",
                 league or "ALL",
@@ -355,10 +368,23 @@ def _generate_forbidden_fruit_slip(
     max_selections: int,
 ) -> ForbiddenFruitSlipResponse:
     drift_status = _read_prediction_guard_status()
+    league_stop = False
+    if league and drift_status != DriftOrchestrator.STOP:
+        try:
+            orchestrator = DriftOrchestrator()
+            orchestrator.load_league_state(league)
+            if orchestrator._league_status.get(league) == DriftOrchestrator.STOP:
+                league_stop = True
+                logger.warning(
+                    "Slip cache invalidated for league=%s: league-scoped drift is STOP.",
+                    league,
+                )
+        except Exception as exc:
+            logger.warning("Could not check league drift state for slip cache: %s", exc)
     cache_key = slip_cache_key(league, min_prob, max_selections)
     cached_slip = prediction_cache.get(cache_key)
     if isinstance(cached_slip, ForbiddenFruitSlipResponse):
-        if drift_status == DriftOrchestrator.STOP:
+        if drift_status == DriftOrchestrator.STOP or league_stop:
             logger.warning(
                 "Slip cache invalidated for league=%s: drift status is STOP.",
                 league or "ALL",
@@ -480,7 +506,7 @@ async def _lifespan(app: FastAPI):
     import asyncio
     import os
 
-    if os.getenv("RENDER"):
+    if os.getenv("WARMUP_CACHE"):
 
         async def _warm() -> None:
             await asyncio.sleep(10)

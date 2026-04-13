@@ -52,4 +52,10 @@ jobs:
 
       - name: Trigger API health check
         run: |
-          curl -f https://football-intelligence-api.onrender.com/api/v1/model-health || echo "API health check skipped"
+          if [ -n "$API_HEALTH_URL" ]; then
+            curl -f "$API_HEALTH_URL/api/v1/model-health" || echo "API health check failed"
+          else
+            echo "API_HEALTH_URL not set — skipping health check"
+          fi
+        env:
+          API_HEALTH_URL: ${{ secrets.API_HEALTH_URL }}
