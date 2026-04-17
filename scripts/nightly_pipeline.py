@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import subprocess
 import sys
@@ -75,6 +76,35 @@ def _print_summary(
     print("=" * 60)
 
 
+def _eligible_leagues_for_drift(leagues: Sequence[str], global_drift_status: str) -> list[str]:
+    eligible: list[str] = []
+    global_allows_fallback = str(global_drift_status).upper() in {"GO", "OK"}
+
+    for league in leagues:
+        state_file = ROOT_DIR / "data" / "drift" / f"{league}_drift_status.json"
+        if state_file.exists():
+            try:
+                payload = json.loads(state_file.read_text(encoding="utf-8"))
+                status = str(payload.get("status", "STOP")).upper()
+            except Exception as exc:
+                logger.warning("[%s] Failed to read league drift file - skipping: %s", league, exc)
+                continue
+
+            if status == "STOP":
+                logger.warning("[%s] Skipping — league drift STOP", league)
+                continue
+            eligible.append(league)
+            continue
+
+        logger.warning("[%s] No league drift file — using global drift state", league)
+        if global_allows_fallback:
+            eligible.append(league)
+        else:
+            logger.warning("[%s] Skipping — global drift state is %s", league, global_drift_status)
+
+    return eligible
+
+
 def main() -> int:
     from src.strategies.drift_guard import DriftGuardrail
 
@@ -132,16 +162,17 @@ def main() -> int:
         )
         return 2
 
-    train_command = (
-        sys.executable,
-        str(SCRIPTS_DIR / "train_batch.py"),
-        "--leagues",
-        "PL",
-        "BL1",
-        "FL1",
-        "SA",
-        "PD",
-    )
+    pipeline_leagues = ["PL", "BL1", "FL1", "SA", "PD"]
+    eligible_leagues = _eligible_leagues_for_drift(pipeline_leagues, drift_status)
+    if not eligible_leagues:
+        logger.error("NIGHTLY ABORT: No leagues eligible after per-league drift gate.")
+        _print_summary(
+            started_at=started_at,
+            step_results=step_results,
+            promotion_happened=False,
+        )
+        return 2
+
     update_command = (
         sys.executable,
         str(SCRIPTS_DIR / "update_bandit.py"),
@@ -163,7 +194,6 @@ def main() -> int:
         "3",
         "--confirm",
     )
-    prediction_leagues = ["PL", "BL1", "FL1", "SA", "PD"]
     resolve_command = (
         sys.executable,
         "-m",
@@ -175,9 +205,19 @@ def main() -> int:
         str(SCRIPTS_DIR / "generate_performance_report.py"),
     )
 
-    train_result = _run_step("train_batch", train_command, success_codes={0})
-    step_results.append(train_result)
-    if train_result.successful:
+    train_results: list[StepResult] = []
+    for league in eligible_leagues:
+        train_command = (
+            sys.executable,
+            str(SCRIPTS_DIR / "train_batch.py"),
+            "--leagues",
+            league,
+        )
+        train_result = _run_step(f"train_batch_{league}", train_command, success_codes={0})
+        step_results.append(train_result)
+        train_results.append(train_result)
+
+    if any(result.successful for result in train_results):
         try:
             from src.monitoring.drift_orchestrator import get_drift_orchestrator
 
@@ -205,7 +245,7 @@ def main() -> int:
     step_results.append(
         _run_step("cleanup_old_models", cleanup_command, success_codes={0})
     )
-    for league in prediction_leagues:
+    for league in eligible_leagues:
         show_predictions_command = (
             sys.executable,
             "-m",
@@ -231,7 +271,7 @@ def main() -> int:
     step_results.append(
         _run_step("resolve_predictions", resolve_command, success_codes={0})
     )
-    for league in prediction_leagues:
+    for league in pipeline_leagues:
         drift_check_command = (
             sys.executable,
             "-m",
@@ -275,7 +315,12 @@ def main() -> int:
         promotion_happened=promotion_happened,
     )
     performance_report_path = ROOT_DIR / "data" / "eval" / "performance_report.json"
-    notification_lines = ["Leagues trained: PL, BL1, FL1, SA, PD"]
+    trained_leagues = [
+        result.name.removeprefix("train_batch_")
+        for result in train_results
+        if result.successful
+    ]
+    notification_lines = [f"Leagues trained: {', '.join(trained_leagues) if trained_leagues else 'none'}"]
     performance_report: dict[str, object] = {}
     if performance_report_path.exists():
         try:
