@@ -1473,8 +1473,12 @@ def _persist_predictions(
         'corn_away_o45':   'corn_away_o45',
         'corn_away_u55':   'corn_away_u55',
         'corn_away_o55':   'corn_away_o55',
-        'card_u45':        'cards_u4.5',
+        'card_u45':        'cards_under_4_5',
         'card_o25':        'cards_o2.5',
+        'home':            'home_win',
+        'away':            'away_win',
+        'btts':            'btts_yes',
+        'card_u55':        'cards_under_5_5',
     }
 
     rows = []
