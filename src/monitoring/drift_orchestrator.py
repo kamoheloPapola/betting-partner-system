@@ -12,6 +12,7 @@ import csv
 import hashlib
 import json
 import logging
+import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -222,8 +223,10 @@ class DriftOrchestrator:
             "alerts": self.global_alerts,
             "metrics": self.global_metrics,
         }
-        with open(self.status_file, "w", encoding="utf-8") as handle:
+        tmp_path = self.status_file.with_suffix(".tmp")
+        with open(tmp_path, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
+        os.replace(tmp_path, self.status_file)
         self._persist_global_state_to_db(payload)
 
     def load_global_state(self) -> None:
@@ -325,8 +328,10 @@ class DriftOrchestrator:
             "status": self._league_status.get(league, self.GO),
             "metrics": self._league_metrics.get(league, {}),
         }
-        with open(state_file, "w", encoding="utf-8") as fh:
+        tmp_path = state_file.with_suffix(".tmp")
+        with open(tmp_path, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, indent=2)
+        os.replace(tmp_path, state_file)
 
     def load_league_state(self, league: str) -> None:
         """
