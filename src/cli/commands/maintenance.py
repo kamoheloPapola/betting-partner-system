@@ -712,10 +712,53 @@ def check_models() -> None:
     if found:
         typer.echo(f"[OK] {len(found)} artifacts present on disk")
 
+    calibrator_dir = MODELS_DIR / "calibrators"
+    calibrator_artifacts = []
+    if calibrator_dir.exists():
+        calibrator_artifacts = [
+            path
+            for pattern in ("*.pkl", "*.joblib")
+            for path in calibrator_dir.glob(pattern)
+            if path.is_file()
+        ]
+    typer.echo(f"[INFO] Calibrators: {len(calibrator_artifacts)} artifacts present in calibrators/")
+
+    missing_calibrators: list[str] = []
+    for manifest_key, manifest_value in manifest.items():
+        if "calibrat" not in str(manifest_key).lower():
+            continue
+
+        filename = None
+        if isinstance(manifest_value, dict):
+            filename = (
+                manifest_value.get("filename")
+                or manifest_value.get("path")
+                or manifest_value.get("calibrator_filename")
+            )
+        elif isinstance(manifest_value, str):
+            filename = manifest_value
+
+        if not filename:
+            missing_calibrators.append(f"  {manifest_key} -- no filename in entry")
+            continue
+
+        calibrator_path = Path(filename)
+        if not calibrator_path.is_absolute():
+            calibrator_path = MODELS_DIR / calibrator_path
+        if not calibrator_path.exists():
+            missing_calibrators.append(f"  {manifest_key} -> {filename} -- FILE MISSING on disk")
+
     if not_in_active:
         typer.echo(f"\n[WARN] {len(not_in_active)} keys not registered in active_models:")
         for line in not_in_active:
             typer.echo(line)
+
+    if missing_calibrators:
+        typer.echo(f"\n[FAIL] {len(missing_calibrators)} missing calibrator artifacts:")
+        for line in missing_calibrators:
+            typer.echo(line)
+        typer.echo("\nRun calibration training to regenerate missing calibrators.")
+        raise typer.Exit(1)
 
     if missing:
         typer.echo(f"\n[FAIL] {len(missing)} missing artifacts:")
