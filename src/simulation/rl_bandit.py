@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from src.config import DATA_DIR
 from src.core.constants import RESOLVER_LOOKBACK_DAYS
-from src.core.container import ServiceContainer
+from src.core.container import ServiceContainer  # re-exported for tests and monkeypatching
 from src.db.models import ResolvedPrediction
 from src.ml.calibration import calculate_ece
 
