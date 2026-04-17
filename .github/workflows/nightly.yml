@@ -14,6 +14,7 @@ jobs:
       # Required for this workflow:
       # - DATABASE_URL
       # - FOOTBALL_DATA_API_KEY
+      # - API_FOOTBALL_KEY
       # Optional app/config/env secrets referenced by the codebase:
       # - FOOTBALL_DATA_ORG_KEY (falls back to FOOTBALL_DATA_API_KEY below)
       # - RAPIDAPI_KEY
@@ -43,6 +44,7 @@ jobs:
       FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
       FOOTBALL_DATA_ORG_KEY: ${{ secrets.FOOTBALL_DATA_ORG_KEY || secrets.FOOTBALL_DATA_API_KEY }}
       RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       OPENWEATHERMAP_API_KEY: ${{ secrets.OPENWEATHERMAP_API_KEY }}
       OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
