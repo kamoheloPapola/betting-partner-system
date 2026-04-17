@@ -1253,7 +1253,11 @@ def _run_predict_loop(
                             drift_state = "WATCH"
                         else:
                             drift_state = "STOP"
-                        logger.debug("[%s] No league drift file — using global state: %s", lg, drift_state)
+                        logger.warning(
+                            "[%s] No league drift file found — inheriting global drift state (%s)",
+                            lg,
+                            drift_state,
+                        )
                 except Exception:
                     logger.error(
                         "[%s] DRIFT GATE FAIL-CLOSED: Could not load drift state — blocking predictions.",
