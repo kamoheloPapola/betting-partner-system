@@ -43,6 +43,23 @@ DAMPENING_ALPHA_STEP = 0.05
 
 _dampening_alphas: Dict[str, float] = {}
 _dampening_alphas_loaded = False
+_raw_probability_mode_logged = False
+
+
+def log_raw_probability_mode_once() -> None:
+    """Log raw-probability mode once when no calibrator artifacts are configured."""
+    global _raw_probability_mode_logged
+
+    if _raw_probability_mode_logged:
+        return
+    has_calibrator_artifacts = any(
+        path.is_file()
+        for pattern in ("*.pkl", "*.joblib")
+        for path in CALIBRATOR_DIR.glob(pattern)
+    )
+    if not has_calibrator_artifacts:
+        logger.info("Calibration: no calibrator artifacts loaded - using raw probabilities")
+    _raw_probability_mode_logged = True
 
 
 def _load_dampening_alphas() -> None:
@@ -230,6 +247,7 @@ def save_binary_calibrator_artifact(path: Path, payload: Dict[str, Any]) -> None
 
 def load_binary_calibrator_artifact(path: Path) -> Optional[Dict[str, Any]]:
     """Load a post-hoc calibration artifact from disk."""
+    log_raw_probability_mode_once()
     if not path.exists():
         return None
     try:
