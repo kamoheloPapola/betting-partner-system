@@ -418,6 +418,7 @@ def check_drift(
         # Run drift checks via unified orchestrator
         monitor = DriftOrchestrator()
         alerts: list[str] = []
+        metrics_for_display: dict[str, float] = {}
         status = DriftOrchestrator.GO
 
         def _evaluate_current_state() -> str:
@@ -459,12 +460,12 @@ def check_drift(
                         "ece": _calculate_binned_ece(probs, hits),
                         "mean_conf": float(probs.mean()),
                     }
+                    metrics_for_display = dict(metrics)
                     status = _evaluate_metrics(metrics)
-                    alerts = [
-                        f"HIT_RATE: {metrics['hit_rate']:.3f}",
-                        f"ECE: {metrics['ece']:.3f}",
-                        f"MEAN_CONF: {metrics['mean_conf']:.3f}",
-                    ]
+                    if league:
+                        alerts = monitor.get_league_alerts(league)
+                    else:
+                        alerts = list(monitor.global_alerts)
                 else:
                     status = _evaluate_current_state()
             else:
@@ -484,8 +485,17 @@ def check_drift(
         # Display results
         if not alerts:
             console.print("[green]✓ No drift detected[/green]")
+            if metrics_for_display:
+                table = Table(title="[bold green]Drift Metrics[/bold green]")
+                table.add_column("Metric", style="cyan")
+                table.add_column("Value")
+                table.add_row("Status", status)
+                table.add_row("Hit Rate", f"{metrics_for_display['hit_rate']:.3f}")
+                table.add_row("ECE", f"{metrics_for_display['ece']:.3f}")
+                table.add_row("Mean Confidence", f"{metrics_for_display['mean_conf']:.3f}")
+                console.print(table)
             return
-        
+
         table = Table(title="[bold red]Drift Alerts Detected[/bold red]")
         table.add_column("Type", style="cyan")
         table.add_column("Details")

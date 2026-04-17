@@ -5,13 +5,15 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
 
 from src.config import DATA_DIR
 
 DEFAULT_SQLITE_DB_PATH: Path = DATA_DIR / "models" / "football_intelligence.db"
+create_engine = None
 
 
 def database_is_configured() -> bool:
@@ -35,6 +37,13 @@ def _resolve_database_url() -> str:
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
     """Return the active SQLAlchemy engine."""
+    global create_engine
+
+    if create_engine is None:
+        from sqlalchemy import create_engine as sqlalchemy_create_engine
+
+        create_engine = sqlalchemy_create_engine
+
     database_url = _resolve_database_url()
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite:///") else {}
     return create_engine(

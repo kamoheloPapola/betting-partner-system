@@ -68,6 +68,8 @@ def callback(
 # --- WINDOWS ENCODING FIX ---
 if sys.platform == "win32":
     try:
+        logical_cpus = os.cpu_count() or 1
+        os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(max(1, logical_cpus - 1)))
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8')
         if hasattr(sys.stderr, 'reconfigure'):

@@ -20,12 +20,9 @@ from typing import Any, Dict, List, Optional, Set
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from src.config import DATA_DIR
 from src.db.connection import database_is_configured, get_engine
-from src.db.models import DriftEvent
 from src.monitoring.telemetry import capture_alert
 
 logger = logging.getLogger(__name__)
@@ -236,7 +233,7 @@ class DriftOrchestrator:
             return
 
         if not self.status_file.exists():
-            self.global_status = self.GO
+            self.global_status = self.STOP
             self.global_alerts = []
             self.global_metrics = {}
             self.global_metrics_included = set()
@@ -265,7 +262,7 @@ class DriftOrchestrator:
 
     def _league_state_file(self, league: str) -> Path:
         """Return the per-league state file path."""
-        return DATA_DIR / "drift" / f"{league}_drift_status.json"
+        return self.status_file.parent / f"{league}_drift_status.json"
 
     def evaluate_league_drift(
         self, league: str, current_session_data: Optional[Dict[str, Any]] = None
@@ -281,6 +278,10 @@ class DriftOrchestrator:
         else:
             self.load_league_state(league)
         return self._league_status.get(league, self.GO)
+
+    def get_league_alerts(self, league: str) -> List[str]:
+        """Return the most recent evaluated alerts for a league."""
+        return list(self._league_metrics.get(league, {}).get("alerts", []))
 
     def _evaluate_league_metrics(self, league: str, data: Dict[str, Any]) -> None:
         """Compute league-scoped drift status from raw metrics dict."""
@@ -337,12 +338,12 @@ class DriftOrchestrator:
         """
         Load per-league drift state from file.
 
-        Missing file -> GO (no data yet, not a fault).
+        Missing file -> STOP (unknown state must fail closed).
         Corrupt/unreadable file -> STOP (fail closed - bad state file is a fault).
         """
         state_file = self._league_state_file(league)
         if not state_file.exists():
-            self._league_status[league] = self.GO
+            self._league_status[league] = self.STOP
             return
         try:
             with open(state_file, "r", encoding="utf-8") as fh:
@@ -746,6 +747,10 @@ class DriftOrchestrator:
             return
 
         try:
+            from sqlalchemy.orm import Session
+
+            from src.db.models import DriftEvent
+
             with Session(get_engine()) as session:
                 session.merge(
                     DriftEvent(
@@ -774,6 +779,11 @@ class DriftOrchestrator:
             return None
 
         try:
+            from sqlalchemy import select
+            from sqlalchemy.orm import Session
+
+            from src.db.models import DriftEvent
+
             with Session(get_engine()) as session:
                 row = session.execute(
                     select(DriftEvent)
@@ -866,6 +876,10 @@ class DriftOrchestrator:
             return
 
         try:
+            from sqlalchemy.orm import Session
+
+            from src.db.models import DriftEvent
+
             with Session(get_engine()) as session:
                 for row in rows:
                     session.merge(

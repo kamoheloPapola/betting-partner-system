@@ -76,10 +76,6 @@
     "mh_corn_SA": "mh_corn_v1.0.0_SA"
   },
   "away_goals_v1.0.0_BL1": {
-    "filename": "away_goals_model_BL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -112,26 +108,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.9797,
-      "rmse": 1.2402,
-      "calibration_score": 0.1893
-    },
-    "training_date": "2026-04-12T20:30:33.122457",
+    "filename": "away_goals_model_BL1.pkl",
     "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 747,
-    "registered_at": "2026-04-12T20:30:33.122481",
+    "metrics": {
+      "calibration_score": 0.2033,
+      "mae": 1.003,
+      "rmse": 1.2842
+    },
     "name": "away_goals",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:03:57.370314",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_goals",
+    "temporal_validated": true,
+    "test_size": 747,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:03:57.370292",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "away_goals_v1.0.0_FL1": {
-    "filename": "away_goals_model_FL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -164,20 +160,24 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.9726,
-      "rmse": 1.2528,
-      "calibration_score": 0.2292
-    },
-    "training_date": "2026-04-12T20:48:39.227439",
+    "filename": "away_goals_model_FL1.pkl",
     "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
-    "registered_at": "2026-04-12T20:48:39.227467",
+    "metrics": {
+      "calibration_score": 0.2387,
+      "mae": 0.9851,
+      "rmse": 1.2766
+    },
     "name": "away_goals",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:05:55.087918",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_goals",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:05:55.087896",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "away_goals_v1.0.0_None": {
     "features": [
@@ -232,10 +232,6 @@
     "version": "1.0.0"
   },
   "away_goals_v1.0.0_PD": {
-    "filename": "away_goals_model_PD.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -268,26 +264,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.8653,
-      "rmse": 1.1053,
-      "calibration_score": 0.2225
-    },
-    "training_date": "2026-04-12T20:52:17.480440",
+    "filename": "away_goals_model_PD.pkl",
     "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
-    "registered_at": "2026-04-12T20:52:17.480457",
+    "metrics": {
+      "calibration_score": 0.2406,
+      "mae": 0.8885,
+      "rmse": 1.1487
+    },
     "name": "away_goals",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:08:52.602990",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_goals",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:08:52.602971",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "away_goals_v1.0.0_PL": {
-    "filename": "away_goals_model_PL.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -320,26 +316,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.966,
-      "rmse": 1.2565,
-      "calibration_score": 0.214
-    },
-    "training_date": "2026-04-12T20:01:31.151580",
+    "filename": "away_goals_model_PL.pkl",
     "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
-    "registered_at": "2026-04-12T20:01:31.151604",
+    "metrics": {
+      "calibration_score": 0.2269,
+      "mae": 0.9916,
+      "rmse": 1.2891
+    },
     "name": "away_goals",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:02:13.928697",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_goals",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:02:13.928678",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "away_goals_v1.0.0_SA": {
-    "filename": "away_goals_model_SA.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -372,26 +368,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.8792,
-      "rmse": 1.1301,
-      "calibration_score": 0.2276
-    },
-    "training_date": "2026-04-12T20:50:21.928240",
+    "filename": "away_goals_model_SA.pkl",
     "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
-    "registered_at": "2026-04-12T20:50:21.928265",
+    "metrics": {
+      "calibration_score": 0.2358,
+      "mae": 0.8888,
+      "rmse": 1.1467
+    },
     "name": "away_goals",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:07:26.960684",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_goals",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:07:26.960665",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "away_goals_xgb_v1.0.0_BL1": {
-    "filename": "away_goals_xgb_v1_BL1.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_count_poisson",
-    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -424,26 +420,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.9828,
-      "rmse": 1.2625,
-      "calibration_score": 0.1999
-    },
-    "training_date": "2026-04-12T20:30:33.899718",
+    "filename": "away_goals_xgb_v1_BL1.joblib",
     "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 747,
-    "registered_at": "2026-04-12T20:30:33.899733",
+    "metrics": {
+      "calibration_score": 0.2389,
+      "mae": 1.0347,
+      "rmse": 1.3573
+    },
     "name": "away_goals_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:04:04.271855",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_goals",
+    "temporal_validated": true,
+    "test_size": 747,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:04:04.271839",
+    "type": "xgb_regressor_count_poisson",
+    "version": "1.0.0"
   },
   "away_goals_xgb_v1.0.0_FL1": {
-    "filename": "away_goals_xgb_v1_FL1.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_count_poisson",
-    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -476,20 +472,24 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.9796,
-      "rmse": 1.2867,
-      "calibration_score": 0.2571
-    },
-    "training_date": "2026-04-12T20:48:51.100875",
+    "filename": "away_goals_xgb_v1_FL1.joblib",
     "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
-    "registered_at": "2026-04-12T20:48:51.100904",
+    "metrics": {
+      "calibration_score": 0.2752,
+      "mae": 0.9979,
+      "rmse": 1.318
+    },
     "name": "away_goals_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:06:01.451123",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_goals",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:06:01.451100",
+    "type": "xgb_regressor_count_poisson",
+    "version": "1.0.0"
   },
   "away_goals_xgb_v1.0.0_None": {
     "features": [
@@ -544,10 +544,6 @@
     "version": "1.0.0"
   },
   "away_goals_xgb_v1.0.0_PD": {
-    "filename": "away_goals_xgb_v1_PD.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_count_poisson",
-    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -580,26 +576,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.8676,
-      "rmse": 1.1292,
-      "calibration_score": 0.2357
-    },
-    "training_date": "2026-04-12T20:52:25.448603",
+    "filename": "away_goals_xgb_v1_PD.joblib",
     "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
-    "registered_at": "2026-04-12T20:52:25.448622",
+    "metrics": {
+      "calibration_score": 0.2822,
+      "mae": 0.9123,
+      "rmse": 1.2154
+    },
     "name": "away_goals_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:08:58.441690",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_goals",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:08:58.441665",
+    "type": "xgb_regressor_count_poisson",
+    "version": "1.0.0"
   },
   "away_goals_xgb_v1.0.0_PL": {
-    "filename": "away_goals_xgb_v1_PL.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_count_poisson",
-    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -632,26 +628,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.0229,
-      "rmse": 1.3504,
-      "calibration_score": 0.2637
-    },
-    "training_date": "2026-04-12T20:01:56.709526",
+    "filename": "away_goals_xgb_v1_PL.joblib",
     "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
-    "registered_at": "2026-04-12T20:01:56.709555",
+    "metrics": {
+      "calibration_score": 0.2859,
+      "mae": 1.0484,
+      "rmse": 1.3864
+    },
     "name": "away_goals_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:02:18.964507",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_goals",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:02:18.964474",
+    "type": "xgb_regressor_count_poisson",
+    "version": "1.0.0"
   },
   "away_goals_xgb_v1.0.0_SA": {
-    "filename": "away_goals_xgb_v1_SA.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_count_poisson",
-    "target": "away_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -684,26 +680,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.8898,
-      "rmse": 1.1587,
-      "calibration_score": 0.2609
-    },
-    "training_date": "2026-04-12T20:50:30.042660",
+    "filename": "away_goals_xgb_v1_SA.joblib",
     "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
-    "registered_at": "2026-04-12T20:50:30.042689",
+    "metrics": {
+      "calibration_score": 0.2772,
+      "mae": 0.9056,
+      "rmse": 1.1841
+    },
     "name": "away_goals_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:07:32.928412",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_goals",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:07:32.928394",
+    "type": "xgb_regressor_count_poisson",
+    "version": "1.0.0"
   },
   "cards_v1.0.0_BL1": {
-    "filename": "cards_model_BL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_cards",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -736,26 +732,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.8696,
-      "rmse": 2.3792,
-      "calibration_score": 0.0292
-    },
-    "training_date": "2026-04-12T20:30:37.552084",
+    "filename": "cards_model_BL1.pkl",
     "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 746,
-    "registered_at": "2026-04-12T20:30:37.552102",
+    "metrics": {
+      "calibration_score": 0.0302,
+      "mae": 1.91,
+      "rmse": 2.4496
+    },
     "name": "cards",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:05:07.136189",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_cards",
+    "temporal_validated": true,
+    "test_size": 746,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:05:07.136163",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "cards_v1.0.0_FL1": {
-    "filename": "cards_model_FL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_cards",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -788,20 +784,24 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.7014,
-      "rmse": 2.2,
-      "calibration_score": 0.033
-    },
-    "training_date": "2026-04-12T20:49:35.716700",
+    "filename": "cards_model_FL1.pkl",
     "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
-    "registered_at": "2026-04-12T20:49:35.716729",
+    "metrics": {
+      "calibration_score": 0.033,
+      "mae": 1.7238,
+      "rmse": 2.2346
+    },
     "name": "cards",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:06:44.349036",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_cards",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:06:44.349011",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "cards_v1.0.0_None": {
     "features": [
@@ -856,10 +856,6 @@
     "version": "1.0.0"
   },
   "cards_v1.0.0_PD": {
-    "filename": "cards_model_PD.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_cards",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -892,26 +888,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.1172,
-      "rmse": 2.6484,
-      "calibration_score": 0.0171
-    },
-    "training_date": "2026-04-12T20:53:39.586463",
+    "filename": "cards_model_PD.pkl",
     "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
-    "registered_at": "2026-04-12T20:53:39.586493",
+    "metrics": {
+      "calibration_score": 0.0173,
+      "mae": 2.17,
+      "rmse": 2.7147
+    },
     "name": "cards",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:09:39.835922",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_cards",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:09:39.835900",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "cards_v1.0.0_PL": {
-    "filename": "cards_model_PL.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_cards",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -944,26 +940,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.9798,
-      "rmse": 2.56,
-      "calibration_score": 0.0352
-    },
-    "training_date": "2026-04-12T20:28:51.907557",
+    "filename": "cards_model_PL.pkl",
     "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
-    "registered_at": "2026-04-12T20:28:51.907578",
+    "metrics": {
+      "calibration_score": 0.0363,
+      "mae": 2.0268,
+      "rmse": 2.609
+    },
     "name": "cards",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:03:18.337648",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_cards",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:03:18.337627",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "cards_v1.0.0_SA": {
-    "filename": "cards_model_SA.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_cards",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -996,26 +992,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.8767,
-      "rmse": 2.3785,
-      "calibration_score": 0.0296
-    },
-    "training_date": "2026-04-12T20:51:36.547835",
+    "filename": "cards_model_SA.pkl",
     "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
-    "registered_at": "2026-04-12T20:51:36.547854",
+    "metrics": {
+      "calibration_score": 0.0297,
+      "mae": 1.8916,
+      "rmse": 2.3991
+    },
     "name": "cards",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:08:14.475413",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_cards",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:08:14.475387",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "cards_xgb_v1.0.0_BL1": {
-    "filename": "cards_xgb_v1_BL1.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_cards",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1048,26 +1044,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.9793,
-      "rmse": 2.5727,
-      "calibration_score": 0.0324
-    },
-    "training_date": "2026-04-12T20:47:56.209045",
+    "filename": "cards_xgb_v1_BL1.joblib",
     "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 746,
-    "registered_at": "2026-04-12T20:47:56.209070",
+    "metrics": {
+      "calibration_score": 0.0376,
+      "mae": 2.0695,
+      "rmse": 2.708
+    },
     "name": "cards_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:05:14.691491",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_cards",
+    "temporal_validated": true,
+    "test_size": 746,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:05:14.691469",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "cards_xgb_v1.0.0_FL1": {
-    "filename": "cards_xgb_v1_FL1.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_cards",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1100,20 +1096,24 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.7727,
-      "rmse": 2.292,
-      "calibration_score": 0.0352
-    },
-    "training_date": "2026-04-12T20:49:43.051306",
+    "filename": "cards_xgb_v1_FL1.joblib",
     "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
-    "registered_at": "2026-04-12T20:49:43.051338",
+    "metrics": {
+      "calibration_score": 0.0361,
+      "mae": 1.7924,
+      "rmse": 2.3182
+    },
     "name": "cards_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:06:49.733974",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_cards",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:06:49.733951",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "cards_xgb_v1.0.0_None": {
     "features": [
@@ -1168,10 +1168,6 @@
     "version": "1.0.0"
   },
   "cards_xgb_v1.0.0_PD": {
-    "filename": "cards_xgb_v1_PD.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_cards",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1204,26 +1200,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.1602,
-      "rmse": 2.7256,
-      "calibration_score": 0.0179
-    },
-    "training_date": "2026-04-12T20:53:49.155381",
+    "filename": "cards_xgb_v1_PD.joblib",
     "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
-    "registered_at": "2026-04-12T20:53:49.155393",
+    "metrics": {
+      "calibration_score": 0.0193,
+      "mae": 2.1991,
+      "rmse": 2.7954
+    },
     "name": "cards_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:09:45.574441",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_cards",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:09:45.574421",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "cards_xgb_v1.0.0_PL": {
-    "filename": "cards_xgb_v1_PL.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_cards",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1256,26 +1252,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.1455,
-      "rmse": 2.7582,
-      "calibration_score": 0.0447
-    },
-    "training_date": "2026-04-12T20:28:52.870306",
+    "filename": "cards_xgb_v1_PL.joblib",
     "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
-    "registered_at": "2026-04-12T20:28:52.870360",
+    "metrics": {
+      "calibration_score": 0.0486,
+      "mae": 2.1884,
+      "rmse": 2.8059
+    },
     "name": "cards_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:03:26.319243",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_cards",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:03:26.319218",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "cards_xgb_v1.0.0_SA": {
-    "filename": "cards_xgb_v1_SA.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_cards",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1308,26 +1304,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.832,
-      "rmse": 2.3261,
-      "calibration_score": 0.0301
-    },
-    "training_date": "2026-04-12T20:51:43.163562",
+    "filename": "cards_xgb_v1_SA.joblib",
     "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
-    "registered_at": "2026-04-12T20:51:43.163584",
+    "metrics": {
+      "calibration_score": 0.0303,
+      "mae": 1.8358,
+      "rmse": 2.3323
+    },
     "name": "cards_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:08:20.267458",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_cards",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:08:20.267434",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "corners_v1.0.0_BL1": {
-    "filename": "corners_model_BL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1360,26 +1356,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.7873,
-      "rmse": 3.438,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:30:35.940403",
+    "filename": "corners_model_BL1.pkl",
     "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 746,
-    "registered_at": "2026-04-12T20:30:35.940418",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.8784,
+      "rmse": 3.5853
+    },
     "name": "corners",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:04:23.522881",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 746,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:04:23.522841",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "corners_v1.0.0_FL1": {
-    "filename": "corners_model_FL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1412,20 +1408,24 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.8218,
-      "rmse": 3.6134,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:49:11.378856",
+    "filename": "corners_model_FL1.pkl",
     "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
-    "registered_at": "2026-04-12T20:49:11.378875",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.8437,
+      "rmse": 3.6515
+    },
     "name": "corners",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:06:21.804914",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:06:21.804897",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "corners_v1.0.0_None": {
     "features": [
@@ -1480,10 +1480,6 @@
     "version": "1.0.0"
   },
   "corners_v1.0.0_PD": {
-    "filename": "corners_model_PD.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1516,26 +1512,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.6652,
-      "rmse": 3.3862,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:52:59.643760",
+    "filename": "corners_model_PD.pkl",
     "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
-    "registered_at": "2026-04-12T20:52:59.643779",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.7704,
+      "rmse": 3.509
+    },
     "name": "corners",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:09:17.807342",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:09:17.807320",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "corners_v1.0.0_PL": {
-    "filename": "corners_model_PL.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1568,26 +1564,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 3.0746,
-      "rmse": 3.8514,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:21:15.519851",
+    "filename": "corners_model_PL.pkl",
     "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
-    "registered_at": "2026-04-12T20:21:15.519877",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 3.103,
+      "rmse": 3.8846
+    },
     "name": "corners",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:02:41.946113",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:02:41.946093",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "corners_v1.0.0_SA": {
-    "filename": "corners_model_SA.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1620,26 +1616,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 3.0556,
-      "rmse": 3.8409,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:51:04.239804",
+    "filename": "corners_model_SA.pkl",
     "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
-    "registered_at": "2026-04-12T20:51:04.239827",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 3.0916,
+      "rmse": 3.8906
+    },
     "name": "corners",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:07:51.297476",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:07:51.297456",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "corners_xgb_v1.0.0_BL1": {
-    "filename": "corners_xgb_v1_BL1.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1672,26 +1668,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.8811,
-      "rmse": 3.5841,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:30:36.685738",
+    "filename": "corners_xgb_v1_BL1.joblib",
     "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 746,
-    "registered_at": "2026-04-12T20:30:36.685755",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.9136,
+      "rmse": 3.633
+    },
     "name": "corners_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:04:39.935696",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 746,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:04:39.935632",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "corners_xgb_v1.0.0_FL1": {
-    "filename": "corners_xgb_v1_FL1.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1724,20 +1720,24 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.8191,
-      "rmse": 3.5964,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:49:24.438056",
+    "filename": "corners_xgb_v1_FL1.joblib",
     "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
-    "registered_at": "2026-04-12T20:49:24.438075",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.8205,
+      "rmse": 3.5995
+    },
     "name": "corners_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:06:33.075652",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:06:33.075626",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "corners_xgb_v1.0.0_None": {
     "features": [
@@ -1792,10 +1792,6 @@
     "version": "1.0.0"
   },
   "corners_xgb_v1.0.0_PD": {
-    "filename": "corners_xgb_v1_PD.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1828,26 +1824,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.7597,
-      "rmse": 3.5082,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:53:16.412242",
+    "filename": "corners_xgb_v1_PD.joblib",
     "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
-    "registered_at": "2026-04-12T20:53:16.412263",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.7969,
+      "rmse": 3.552
+    },
     "name": "corners_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:09:29.523153",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:09:29.523128",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "corners_xgb_v1.0.0_PL": {
-    "filename": "corners_xgb_v1_PL.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1880,26 +1876,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 3.058,
-      "rmse": 3.8341,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:28:26.544195",
+    "filename": "corners_xgb_v1_PL.joblib",
     "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
-    "registered_at": "2026-04-12T20:28:26.544226",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 3.0584,
+      "rmse": 3.835
+    },
     "name": "corners_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:03:00.404986",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:03:00.404966",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "corners_xgb_v1.0.0_SA": {
-    "filename": "corners_xgb_v1_SA.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1932,26 +1928,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.9948,
-      "rmse": 3.7951,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:51:19.397608",
+    "filename": "corners_xgb_v1_SA.joblib",
     "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
-    "registered_at": "2026-04-12T20:51:19.397633",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.9966,
+      "rmse": 3.7973
+    },
     "name": "corners_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:08:03.050499",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:08:03.050479",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "home_goals_v1.0.0_BL1": {
-    "filename": "home_goals_model_BL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -1984,26 +1980,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.1058,
-      "rmse": 1.383,
-      "calibration_score": 0.1767
-    },
-    "training_date": "2026-04-12T20:30:31.352521",
+    "filename": "home_goals_model_BL1.pkl",
     "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 747,
-    "registered_at": "2026-04-12T20:30:31.352539",
+    "metrics": {
+      "calibration_score": 0.1891,
+      "mae": 1.1262,
+      "rmse": 1.4228
+    },
     "name": "home_goals",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:03:45.681040",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_goals",
+    "temporal_validated": true,
+    "test_size": 747,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:03:45.681021",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "home_goals_v1.0.0_FL1": {
-    "filename": "home_goals_model_FL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2036,20 +2032,24 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.0498,
-      "rmse": 1.3449,
-      "calibration_score": 0.1877
-    },
-    "training_date": "2026-04-12T20:48:18.226524",
+    "filename": "home_goals_model_FL1.pkl",
     "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
-    "registered_at": "2026-04-12T20:48:18.226594",
+    "metrics": {
+      "calibration_score": 0.1962,
+      "mae": 1.058,
+      "rmse": 1.3662
+    },
     "name": "home_goals",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:05:42.080674",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_goals",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:05:42.080648",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "home_goals_v1.0.0_None": {
     "features": [
@@ -2104,10 +2104,6 @@
     "version": "1.0.0"
   },
   "home_goals_v1.0.0_PD": {
-    "filename": "home_goals_model_PD.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2140,26 +2136,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.9373,
-      "rmse": 1.2029,
-      "calibration_score": 0.1742
-    },
-    "training_date": "2026-04-12T20:52:06.453011",
+    "filename": "home_goals_model_PD.pkl",
     "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
-    "registered_at": "2026-04-12T20:52:06.453028",
+    "metrics": {
+      "calibration_score": 0.193,
+      "mae": 0.958,
+      "rmse": 1.2532
+    },
     "name": "home_goals",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:08:41.615229",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_goals",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:08:41.615208",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "home_goals_v1.0.0_PL": {
-    "filename": "home_goals_model_PL.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2192,26 +2188,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.1023,
-      "rmse": 1.3955,
-      "calibration_score": 0.1914
-    },
-    "training_date": "2026-04-12T20:01:19.930481",
+    "filename": "home_goals_model_PL.pkl",
     "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
-    "registered_at": "2026-04-12T20:01:19.930511",
+    "metrics": {
+      "calibration_score": 0.2025,
+      "mae": 1.1254,
+      "rmse": 1.4274
+    },
     "name": "home_goals",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:02:00.854486",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_goals",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:02:00.854462",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "home_goals_v1.0.0_SA": {
-    "filename": "home_goals_model_SA.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2244,26 +2240,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.9567,
-      "rmse": 1.23,
-      "calibration_score": 0.205
-    },
-    "training_date": "2026-04-12T20:50:07.515873",
+    "filename": "home_goals_model_SA.pkl",
     "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
-    "registered_at": "2026-04-12T20:50:07.515896",
+    "metrics": {
+      "calibration_score": 0.2128,
+      "mae": 0.9752,
+      "rmse": 1.2583
+    },
     "name": "home_goals",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:07:11.555037",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_goals",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:07:11.555012",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "home_goals_xgb_v1.0.0_BL1": {
-    "filename": "home_goals_xgb_v1_BL1.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_count_poisson",
-    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2296,26 +2292,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.1041,
-      "rmse": 1.3936,
-      "calibration_score": 0.1803
-    },
-    "training_date": "2026-04-12T20:30:32.461796",
+    "filename": "home_goals_xgb_v1_BL1.joblib",
     "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 747,
-    "registered_at": "2026-04-12T20:30:32.461819",
+    "metrics": {
+      "calibration_score": 0.2093,
+      "mae": 1.1518,
+      "rmse": 1.4803
+    },
     "name": "home_goals_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:03:51.537155",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_goals",
+    "temporal_validated": true,
+    "test_size": 747,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:03:51.537138",
+    "type": "xgb_regressor_count_poisson",
+    "version": "1.0.0"
   },
   "home_goals_xgb_v1.0.0_FL1": {
-    "filename": "home_goals_xgb_v1_FL1.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_count_poisson",
-    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2348,20 +2344,24 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.055,
-      "rmse": 1.3917,
-      "calibration_score": 0.2152
-    },
-    "training_date": "2026-04-12T20:48:28.288721",
+    "filename": "home_goals_xgb_v1_FL1.joblib",
     "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
-    "registered_at": "2026-04-12T20:48:28.288739",
+    "metrics": {
+      "calibration_score": 0.2311,
+      "mae": 1.0779,
+      "rmse": 1.4232
+    },
     "name": "home_goals_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:05:48.600207",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_goals",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:05:48.600184",
+    "type": "xgb_regressor_count_poisson",
+    "version": "1.0.0"
   },
   "home_goals_xgb_v1.0.0_None": {
     "features": [
@@ -2416,10 +2416,6 @@
     "version": "1.0.0"
   },
   "home_goals_xgb_v1.0.0_PD": {
-    "filename": "home_goals_xgb_v1_PD.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_count_poisson",
-    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2452,26 +2448,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.9515,
-      "rmse": 1.244,
-      "calibration_score": 0.1892
-    },
-    "training_date": "2026-04-12T20:52:11.705513",
+    "filename": "home_goals_xgb_v1_PD.joblib",
     "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
-    "registered_at": "2026-04-12T20:52:11.705535",
+    "metrics": {
+      "calibration_score": 0.2341,
+      "mae": 1.0181,
+      "rmse": 1.3467
+    },
     "name": "home_goals_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:08:46.904515",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_goals",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:08:46.904494",
+    "type": "xgb_regressor_count_poisson",
+    "version": "1.0.0"
   },
   "home_goals_xgb_v1.0.0_PL": {
-    "filename": "home_goals_xgb_v1_PL.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_count_poisson",
-    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2504,26 +2500,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 1.1439,
-      "rmse": 1.475,
-      "calibration_score": 0.2298
-    },
-    "training_date": "2026-04-12T20:01:25.233104",
+    "filename": "home_goals_xgb_v1_PL.joblib",
     "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
-    "registered_at": "2026-04-12T20:01:25.233120",
+    "metrics": {
+      "calibration_score": 0.2484,
+      "mae": 1.1722,
+      "rmse": 1.5139
+    },
     "name": "home_goals_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:02:07.351142",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_goals",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:02:07.351117",
+    "type": "xgb_regressor_count_poisson",
+    "version": "1.0.0"
   },
   "home_goals_xgb_v1.0.0_SA": {
-    "filename": "home_goals_xgb_v1_SA.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_count_poisson",
-    "target": "home_goals",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2556,296 +2552,296 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 0.9508,
-      "rmse": 1.2301,
-      "calibration_score": 0.2282
-    },
-    "training_date": "2026-04-12T20:50:14.494495",
+    "filename": "home_goals_xgb_v1_SA.joblib",
     "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
-    "registered_at": "2026-04-12T20:50:14.494524",
+    "metrics": {
+      "calibration_score": 0.2427,
+      "mae": 0.9683,
+      "rmse": 1.2566
+    },
     "name": "home_goals_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:07:19.093022",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_goals",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:07:19.093004",
+    "type": "xgb_regressor_count_poisson",
+    "version": "1.0.0"
   },
   "ma_corn_v1.0.0_BL1": {
-    "filename": "away_corners_model_BL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "away_corners",
-    "features": [
-      "home_rolling_goals_scored_3",
-      "home_rolling_goals_conceded_3",
-      "home_rolling_corners_scored_3",
-      "home_rolling_corners_conceded_3",
-      "home_rolling_goals_scored_5",
-      "home_rolling_goals_conceded_5",
-      "home_rolling_corners_scored_5",
-      "home_rolling_corners_conceded_5",
-      "home_rolling_goals_scored_10",
-      "home_rolling_goals_conceded_10",
-      "home_rolling_corners_scored_10",
-      "home_rolling_corners_conceded_10",
-      "home_form_rating",
-      "home_team_availability_pct",
-      "away_rolling_goals_scored_3",
-      "away_rolling_goals_conceded_3",
-      "away_rolling_corners_scored_3",
-      "away_rolling_corners_conceded_3",
-      "away_rolling_goals_scored_5",
-      "away_rolling_goals_conceded_5",
-      "away_rolling_corners_scored_5",
-      "away_rolling_corners_conceded_5",
-      "away_rolling_goals_scored_10",
-      "away_rolling_goals_conceded_10",
-      "away_rolling_corners_scored_10",
-      "away_rolling_corners_conceded_10",
-      "away_form_rating",
-      "away_team_availability_pct",
-      "precipitation_mm",
-      "wind_speed_kmh"
-    ],
-    "metrics": {
-      "mae": 2.0118,
-      "rmse": 2.5772,
-      "calibration_score": 0.0356
-    },
-    "training_date": "2026-04-12T20:30:35.370450",
-    "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 746,
     "calibrator_corn_o75_filename": "calibrators\\corners_corn_o75_cal_BL1.pkl",
     "calibrator_corn_u11_filename": "calibrators\\corners_corn_u11_cal_BL1.pkl",
-    "registered_at": "2026-04-12T20:30:35.370462",
+    "features": [
+      "home_rolling_goals_scored_3",
+      "home_rolling_goals_conceded_3",
+      "home_rolling_corners_scored_3",
+      "home_rolling_corners_conceded_3",
+      "home_rolling_goals_scored_5",
+      "home_rolling_goals_conceded_5",
+      "home_rolling_corners_scored_5",
+      "home_rolling_corners_conceded_5",
+      "home_rolling_goals_scored_10",
+      "home_rolling_goals_conceded_10",
+      "home_rolling_corners_scored_10",
+      "home_rolling_corners_conceded_10",
+      "home_form_rating",
+      "home_team_availability_pct",
+      "away_rolling_goals_scored_3",
+      "away_rolling_goals_conceded_3",
+      "away_rolling_corners_scored_3",
+      "away_rolling_corners_conceded_3",
+      "away_rolling_goals_scored_5",
+      "away_rolling_goals_conceded_5",
+      "away_rolling_corners_scored_5",
+      "away_rolling_corners_conceded_5",
+      "away_rolling_goals_scored_10",
+      "away_rolling_goals_conceded_10",
+      "away_rolling_corners_scored_10",
+      "away_rolling_corners_conceded_10",
+      "away_form_rating",
+      "away_team_availability_pct",
+      "precipitation_mm",
+      "wind_speed_kmh"
+    ],
+    "filename": "away_corners_model_BL1.pkl",
+    "league": "BL1",
+    "metrics": {
+      "calibration_score": 0.0363,
+      "mae": 2.065,
+      "rmse": 2.6631
+    },
     "name": "ma_corn",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:04:17.688841",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_corners",
+    "temporal_validated": true,
+    "test_size": 746,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:04:17.688819",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "ma_corn_v1.0.0_FL1": {
-    "filename": "away_corners_model_FL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "away_corners",
-    "features": [
-      "home_rolling_goals_scored_3",
-      "home_rolling_goals_conceded_3",
-      "home_rolling_corners_scored_3",
-      "home_rolling_corners_conceded_3",
-      "home_rolling_goals_scored_5",
-      "home_rolling_goals_conceded_5",
-      "home_rolling_corners_scored_5",
-      "home_rolling_corners_conceded_5",
-      "home_rolling_goals_scored_10",
-      "home_rolling_goals_conceded_10",
-      "home_rolling_corners_scored_10",
-      "home_rolling_corners_conceded_10",
-      "home_form_rating",
-      "home_team_availability_pct",
-      "away_rolling_goals_scored_3",
-      "away_rolling_goals_conceded_3",
-      "away_rolling_corners_scored_3",
-      "away_rolling_corners_conceded_3",
-      "away_rolling_goals_scored_5",
-      "away_rolling_goals_conceded_5",
-      "away_rolling_corners_scored_5",
-      "away_rolling_corners_conceded_5",
-      "away_rolling_goals_scored_10",
-      "away_rolling_goals_conceded_10",
-      "away_rolling_corners_scored_10",
-      "away_rolling_corners_conceded_10",
-      "away_form_rating",
-      "away_team_availability_pct",
-      "precipitation_mm",
-      "wind_speed_kmh"
-    ],
-    "metrics": {
-      "mae": 2.1078,
-      "rmse": 2.7475,
-      "calibration_score": 0.0304
-    },
-    "training_date": "2026-04-12T20:49:05.504906",
-    "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
     "calibrator_corn_o75_filename": "calibrators\\corners_corn_o75_cal_FL1.pkl",
     "calibrator_corn_u11_filename": "calibrators\\corners_corn_u11_cal_FL1.pkl",
-    "registered_at": "2026-04-12T20:49:05.504924",
+    "features": [
+      "home_rolling_goals_scored_3",
+      "home_rolling_goals_conceded_3",
+      "home_rolling_corners_scored_3",
+      "home_rolling_corners_conceded_3",
+      "home_rolling_goals_scored_5",
+      "home_rolling_goals_conceded_5",
+      "home_rolling_corners_scored_5",
+      "home_rolling_corners_conceded_5",
+      "home_rolling_goals_scored_10",
+      "home_rolling_goals_conceded_10",
+      "home_rolling_corners_scored_10",
+      "home_rolling_corners_conceded_10",
+      "home_form_rating",
+      "home_team_availability_pct",
+      "away_rolling_goals_scored_3",
+      "away_rolling_goals_conceded_3",
+      "away_rolling_corners_scored_3",
+      "away_rolling_corners_conceded_3",
+      "away_rolling_goals_scored_5",
+      "away_rolling_goals_conceded_5",
+      "away_rolling_corners_scored_5",
+      "away_rolling_corners_conceded_5",
+      "away_rolling_goals_scored_10",
+      "away_rolling_goals_conceded_10",
+      "away_rolling_corners_scored_10",
+      "away_rolling_corners_conceded_10",
+      "away_form_rating",
+      "away_team_availability_pct",
+      "precipitation_mm",
+      "wind_speed_kmh"
+    ],
+    "filename": "away_corners_model_FL1.pkl",
+    "league": "FL1",
+    "metrics": {
+      "calibration_score": 0.0309,
+      "mae": 2.1371,
+      "rmse": 2.7964
+    },
     "name": "ma_corn",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:06:15.250465",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_corners",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:06:15.250436",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "ma_corn_v1.0.0_PD": {
-    "filename": "away_corners_model_PD.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "away_corners",
-    "features": [
-      "home_rolling_goals_scored_3",
-      "home_rolling_goals_conceded_3",
-      "home_rolling_corners_scored_3",
-      "home_rolling_corners_conceded_3",
-      "home_rolling_goals_scored_5",
-      "home_rolling_goals_conceded_5",
-      "home_rolling_corners_scored_5",
-      "home_rolling_corners_conceded_5",
-      "home_rolling_goals_scored_10",
-      "home_rolling_goals_conceded_10",
-      "home_rolling_corners_scored_10",
-      "home_rolling_corners_conceded_10",
-      "home_form_rating",
-      "home_team_availability_pct",
-      "away_rolling_goals_scored_3",
-      "away_rolling_goals_conceded_3",
-      "away_rolling_corners_scored_3",
-      "away_rolling_corners_conceded_3",
-      "away_rolling_goals_scored_5",
-      "away_rolling_goals_conceded_5",
-      "away_rolling_corners_scored_5",
-      "away_rolling_corners_conceded_5",
-      "away_rolling_goals_scored_10",
-      "away_rolling_goals_conceded_10",
-      "away_rolling_corners_scored_10",
-      "away_rolling_corners_conceded_10",
-      "away_form_rating",
-      "away_team_availability_pct",
-      "precipitation_mm",
-      "wind_speed_kmh"
-    ],
-    "metrics": {
-      "mae": 1.8996,
-      "rmse": 2.4191,
-      "calibration_score": 0.0329
-    },
-    "training_date": "2026-04-12T20:52:50.008824",
-    "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
     "calibrator_corn_o75_filename": "calibrators\\corners_corn_o75_cal_PD.pkl",
     "calibrator_corn_u11_filename": "calibrators\\corners_corn_u11_cal_PD.pkl",
-    "registered_at": "2026-04-12T20:52:50.008846",
+    "features": [
+      "home_rolling_goals_scored_3",
+      "home_rolling_goals_conceded_3",
+      "home_rolling_corners_scored_3",
+      "home_rolling_corners_conceded_3",
+      "home_rolling_goals_scored_5",
+      "home_rolling_goals_conceded_5",
+      "home_rolling_corners_scored_5",
+      "home_rolling_corners_conceded_5",
+      "home_rolling_goals_scored_10",
+      "home_rolling_goals_conceded_10",
+      "home_rolling_corners_scored_10",
+      "home_rolling_corners_conceded_10",
+      "home_form_rating",
+      "home_team_availability_pct",
+      "away_rolling_goals_scored_3",
+      "away_rolling_goals_conceded_3",
+      "away_rolling_corners_scored_3",
+      "away_rolling_corners_conceded_3",
+      "away_rolling_goals_scored_5",
+      "away_rolling_goals_conceded_5",
+      "away_rolling_corners_scored_5",
+      "away_rolling_corners_conceded_5",
+      "away_rolling_goals_scored_10",
+      "away_rolling_goals_conceded_10",
+      "away_rolling_corners_scored_10",
+      "away_rolling_corners_conceded_10",
+      "away_form_rating",
+      "away_team_availability_pct",
+      "precipitation_mm",
+      "wind_speed_kmh"
+    ],
+    "filename": "away_corners_model_PD.pkl",
+    "league": "PD",
+    "metrics": {
+      "calibration_score": 0.033,
+      "mae": 1.9438,
+      "rmse": 2.4868
+    },
     "name": "ma_corn",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:09:11.453372",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_corners",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:09:11.453354",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "ma_corn_v1.0.0_PL": {
-    "filename": "away_corners_model_PL.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "away_corners",
-    "features": [
-      "home_rolling_goals_scored_3",
-      "home_rolling_goals_conceded_3",
-      "home_rolling_corners_scored_3",
-      "home_rolling_corners_conceded_3",
-      "home_rolling_goals_scored_5",
-      "home_rolling_goals_conceded_5",
-      "home_rolling_corners_scored_5",
-      "home_rolling_corners_conceded_5",
-      "home_rolling_goals_scored_10",
-      "home_rolling_goals_conceded_10",
-      "home_rolling_corners_scored_10",
-      "home_rolling_corners_conceded_10",
-      "home_form_rating",
-      "home_team_availability_pct",
-      "away_rolling_goals_scored_3",
-      "away_rolling_goals_conceded_3",
-      "away_rolling_corners_scored_3",
-      "away_rolling_corners_conceded_3",
-      "away_rolling_goals_scored_5",
-      "away_rolling_goals_conceded_5",
-      "away_rolling_corners_scored_5",
-      "away_rolling_corners_conceded_5",
-      "away_rolling_goals_scored_10",
-      "away_rolling_goals_conceded_10",
-      "away_rolling_corners_scored_10",
-      "away_rolling_corners_conceded_10",
-      "away_form_rating",
-      "away_team_availability_pct",
-      "precipitation_mm",
-      "wind_speed_kmh"
-    ],
-    "metrics": {
-      "mae": 2.3331,
-      "rmse": 2.9878,
-      "calibration_score": 0.0316
-    },
-    "training_date": "2026-04-12T20:21:14.040018",
-    "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
     "calibrator_corn_o75_filename": "calibrators\\corners_corn_o75_cal_PL.pkl",
     "calibrator_corn_u11_filename": "calibrators\\corners_corn_u11_cal_PL.pkl",
-    "registered_at": "2026-04-12T20:21:14.040040",
+    "features": [
+      "home_rolling_goals_scored_3",
+      "home_rolling_goals_conceded_3",
+      "home_rolling_corners_scored_3",
+      "home_rolling_corners_conceded_3",
+      "home_rolling_goals_scored_5",
+      "home_rolling_goals_conceded_5",
+      "home_rolling_corners_scored_5",
+      "home_rolling_corners_conceded_5",
+      "home_rolling_goals_scored_10",
+      "home_rolling_goals_conceded_10",
+      "home_rolling_corners_scored_10",
+      "home_rolling_corners_conceded_10",
+      "home_form_rating",
+      "home_team_availability_pct",
+      "away_rolling_goals_scored_3",
+      "away_rolling_goals_conceded_3",
+      "away_rolling_corners_scored_3",
+      "away_rolling_corners_conceded_3",
+      "away_rolling_goals_scored_5",
+      "away_rolling_goals_conceded_5",
+      "away_rolling_corners_scored_5",
+      "away_rolling_corners_conceded_5",
+      "away_rolling_goals_scored_10",
+      "away_rolling_goals_conceded_10",
+      "away_rolling_corners_scored_10",
+      "away_rolling_corners_conceded_10",
+      "away_form_rating",
+      "away_team_availability_pct",
+      "precipitation_mm",
+      "wind_speed_kmh"
+    ],
+    "filename": "away_corners_model_PL.pkl",
+    "league": "PL",
+    "metrics": {
+      "calibration_score": 0.0323,
+      "mae": 2.3707,
+      "rmse": 3.0374
+    },
     "name": "ma_corn",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:02:31.393090",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_corners",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:02:31.393074",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "ma_corn_v1.0.0_SA": {
-    "filename": "away_corners_model_SA.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "away_corners",
-    "features": [
-      "home_rolling_goals_scored_3",
-      "home_rolling_goals_conceded_3",
-      "home_rolling_corners_scored_3",
-      "home_rolling_corners_conceded_3",
-      "home_rolling_goals_scored_5",
-      "home_rolling_goals_conceded_5",
-      "home_rolling_corners_scored_5",
-      "home_rolling_corners_conceded_5",
-      "home_rolling_goals_scored_10",
-      "home_rolling_goals_conceded_10",
-      "home_rolling_corners_scored_10",
-      "home_rolling_corners_conceded_10",
-      "home_form_rating",
-      "home_team_availability_pct",
-      "away_rolling_goals_scored_3",
-      "away_rolling_goals_conceded_3",
-      "away_rolling_corners_scored_3",
-      "away_rolling_corners_conceded_3",
-      "away_rolling_goals_scored_5",
-      "away_rolling_goals_conceded_5",
-      "away_rolling_corners_scored_5",
-      "away_rolling_corners_conceded_5",
-      "away_rolling_goals_scored_10",
-      "away_rolling_goals_conceded_10",
-      "away_rolling_corners_scored_10",
-      "away_rolling_corners_conceded_10",
-      "away_form_rating",
-      "away_team_availability_pct",
-      "precipitation_mm",
-      "wind_speed_kmh"
-    ],
-    "metrics": {
-      "mae": 2.1147,
-      "rmse": 2.6261,
-      "calibration_score": 0.0433
-    },
-    "training_date": "2026-04-12T20:50:53.683694",
-    "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
     "calibrator_corn_o75_filename": "calibrators\\corners_corn_o75_cal_SA.pkl",
     "calibrator_corn_u11_filename": "calibrators\\corners_corn_u11_cal_SA.pkl",
-    "registered_at": "2026-04-12T20:50:53.683711",
+    "features": [
+      "home_rolling_goals_scored_3",
+      "home_rolling_goals_conceded_3",
+      "home_rolling_corners_scored_3",
+      "home_rolling_corners_conceded_3",
+      "home_rolling_goals_scored_5",
+      "home_rolling_goals_conceded_5",
+      "home_rolling_corners_scored_5",
+      "home_rolling_corners_conceded_5",
+      "home_rolling_goals_scored_10",
+      "home_rolling_goals_conceded_10",
+      "home_rolling_corners_scored_10",
+      "home_rolling_corners_conceded_10",
+      "home_form_rating",
+      "home_team_availability_pct",
+      "away_rolling_goals_scored_3",
+      "away_rolling_goals_conceded_3",
+      "away_rolling_corners_scored_3",
+      "away_rolling_corners_conceded_3",
+      "away_rolling_goals_scored_5",
+      "away_rolling_goals_conceded_5",
+      "away_rolling_corners_scored_5",
+      "away_rolling_corners_conceded_5",
+      "away_rolling_goals_scored_10",
+      "away_rolling_goals_conceded_10",
+      "away_rolling_corners_scored_10",
+      "away_rolling_corners_conceded_10",
+      "away_form_rating",
+      "away_team_availability_pct",
+      "precipitation_mm",
+      "wind_speed_kmh"
+    ],
+    "filename": "away_corners_model_SA.pkl",
+    "league": "SA",
+    "metrics": {
+      "calibration_score": 0.0438,
+      "mae": 2.1341,
+      "rmse": 2.6629
+    },
     "name": "ma_corn",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:07:45.701616",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "away_corners",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:07:45.701584",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "match_outcome_v1.0.0_BL1": {
-    "filename": "match_outcome_model_BL1.pkl",
-    "status": "productive",
-    "type": "lgbm_classifier",
-    "target": "outcome",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2878,26 +2874,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
+    "filename": "match_outcome_model_BL1.pkl",
+    "league": "BL1",
     "metrics": {
       "accuracy": 0.4685,
-      "log_loss": 1.0292,
-      "brier_score": 0.6163
+      "brier_score": 0.6163,
+      "log_loss": 1.0292
     },
-    "training_date": "2026-04-12T20:29:01.583676",
-    "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 747,
-    "registered_at": "2026-04-12T20:29:01.583696",
     "name": "match_outcome",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:03:39.934118",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "outcome",
+    "temporal_validated": true,
+    "test_size": 747,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:03:39.934098",
+    "type": "lgbm_classifier",
+    "version": "1.0.0"
   },
   "match_outcome_v1.0.0_FL1": {
-    "filename": "match_outcome_model_FL1.pkl",
-    "status": "productive",
-    "type": "lgbm_classifier",
-    "target": "outcome",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -2930,20 +2926,24 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
+    "filename": "match_outcome_model_FL1.pkl",
+    "league": "FL1",
     "metrics": {
       "accuracy": 0.4722,
-      "log_loss": 1.0352,
-      "brier_score": 0.6208
+      "brier_score": 0.6208,
+      "log_loss": 1.0352
     },
-    "training_date": "2026-04-12T20:48:11.267533",
-    "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
-    "registered_at": "2026-04-12T20:48:11.267555",
     "name": "match_outcome",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:05:32.282712",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "outcome",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:05:32.282689",
+    "type": "lgbm_classifier",
+    "version": "1.0.0"
   },
   "match_outcome_v1.0.0_None": {
     "features": [
@@ -2998,10 +2998,6 @@
     "version": "1.0.0"
   },
   "match_outcome_v1.0.0_PD": {
-    "filename": "match_outcome_model_PD.pkl",
-    "status": "productive",
-    "type": "lgbm_classifier",
-    "target": "outcome",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3034,26 +3030,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
+    "filename": "match_outcome_model_PD.pkl",
+    "league": "PD",
     "metrics": {
       "accuracy": 0.493,
-      "log_loss": 1.0209,
-      "brier_score": 0.6122
+      "brier_score": 0.6122,
+      "log_loss": 1.0209
     },
-    "training_date": "2026-04-12T20:52:00.086897",
-    "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
-    "registered_at": "2026-04-12T20:52:00.086913",
     "name": "match_outcome",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:08:36.270094",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "outcome",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:08:36.270081",
+    "type": "lgbm_classifier",
+    "version": "1.0.0"
   },
   "match_outcome_v1.0.0_PL": {
-    "filename": "match_outcome_model_PL.pkl",
-    "status": "productive",
-    "type": "lgbm_classifier",
-    "target": "outcome",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3086,26 +3082,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
+    "filename": "match_outcome_model_PL.pkl",
+    "league": "PL",
     "metrics": {
       "accuracy": 0.5181,
-      "log_loss": 1.0102,
-      "brier_score": 0.6033
+      "brier_score": 0.6033,
+      "log_loss": 1.0102
     },
-    "training_date": "2026-04-12T20:01:12.559359",
-    "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
-    "registered_at": "2026-04-12T20:01:12.559386",
     "name": "match_outcome",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:01:51.827365",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "outcome",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:01:51.827347",
+    "type": "lgbm_classifier",
+    "version": "1.0.0"
   },
   "match_outcome_v1.0.0_SA": {
-    "filename": "match_outcome_model_SA.pkl",
-    "status": "productive",
-    "type": "lgbm_classifier",
-    "target": "outcome",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3138,26 +3134,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
+    "filename": "match_outcome_model_SA.pkl",
+    "league": "SA",
     "metrics": {
       "accuracy": 0.4848,
-      "log_loss": 1.0336,
-      "brier_score": 0.6212
+      "brier_score": 0.6212,
+      "log_loss": 1.0336
     },
-    "training_date": "2026-04-12T20:50:00.068983",
-    "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
-    "registered_at": "2026-04-12T20:50:00.069003",
     "name": "match_outcome",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:07:04.825473",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "outcome",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:07:04.825449",
+    "type": "lgbm_classifier",
+    "version": "1.0.0"
   },
   "m_corners_lgbm_v1.0.0_BL1": {
-    "filename": "corners_model_BL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3190,26 +3186,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.7873,
-      "rmse": 3.438,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:30:35.984954",
+    "filename": "corners_model_BL1.pkl",
     "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 746,
-    "registered_at": "2026-04-12T20:30:35.984968",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.8784,
+      "rmse": 3.5853
+    },
     "name": "m_corners_lgbm",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:04:31.335754",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 746,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:04:31.335729",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "m_corners_lgbm_v1.0.0_FL1": {
-    "filename": "corners_model_FL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3242,26 +3238,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.8218,
-      "rmse": 3.6134,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:49:17.298661",
+    "filename": "corners_model_FL1.pkl",
     "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
-    "registered_at": "2026-04-12T20:49:17.298672",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.8437,
+      "rmse": 3.6515
+    },
     "name": "m_corners_lgbm",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:06:27.148353",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:06:27.148336",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "m_corners_lgbm_v1.0.0_PD": {
-    "filename": "corners_model_PD.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3294,26 +3290,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.6652,
-      "rmse": 3.3862,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:53:08.315374",
+    "filename": "corners_model_PD.pkl",
     "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
-    "registered_at": "2026-04-12T20:53:08.315395",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.7704,
+      "rmse": 3.509
+    },
     "name": "m_corners_lgbm",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:09:23.708622",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:09:23.708606",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "m_corners_lgbm_v1.0.0_PL": {
-    "filename": "corners_model_PL.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3346,26 +3342,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 3.0746,
-      "rmse": 3.8514,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:23:08.882765",
+    "filename": "corners_model_PL.pkl",
     "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
-    "registered_at": "2026-04-12T20:23:08.882780",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 3.103,
+      "rmse": 3.8846
+    },
     "name": "m_corners_lgbm",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:02:49.290196",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:02:49.290178",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "m_corners_lgbm_v1.0.0_SA": {
-    "filename": "corners_model_SA.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3398,26 +3394,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 3.0556,
-      "rmse": 3.8409,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:51:11.786649",
+    "filename": "corners_model_SA.pkl",
     "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
-    "registered_at": "2026-04-12T20:51:11.786666",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 3.0916,
+      "rmse": 3.8906
+    },
     "name": "m_corners_lgbm",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:07:56.177600",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:07:56.177581",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "m_corners_xgb_v1.0.0_BL1": {
-    "filename": "corners_xgb_v1_BL1.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3450,26 +3446,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.8811,
-      "rmse": 3.5841,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:30:36.739953",
+    "filename": "corners_xgb_v1_BL1.joblib",
     "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 746,
-    "registered_at": "2026-04-12T20:30:36.739969",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.9136,
+      "rmse": 3.633
+    },
     "name": "m_corners_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:04:52.860947",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 746,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:04:52.860935",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "m_corners_xgb_v1.0.0_FL1": {
-    "filename": "corners_xgb_v1_FL1.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3502,26 +3498,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.8191,
-      "rmse": 3.5964,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:49:29.978154",
+    "filename": "corners_xgb_v1_FL1.joblib",
     "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
-    "registered_at": "2026-04-12T20:49:29.978167",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.8205,
+      "rmse": 3.5995
+    },
     "name": "m_corners_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:06:37.746223",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:06:37.746213",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "m_corners_xgb_v1.0.0_PD": {
-    "filename": "corners_xgb_v1_PD.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3554,26 +3550,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.7597,
-      "rmse": 3.5082,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:53:28.233667",
+    "filename": "corners_xgb_v1_PD.joblib",
     "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
-    "registered_at": "2026-04-12T20:53:28.233686",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.7969,
+      "rmse": 3.552
+    },
     "name": "m_corners_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:09:34.275597",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:09:34.275584",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "m_corners_xgb_v1.0.0_PL": {
-    "filename": "corners_xgb_v1_PL.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3606,26 +3602,26 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 3.058,
-      "rmse": 3.8341,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:28:50.670092",
+    "filename": "corners_xgb_v1_PL.joblib",
     "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
-    "registered_at": "2026-04-12T20:28:50.670106",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 3.0584,
+      "rmse": 3.835
+    },
     "name": "m_corners_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:03:09.940255",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 940,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:03:09.940241",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "m_corners_xgb_v1.0.0_SA": {
-    "filename": "corners_xgb_v1_SA.joblib",
-    "status": "productive",
-    "type": "xgb_regressor_tweedie",
-    "target": "total_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3658,242 +3654,190 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
-    "metrics": {
-      "mae": 2.9948,
-      "rmse": 3.7951,
-      "calibration_score": 0.0
-    },
-    "training_date": "2026-04-12T20:51:27.620804",
+    "filename": "corners_xgb_v1_SA.joblib",
     "league": "SA",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 924,
-    "registered_at": "2026-04-12T20:51:27.620826",
+    "metrics": {
+      "calibration_score": 0.0,
+      "mae": 2.9966,
+      "rmse": 3.7973
+    },
     "name": "m_corners_xgb",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:08:08.740771",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "total_corners",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:08:08.740760",
+    "type": "xgb_regressor_tweedie",
+    "version": "1.0.0"
   },
   "mh_corn_v1.0.0_BL1": {
-    "filename": "home_corners_model_BL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "home_corners",
-    "features": [
-      "home_rolling_goals_scored_3",
-      "home_rolling_goals_conceded_3",
-      "home_rolling_corners_scored_3",
-      "home_rolling_corners_conceded_3",
-      "home_rolling_goals_scored_5",
-      "home_rolling_goals_conceded_5",
-      "home_rolling_corners_scored_5",
-      "home_rolling_corners_conceded_5",
-      "home_rolling_goals_scored_10",
-      "home_rolling_goals_conceded_10",
-      "home_rolling_corners_scored_10",
-      "home_rolling_corners_conceded_10",
-      "home_form_rating",
-      "home_team_availability_pct",
-      "away_rolling_goals_scored_3",
-      "away_rolling_goals_conceded_3",
-      "away_rolling_corners_scored_3",
-      "away_rolling_corners_conceded_3",
-      "away_rolling_goals_scored_5",
-      "away_rolling_goals_conceded_5",
-      "away_rolling_corners_scored_5",
-      "away_rolling_corners_conceded_5",
-      "away_rolling_goals_scored_10",
-      "away_rolling_goals_conceded_10",
-      "away_rolling_corners_scored_10",
-      "away_rolling_corners_conceded_10",
-      "away_form_rating",
-      "away_team_availability_pct",
-      "precipitation_mm",
-      "wind_speed_kmh"
-    ],
-    "metrics": {
-      "mae": 2.2674,
-      "rmse": 2.944,
-      "calibration_score": 0.0128
-    },
-    "training_date": "2026-04-12T20:30:35.332451",
-    "league": "BL1",
-    "temporal_validated": true,
-    "train_size": 1530,
-    "test_size": 746,
     "calibrator_corn_o75_filename": "calibrators\\corners_corn_o75_cal_BL1.pkl",
     "calibrator_corn_u11_filename": "calibrators\\corners_corn_u11_cal_BL1.pkl",
-    "registered_at": "2026-04-12T20:30:35.332461",
+    "features": [
+      "home_rolling_goals_scored_3",
+      "home_rolling_goals_conceded_3",
+      "home_rolling_corners_scored_3",
+      "home_rolling_corners_conceded_3",
+      "home_rolling_goals_scored_5",
+      "home_rolling_goals_conceded_5",
+      "home_rolling_corners_scored_5",
+      "home_rolling_corners_conceded_5",
+      "home_rolling_goals_scored_10",
+      "home_rolling_goals_conceded_10",
+      "home_rolling_corners_scored_10",
+      "home_rolling_corners_conceded_10",
+      "home_form_rating",
+      "home_team_availability_pct",
+      "away_rolling_goals_scored_3",
+      "away_rolling_goals_conceded_3",
+      "away_rolling_corners_scored_3",
+      "away_rolling_corners_conceded_3",
+      "away_rolling_goals_scored_5",
+      "away_rolling_goals_conceded_5",
+      "away_rolling_corners_scored_5",
+      "away_rolling_corners_conceded_5",
+      "away_rolling_goals_scored_10",
+      "away_rolling_goals_conceded_10",
+      "away_rolling_corners_scored_10",
+      "away_rolling_corners_conceded_10",
+      "away_form_rating",
+      "away_team_availability_pct",
+      "precipitation_mm",
+      "wind_speed_kmh"
+    ],
+    "filename": "home_corners_model_BL1.pkl",
+    "league": "BL1",
+    "metrics": {
+      "calibration_score": 0.0127,
+      "mae": 2.3353,
+      "rmse": 3.0568
+    },
     "name": "mh_corn",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:04:12.365767",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_corners",
+    "temporal_validated": true,
+    "test_size": 746,
+    "train_size": 1530,
+    "training_date": "2026-04-17T20:04:12.365758",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "mh_corn_v1.0.0_FL1": {
-    "filename": "home_corners_model_FL1.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "home_corners",
-    "features": [
-      "home_rolling_goals_scored_3",
-      "home_rolling_goals_conceded_3",
-      "home_rolling_corners_scored_3",
-      "home_rolling_corners_conceded_3",
-      "home_rolling_goals_scored_5",
-      "home_rolling_goals_conceded_5",
-      "home_rolling_corners_scored_5",
-      "home_rolling_corners_conceded_5",
-      "home_rolling_goals_scored_10",
-      "home_rolling_goals_conceded_10",
-      "home_rolling_corners_scored_10",
-      "home_rolling_corners_conceded_10",
-      "home_form_rating",
-      "home_team_availability_pct",
-      "away_rolling_goals_scored_3",
-      "away_rolling_goals_conceded_3",
-      "away_rolling_corners_scored_3",
-      "away_rolling_corners_conceded_3",
-      "away_rolling_goals_scored_5",
-      "away_rolling_goals_conceded_5",
-      "away_rolling_corners_scored_5",
-      "away_rolling_corners_conceded_5",
-      "away_rolling_goals_scored_10",
-      "away_rolling_goals_conceded_10",
-      "away_rolling_corners_scored_10",
-      "away_rolling_corners_conceded_10",
-      "away_form_rating",
-      "away_team_availability_pct",
-      "precipitation_mm",
-      "wind_speed_kmh"
-    ],
-    "metrics": {
-      "mae": 2.2675,
-      "rmse": 2.8642,
-      "calibration_score": 0.0185
-    },
-    "training_date": "2026-04-12T20:49:00.441052",
-    "league": "FL1",
-    "temporal_validated": true,
-    "train_size": 1799,
-    "test_size": 756,
     "calibrator_corn_o75_filename": "calibrators\\corners_corn_o75_cal_FL1.pkl",
     "calibrator_corn_u11_filename": "calibrators\\corners_corn_u11_cal_FL1.pkl",
-    "registered_at": "2026-04-12T20:49:00.441068",
+    "features": [
+      "home_rolling_goals_scored_3",
+      "home_rolling_goals_conceded_3",
+      "home_rolling_corners_scored_3",
+      "home_rolling_corners_conceded_3",
+      "home_rolling_goals_scored_5",
+      "home_rolling_goals_conceded_5",
+      "home_rolling_corners_scored_5",
+      "home_rolling_corners_conceded_5",
+      "home_rolling_goals_scored_10",
+      "home_rolling_goals_conceded_10",
+      "home_rolling_corners_scored_10",
+      "home_rolling_corners_conceded_10",
+      "home_form_rating",
+      "home_team_availability_pct",
+      "away_rolling_goals_scored_3",
+      "away_rolling_goals_conceded_3",
+      "away_rolling_corners_scored_3",
+      "away_rolling_corners_conceded_3",
+      "away_rolling_goals_scored_5",
+      "away_rolling_goals_conceded_5",
+      "away_rolling_corners_scored_5",
+      "away_rolling_corners_conceded_5",
+      "away_rolling_goals_scored_10",
+      "away_rolling_goals_conceded_10",
+      "away_rolling_corners_scored_10",
+      "away_rolling_corners_conceded_10",
+      "away_form_rating",
+      "away_team_availability_pct",
+      "precipitation_mm",
+      "wind_speed_kmh"
+    ],
+    "filename": "home_corners_model_FL1.pkl",
+    "league": "FL1",
+    "metrics": {
+      "calibration_score": 0.0187,
+      "mae": 2.3113,
+      "rmse": 2.922
+    },
     "name": "mh_corn",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:06:10.460123",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_corners",
+    "temporal_validated": true,
+    "test_size": 756,
+    "train_size": 1799,
+    "training_date": "2026-04-17T20:06:10.460109",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "mh_corn_v1.0.0_PD": {
-    "filename": "home_corners_model_PD.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "home_corners",
-    "features": [
-      "home_rolling_goals_scored_3",
-      "home_rolling_goals_conceded_3",
-      "home_rolling_corners_scored_3",
-      "home_rolling_corners_conceded_3",
-      "home_rolling_goals_scored_5",
-      "home_rolling_goals_conceded_5",
-      "home_rolling_corners_scored_5",
-      "home_rolling_corners_conceded_5",
-      "home_rolling_goals_scored_10",
-      "home_rolling_goals_conceded_10",
-      "home_rolling_corners_scored_10",
-      "home_rolling_corners_conceded_10",
-      "home_form_rating",
-      "home_team_availability_pct",
-      "away_rolling_goals_scored_3",
-      "away_rolling_goals_conceded_3",
-      "away_rolling_corners_scored_3",
-      "away_rolling_corners_conceded_3",
-      "away_rolling_goals_scored_5",
-      "away_rolling_goals_conceded_5",
-      "away_rolling_corners_scored_5",
-      "away_rolling_corners_conceded_5",
-      "away_rolling_goals_scored_10",
-      "away_rolling_goals_conceded_10",
-      "away_rolling_corners_scored_10",
-      "away_rolling_corners_conceded_10",
-      "away_form_rating",
-      "away_team_availability_pct",
-      "precipitation_mm",
-      "wind_speed_kmh"
-    ],
-    "metrics": {
-      "mae": 2.3861,
-      "rmse": 3.1101,
-      "calibration_score": 0.0148
-    },
-    "training_date": "2026-04-12T20:52:37.016071",
-    "league": "PD",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 931,
     "calibrator_corn_o75_filename": "calibrators\\corners_corn_o75_cal_PD.pkl",
     "calibrator_corn_u11_filename": "calibrators\\corners_corn_u11_cal_PD.pkl",
-    "registered_at": "2026-04-12T20:52:37.016087",
+    "features": [
+      "home_rolling_goals_scored_3",
+      "home_rolling_goals_conceded_3",
+      "home_rolling_corners_scored_3",
+      "home_rolling_corners_conceded_3",
+      "home_rolling_goals_scored_5",
+      "home_rolling_goals_conceded_5",
+      "home_rolling_corners_scored_5",
+      "home_rolling_corners_conceded_5",
+      "home_rolling_goals_scored_10",
+      "home_rolling_goals_conceded_10",
+      "home_rolling_corners_scored_10",
+      "home_rolling_corners_conceded_10",
+      "home_form_rating",
+      "home_team_availability_pct",
+      "away_rolling_goals_scored_3",
+      "away_rolling_goals_conceded_3",
+      "away_rolling_corners_scored_3",
+      "away_rolling_corners_conceded_3",
+      "away_rolling_goals_scored_5",
+      "away_rolling_goals_conceded_5",
+      "away_rolling_corners_scored_5",
+      "away_rolling_corners_conceded_5",
+      "away_rolling_goals_scored_10",
+      "away_rolling_goals_conceded_10",
+      "away_rolling_corners_scored_10",
+      "away_rolling_corners_conceded_10",
+      "away_form_rating",
+      "away_team_availability_pct",
+      "precipitation_mm",
+      "wind_speed_kmh"
+    ],
+    "filename": "home_corners_model_PD.pkl",
+    "league": "PD",
+    "metrics": {
+      "calibration_score": 0.015,
+      "mae": 2.4728,
+      "rmse": 3.2268
+    },
     "name": "mh_corn",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:09:06.296409",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_corners",
+    "temporal_validated": true,
+    "test_size": 931,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:09:06.296396",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "mh_corn_v1.0.0_PL": {
-    "filename": "home_corners_model_PL.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "home_corners",
-    "features": [
-      "home_rolling_goals_scored_3",
-      "home_rolling_goals_conceded_3",
-      "home_rolling_corners_scored_3",
-      "home_rolling_corners_conceded_3",
-      "home_rolling_goals_scored_5",
-      "home_rolling_goals_conceded_5",
-      "home_rolling_corners_scored_5",
-      "home_rolling_corners_conceded_5",
-      "home_rolling_goals_scored_10",
-      "home_rolling_goals_conceded_10",
-      "home_rolling_corners_scored_10",
-      "home_rolling_corners_conceded_10",
-      "home_form_rating",
-      "home_team_availability_pct",
-      "away_rolling_goals_scored_3",
-      "away_rolling_goals_conceded_3",
-      "away_rolling_corners_scored_3",
-      "away_rolling_corners_conceded_3",
-      "away_rolling_goals_scored_5",
-      "away_rolling_goals_conceded_5",
-      "away_rolling_corners_scored_5",
-      "away_rolling_corners_conceded_5",
-      "away_rolling_goals_scored_10",
-      "away_rolling_goals_conceded_10",
-      "away_rolling_corners_scored_10",
-      "away_rolling_corners_conceded_10",
-      "away_form_rating",
-      "away_team_availability_pct",
-      "precipitation_mm",
-      "wind_speed_kmh"
-    ],
-    "metrics": {
-      "mae": 2.5186,
-      "rmse": 3.1161,
-      "calibration_score": 0.0187
-    },
-    "training_date": "2026-04-12T20:21:13.988204",
-    "league": "PL",
-    "temporal_validated": true,
-    "train_size": 1520,
-    "test_size": 940,
     "calibrator_corn_o75_filename": "calibrators\\corners_corn_o75_cal_PL.pkl",
     "calibrator_corn_u11_filename": "calibrators\\corners_corn_u11_cal_PL.pkl",
-    "registered_at": "2026-04-12T20:21:13.988256",
-    "name": "mh_corn",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
-  },
-  "mh_corn_v1.0.0_SA": {
-    "filename": "home_corners_model_SA.pkl",
-    "status": "productive",
-    "type": "lgbm_regressor_poisson",
-    "target": "home_corners",
     "features": [
       "home_rolling_goals_scored_3",
       "home_rolling_goals_conceded_3",
@@ -3926,22 +3870,78 @@
       "precipitation_mm",
       "wind_speed_kmh"
     ],
+    "filename": "home_corners_model_PL.pkl",
+    "league": "PL",
     "metrics": {
-      "mae": 2.4393,
-      "rmse": 3.1108,
-      "calibration_score": 0.0134
+      "calibration_score": 0.0187,
+      "mae": 2.5732,
+      "rmse": 3.1933
     },
-    "training_date": "2026-04-12T20:50:41.694257",
-    "league": "SA",
+    "name": "mh_corn",
+    "registered_at": "2026-04-17T20:02:26.607581",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_corners",
     "temporal_validated": true,
+    "test_size": 940,
     "train_size": 1520,
-    "test_size": 924,
+    "training_date": "2026-04-17T20:02:26.607566",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
+  },
+  "mh_corn_v1.0.0_SA": {
     "calibrator_corn_o75_filename": "calibrators\\corners_corn_o75_cal_SA.pkl",
     "calibrator_corn_u11_filename": "calibrators\\corners_corn_u11_cal_SA.pkl",
-    "registered_at": "2026-04-12T20:50:41.694270",
+    "features": [
+      "home_rolling_goals_scored_3",
+      "home_rolling_goals_conceded_3",
+      "home_rolling_corners_scored_3",
+      "home_rolling_corners_conceded_3",
+      "home_rolling_goals_scored_5",
+      "home_rolling_goals_conceded_5",
+      "home_rolling_corners_scored_5",
+      "home_rolling_corners_conceded_5",
+      "home_rolling_goals_scored_10",
+      "home_rolling_goals_conceded_10",
+      "home_rolling_corners_scored_10",
+      "home_rolling_corners_conceded_10",
+      "home_form_rating",
+      "home_team_availability_pct",
+      "away_rolling_goals_scored_3",
+      "away_rolling_goals_conceded_3",
+      "away_rolling_corners_scored_3",
+      "away_rolling_corners_conceded_3",
+      "away_rolling_goals_scored_5",
+      "away_rolling_goals_conceded_5",
+      "away_rolling_corners_scored_5",
+      "away_rolling_corners_conceded_5",
+      "away_rolling_goals_scored_10",
+      "away_rolling_goals_conceded_10",
+      "away_rolling_corners_scored_10",
+      "away_rolling_corners_conceded_10",
+      "away_form_rating",
+      "away_team_availability_pct",
+      "precipitation_mm",
+      "wind_speed_kmh"
+    ],
+    "filename": "home_corners_model_SA.pkl",
+    "league": "SA",
+    "metrics": {
+      "calibration_score": 0.0138,
+      "mae": 2.4786,
+      "rmse": 3.1756
+    },
     "name": "mh_corn",
-    "version": "1.0.0",
-    "sklearn_version": "1.8.0"
+    "registered_at": "2026-04-17T20:07:40.588755",
+    "sklearn_version": "1.8.0",
+    "status": "productive",
+    "target": "home_corners",
+    "temporal_validated": true,
+    "test_size": 924,
+    "train_size": 1520,
+    "training_date": "2026-04-17T20:07:40.588743",
+    "type": "lgbm_regressor_poisson",
+    "version": "1.0.0"
   },
   "poisson_away_base_v1.0.0_BL1": {
     "calibration_split": "validation_only",

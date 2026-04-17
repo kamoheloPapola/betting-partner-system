@@ -9,17 +9,102 @@ from src.db.models import Base
 from src.ml.registry import ModelRegistry, PROMOTION_THRESHOLDS
 from src.core.exceptions import ModelNotFoundError
 
-def test_model_registry_production_loading():
-    """Verify registry prioritizes production models."""
+def test_model_registry_production_loading(tmp_path, monkeypatch):
+    """
+    Verify get_production_model_for_league resolves against a real manifest.
+    Does NOT mock the method under test - exercises actual registry logic.
+
+    Covers:
+    - Correct league is returned, not a sibling league with the same model name
+    - Shadow / candidate entries are ignored even when their metrics are better
+    - The returned dict carries the expected fields (league, version, status)
+    """
+    monkeypatch.setattr(registry_module, "MODELS_DIR", tmp_path)
+    for filename in (
+        "pl_poisson_home_base_v2.pkl",
+        "pl_poisson_home_base_v3.pkl",
+        "sa_poisson_home_base_v1.pkl",
+    ):
+        (tmp_path / filename).write_bytes(b"model")
+
     registry = ModelRegistry()
-    
-    # Mocking storage/listing
-    with patch.object(registry, 'get_production_model_for_league') as mock_prod:
-        mock_prod.return_value = {'path': 'models/PL/model_v1.pkl', 'league': 'PL', 'version': '1.0'}
-        
-        meta = registry.get_production_model_for_league("PL", "poisson_home_base")
-        assert meta['league'] == 'PL'
-        assert 'version' in meta
+    original_manifest = dict(registry.manifest)
+    try:
+        registry.manifest = {
+            "pl_v2_production": {
+                "name": "poisson_home_base",
+                "league": "PL",
+                "version": "2.0.0",
+                "status": "productive",
+                "registered_at": "2026-03-01T00:00:00",
+                "metrics": {"brier_score": 0.22},
+                "filename": "pl_poisson_home_base_v2.pkl",
+            },
+            # Newer, lower brier - but shadow; must NOT be preferred over production
+            "pl_v3_shadow": {
+                "name": "poisson_home_base",
+                "league": "PL",
+                "version": "3.0.0",
+                "status": "shadow",
+                "registered_at": "2026-04-01T00:00:00",
+                "metrics": {"brier_score": 0.18},
+                "filename": "pl_poisson_home_base_v3.pkl",
+            },
+            # Different league - must never bleed into PL result
+            "sa_v1_production": {
+                "name": "poisson_home_base",
+                "league": "SA",
+                "version": "1.0.0",
+                "status": "productive",
+                "registered_at": "2026-01-01T00:00:00",
+                "metrics": {"brier_score": 0.30},
+                "filename": "sa_poisson_home_base_v1.pkl",
+            },
+        }
+
+        result = registry.get_production_model_for_league("PL", "poisson_home_base")
+
+        assert result is not None, "Expected a production model for PL/poisson_home_base"
+        assert result["league"] == "PL", "Returned model must belong to the requested league"
+        assert result["version"] == "2.0.0", (
+            "Must select the productive-tagged entry (v2), not the shadow (v3) "
+            "even though the shadow has better metrics"
+        )
+        assert result.get("status") == "productive"
+    finally:
+        registry.manifest = original_manifest
+
+
+def test_model_registry_production_loading_returns_none_when_no_production_model(tmp_path, monkeypatch):
+    """
+    get_production_model_for_league must return None (not raise) when the
+    manifest contains entries for the league/model but none are production-tagged.
+    """
+    monkeypatch.setattr(registry_module, "MODELS_DIR", tmp_path)
+    (tmp_path / "pl_poisson_home_base_v1.pkl").write_bytes(b"model")
+
+    registry = ModelRegistry()
+    original_manifest = dict(registry.manifest)
+    try:
+        registry.manifest = {
+            "pl_candidate": {
+                "name": "poisson_home_base",
+                "league": "PL",
+                "version": "1.0.0",
+                "status": "shadow",
+                "registered_at": "2026-01-01T00:00:00",
+                "metrics": {"brier_score": 0.28},
+                "filename": "pl_poisson_home_base_v1.pkl",
+            },
+        }
+
+        result = registry.get_production_model_for_league("PL", "poisson_home_base")
+
+        assert result is None, (
+            "No productive-tagged entry exists - registry must return None, not raise"
+        )
+    finally:
+        registry.manifest = original_manifest
 
 def test_drift_guard_thresholds(tmp_path):
     """Test that DriftGuardrail alerts on degraded models."""

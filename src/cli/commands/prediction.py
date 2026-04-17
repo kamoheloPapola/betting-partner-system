@@ -1079,7 +1079,8 @@ def show_predictions(
     console = Console()
     ALL_LEAGUES = ["PL", "BL1", "FL1", "SA", "PD"]
     if logging.getLogger().getEffectiveLevel() == logging.WARNING:
-        os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(os.cpu_count() or 1))
+        logical_cpus = os.cpu_count() or 1
+        os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(max(1, logical_cpus - 1)))
         logging.getLogger(__name__).setLevel(logging.ERROR)
         for logger_name in (
             "src.ml.registry",

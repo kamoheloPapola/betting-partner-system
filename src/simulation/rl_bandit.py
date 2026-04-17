@@ -6,18 +6,18 @@ from datetime import datetime, timedelta, timezone
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from src.config import DATA_DIR
 from src.core.constants import RESOLVER_LOOKBACK_DAYS
 from src.core.container import ServiceContainer  # re-exported for tests and monkeypatching
-from src.db.models import ResolvedPrediction
 from src.ml.calibration import calculate_ece
+
+if TYPE_CHECKING:
+    from src.core.container import ServiceContainer
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +82,12 @@ def load_resolved_predictions_from_db(
     container: Optional[ServiceContainer] = None,
 ) -> pd.DataFrame:
     """Load resolved predictions from the operational database."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    from src.core.container import ServiceContainer
+    from src.db.models import ResolvedPrediction
+
     active_container = container or ServiceContainer.get_instance()
     cutoff = datetime.now(timezone.utc) - timedelta(days=RESOLVER_LOOKBACK_DAYS)
     try:
@@ -264,6 +270,8 @@ class ContextualBandit:
 
     def refresh_from_resolved_predictions(self) -> Dict[str, Dict[str, Any]]:
         """Load history, compute ECE per bucket, and update state."""
+        from src.core.container import ServiceContainer
+
         resolved = load_resolved_predictions_from_db(ServiceContainer.get_instance())
         ece_by_context = compute_bucket_ece_by_context(resolved)
         if not ece_by_context:

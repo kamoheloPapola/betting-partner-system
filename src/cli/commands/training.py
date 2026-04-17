@@ -11,15 +11,12 @@ import time
 from typing import Optional
 
 import typer
-import pandas as pd
 from rich.console import Console
 
 from src.cli.base import app
 from src.cli.utils import LeagueCode
 from src.core.exceptions import PredictionSystemError, DataValidationError
 from src.ml.training.model_configs import ModelType, TrainingMode
-from src.ml.training.orchestrator import TrainingOrchestrator
-from src.ml.training.data_validator import filter_historical_matches, load_feature_file
 
 # Define public API
 __all__ = ["train", "import_history"]
@@ -49,6 +46,9 @@ def train(
     start_time = time.time()
     
     try:
+        from src.ml.training.data_validator import filter_historical_matches, load_feature_file
+        from src.ml.training.orchestrator import TrainingOrchestrator
+
         # LOCK ENFORCEMENT: Fail hard if system is locked
         from src.config.model_state import require_unlocked
         require_unlocked("Training")

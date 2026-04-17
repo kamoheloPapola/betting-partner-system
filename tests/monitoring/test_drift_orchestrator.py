@@ -9,10 +9,24 @@ from src.monitoring.drift_orchestrator import DriftOrchestrator
 
 
 def test_load_confidence_state_initializes_missing_file_to_go(tmp_path):
+    status_file = tmp_path / "drift" / "rolling_90d_status.json"
     confidence_state_file = tmp_path / "drift" / "confidence_drift_state.json"
+    status_file.parent.mkdir(parents=True, exist_ok=True)
+    status_file.write_text(
+        json.dumps(
+            {
+                "date": "2026-04-13",
+                "evaluated_at": "2026-04-13T00:00:00+00:00",
+                "status": "GO",
+                "alerts": [],
+                "metrics": {},
+            }
+        ),
+        encoding="utf-8",
+    )
 
     orchestrator = DriftOrchestrator(
-        status_file=tmp_path / "drift" / "rolling_90d_status.json",
+        status_file=status_file,
         baseline_file=tmp_path / "models" / "drift_baselines.json",
         confidence_state_file=confidence_state_file,
     )
@@ -27,6 +41,22 @@ def test_load_confidence_state_initializes_missing_file_to_go(tmp_path):
     assert confidence_state_file.exists()
     assert json.loads(confidence_state_file.read_text(encoding="utf-8")) == expected
     assert orchestrator.get_status("HOME_WIN") == DriftOrchestrator.GO
+
+
+def test_league_state_file_uses_configured_status_directory(tmp_path):
+    status_file = tmp_path / "isolated-drift" / "rolling_90d_status.json"
+    orchestrator = DriftOrchestrator(
+        status_file=status_file,
+        baseline_file=tmp_path / "models" / "drift_baselines.json",
+        confidence_state_file=tmp_path / "isolated-drift" / "confidence_drift_state.json",
+    )
+
+    orchestrator.evaluate_league_drift(
+        "PL",
+        {"hit_rate": 0.5, "ece": 0.48, "mean_conf": 0.6},
+    )
+
+    assert (status_file.parent / "PL_drift_status.json").exists()
 
 
 def test_load_global_state_prefers_database_over_json_cache(tmp_path, monkeypatch):

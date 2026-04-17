@@ -47,6 +47,7 @@ from src.strategies.slip_builder import ForbiddenFruitSlipBuilder
 logger = logging.getLogger(__name__)
 _LAST_GLOBAL_DRIFT_STATUS: Optional[str] = None
 STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
+DRIFT_STATE_DIR = DATA_DIR / "drift"
 DEFAULT_TRAINING_LEAGUES = ["PL", "BL1", "FL1", "SA", "PD"]
 MODEL_CONFIGS = [
     {"name": "poisson_home_base"},
@@ -217,6 +218,36 @@ def _normalize_guard_status(status: Any) -> str:
     return DriftOrchestrator.STOP
 
 
+def _read_league_drift_status_from_state_dir(league: Optional[str]) -> Optional[str]:
+    if not league:
+        return None
+
+    league_key = str(league).strip().upper()
+    if not league_key:
+        return None
+
+    global_state_file = DRIFT_STATE_DIR / "rolling_90d_status.json"
+    league_state_file = DRIFT_STATE_DIR / f"{league_key}_drift_status.json"
+    if (
+        not global_state_file.exists()
+        and not league_state_file.exists()
+        and not league_state_file.parent.exists()
+    ):
+        return None
+
+    if not league_state_file.exists():
+        logger.error("League drift state file missing for %s - failing closed.", league_key)
+        return DriftOrchestrator.STOP
+
+    try:
+        with open(league_state_file, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return _normalize_guard_status(data.get("status", DriftOrchestrator.STOP))
+    except Exception as exc:
+        logger.error("League drift state unavailable for %s - failing closed: %s", league_key, exc)
+        return DriftOrchestrator.STOP
+
+
 def _read_prediction_guard_status() -> str:
     try:
         guard = DriftGuardrail()
@@ -332,7 +363,7 @@ def _load_or_compute_predictions(league: Optional[str]) -> List[Dict[str, Any]]:
     cached_predictions = prediction_cache.get(cache_key)
     if isinstance(cached_predictions, list):
         drift_status = _read_prediction_guard_status()
-        league_stop = False
+        league_stop = _read_league_drift_status_from_state_dir(league) == DriftOrchestrator.STOP
         if league and drift_status != DriftOrchestrator.STOP:
             try:
                 orchestrator = DriftOrchestrator()
@@ -351,6 +382,7 @@ def _load_or_compute_predictions(league: Optional[str]) -> List[Dict[str, Any]]:
                 league or "ALL",
             )
             prediction_cache.delete(cache_key)
+            return []
         else:
             return cached_predictions
 
@@ -368,46 +400,35 @@ def _generate_forbidden_fruit_slip(
     max_selections: int,
 ) -> ForbiddenFruitSlipResponse:
     drift_status = _read_prediction_guard_status()
-    league_stop = False
-    if league and drift_status != DriftOrchestrator.STOP:
-        try:
-            orchestrator = DriftOrchestrator()
-            orchestrator.load_league_state(league)
-            if orchestrator._league_status.get(league) == DriftOrchestrator.STOP:
-                league_stop = True
-                logger.warning(
-                    "Slip cache invalidated for league=%s: league-scoped drift is STOP.",
-                    league,
-                )
-        except Exception as exc:
-            logger.warning("Could not check league drift state for slip cache: %s", exc)
+    league_stop = _read_league_drift_status_from_state_dir(league) == DriftOrchestrator.STOP
+    cache_league_stop = league_stop
     cache_key = slip_cache_key(league, min_prob, max_selections)
     cached_slip = prediction_cache.get(cache_key)
-    if isinstance(cached_slip, ForbiddenFruitSlipResponse):
-        if drift_status == DriftOrchestrator.STOP or league_stop:
-            logger.warning(
-                "Slip cache invalidated for league=%s: drift status is STOP.",
-                league or "ALL",
-            )
-            prediction_cache.delete(cache_key)
-        else:
-            return cached_slip
+    if cached_slip is not None and (drift_status == DriftOrchestrator.STOP or cache_league_stop):
+        logger.warning(
+            "Slip cache invalidated for league=%s: drift status is STOP.",
+            league or "ALL",
+        )
+        prediction_cache.delete(cache_key)
+    elif isinstance(cached_slip, ForbiddenFruitSlipResponse):
+        return cached_slip
 
     league_label = str(league or "ALL").upper()
-    if drift_status == DriftOrchestrator.STOP:
+    if drift_status == DriftOrchestrator.STOP or league_stop:
+        prediction_cache.delete(prediction_cache_key(league))
+        prediction_cache.delete(cache_key)
         response = ForbiddenFruitSlipResponse(
             generated_at=datetime.now(),
             model_state=get_model_state(),
             slip=[],
-            drift_status=drift_status,
+            drift_status=DriftOrchestrator.STOP,
             blocked=True,
             message=_empty_slip_message(
                 league=league_label,
-                drift_status=drift_status,
+                drift_status=DriftOrchestrator.STOP,
                 total_legs=0,
             ),
         )
-        prediction_cache.set(cache_key, response)
         return response
 
     raw_predictions = _load_or_compute_predictions(league)
@@ -765,7 +786,10 @@ def trigger_predictions(request: Request, payload: PredictionTriggerRequest) -> 
 
     try:
         drift_status = _read_prediction_guard_status()
+        if _read_league_drift_status_from_state_dir(payload.league) == DriftOrchestrator.STOP:
+            drift_status = DriftOrchestrator.STOP
         if drift_status == DriftOrchestrator.STOP:
+            prediction_cache.delete(prediction_cache_key(payload.league))
             return PredictionTriggerResponse(
                 generated_at=datetime.now(),
                 league=str(payload.league).upper(),

@@ -23,8 +23,6 @@ from typing import Any, Dict, List, Optional, cast
 
 import s3fs
 import sklearn
-from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
 from sklearn.exceptions import InconsistentVersionWarning
 
 from src.config import MODELS_DIR
@@ -35,7 +33,6 @@ from src.core.exceptions import (
     ModelNotFoundError,
 )
 from src.db.connection import database_is_configured, get_engine
-from src.db.models import ModelManifestEntry
 from src.ml.model_db import ModelHistoryDB
 
 # Define public API
@@ -285,6 +282,11 @@ class ModelRegistry:
             return
 
         try:
+            from sqlalchemy import delete
+            from sqlalchemy.orm import Session
+
+            from src.db.models import ModelManifestEntry
+
             with Session(get_engine()) as session:
                 session.execute(delete(ModelManifestEntry))
                 for manifest_key, meta in self.manifest.items():
@@ -324,6 +326,11 @@ class ModelRegistry:
 
     def _load_manifest_from_db(self) -> Optional[Dict[str, Any]]:
         try:
+            from sqlalchemy import select
+            from sqlalchemy.orm import Session
+
+            from src.db.models import ModelManifestEntry
+
             with Session(get_engine()) as session:
                 rows = session.execute(
                     select(ModelManifestEntry).order_by(ModelManifestEntry.manifest_key.asc())

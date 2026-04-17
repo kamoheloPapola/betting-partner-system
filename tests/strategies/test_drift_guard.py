@@ -3,13 +3,13 @@ import json
 from src.strategies.drift_guard import DriftGuardrail
 
 
-def test_load_only_check_does_not_create_status_file(tmp_path):
+def test_load_only_check_fails_closed_without_creating_status_file(tmp_path):
     status_file = tmp_path / "drift" / "status.json"
     guard = DriftGuardrail(status_file=status_file)
 
     status = guard.check_drift()
 
-    assert status == "OK"
+    assert status == "STOP"
     assert not status_file.exists()
 
 

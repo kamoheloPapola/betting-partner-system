@@ -11,15 +11,17 @@ Usage:
     registry = container.registry
     pipeline = container.pipeline
 """
+from __future__ import annotations
+
 import logging
 import threading
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy.engine import Engine
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Engine
 
 from src.ml.registry import ModelRegistry
 from src.features.pipeline import FeaturePipeline
-from src.db.connection import get_engine
 
 # Define public API
 __all__ = ["ServiceContainer"]
@@ -93,6 +95,8 @@ class ServiceContainer:
     @property
     def engine(self) -> Engine:
         """Shared SQLAlchemy engine used by operational data helpers."""
+        from src.db.connection import get_engine
+
         return get_engine()
 
     def reset(self) -> None:
