@@ -106,6 +106,8 @@ class AuthoritativeResolver:
         # 1x2
         'HOME_WIN': 'home_win',
         'AWAY_WIN': 'away_win',
+        'home': 'home_win',
+        'away': 'away_win',
 
         # Goals / team goals
         'HOME_TG_U1.5': 'home_goals_under_1_5',
@@ -114,6 +116,8 @@ class AuthoritativeResolver:
         'away_under_1_5': 'away_goals_under_1_5',
         'over_2_5': 'goals_over_2_5',
         'under_2_5': 'goals_under_2_5',
+        'btts': 'btts_yes',
+        'btts_no': 'btts_no',
 
         # Total corners — main markets
         'CORNERS_U11.5': 'corners_under_11_5',
@@ -150,6 +154,7 @@ class AuthoritativeResolver:
         # Cards
         'cards_u4.5': 'cards_under_4_5',
         'card_u45': 'cards_under_4_5',
+        'card_u55': 'cards_under_5_5',
         'CARDS_U4.5': 'cards_under_4_5',
         'cards_o2.5': 'cards_over_2_5',
         'cards_under_5_5': 'cards_under_5_5',
