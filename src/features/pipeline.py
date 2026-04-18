@@ -567,7 +567,8 @@ class FeaturePipeline:
                 else:
                     fill_val = self.StaticPriors.ROLLING_GOALS
                     
-                team_df[col] = team_df[col].fillna(fill_val).infer_objects(copy=False)
+                with pd.option_context("future.no_silent_downcasting", True):
+                    team_df[col] = team_df[col].infer_objects(copy=False).fillna(fill_val)
         
         # 3. Re-assemble to Match-Centric view
         # Use explicit whitelist (ISSUE #7)
