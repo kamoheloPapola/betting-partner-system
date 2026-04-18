@@ -86,6 +86,19 @@ def _assert_status_consistent(
     metrics = payload.get("metrics", {})
     assert metrics, f"{label}: no 'metrics' in state file - cannot validate consistency"
 
+    if league is not None and metrics.get("inherited_from") == "global":
+        global_status = metrics.get("global_status")
+        persisted_status = payload.get("status")
+        assert persisted_status == global_status, (
+            f"{label}: inherited league status '{persisted_status}' does not match "
+            f"recorded global status '{global_status}' in stored metrics {metrics}."
+        )
+        assert metrics.get("sample_size", 0) < metrics.get("minimum_sample_size", 0), (
+            f"{label}: inherited drift state should only be used below the minimum "
+            f"sample threshold; stored metrics were {metrics}."
+        )
+        return
+
     orch = DriftOrchestrator(
         status_file=tmp_path / "throwaway_status.json",
         baseline_file=BASELINE_FILE,
