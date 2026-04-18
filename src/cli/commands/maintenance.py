@@ -22,6 +22,9 @@ from src.config import PROCESSED_DATA_DIR, STRATEGY_REQUIREMENTS, Thresholds
 
 logger = logging.getLogger(__name__)
 
+LEAGUE_DRIFT_MIN_SAMPLES = 200
+
+
 class DriftMetrics(TypedDict):
     """Schema for statistical drift analysis results."""
     goals_shift: float
@@ -452,7 +455,25 @@ def check_drift(
                     scored["hit"] = outcome_col.astype(str).str.upper().map(outcome_map)
                 scored = scored.dropna(subset=["hit"])
 
-                if not scored.empty:
+                # For league-specific drift, require minimum sample size for reliable ECE.
+                # Below threshold, inherit global drift state rather than compute noisy ECE.
+                if league and len(scored) < LEAGUE_DRIFT_MIN_SAMPLES:
+                    console.print(
+                        f"[yellow]Insufficient sample for league ECE: {len(scored)} predictions "
+                        f"(minimum {LEAGUE_DRIFT_MIN_SAMPLES}). Inheriting global drift state.[/yellow]"
+                    )
+                    status = monitor.evaluate_global_drift()
+                    monitor._league_status[league] = status
+                    monitor._league_metrics[league] = {
+                        "sample_size": len(scored),
+                        "minimum_sample_size": LEAGUE_DRIFT_MIN_SAMPLES,
+                        "inherited_from": "global",
+                        "global_status": status,
+                    }
+                    monitor.persist_league_state(league)
+                    metrics_for_display = {}
+                    alerts = []
+                elif not scored.empty:
                     probs = scored["probability"].clip(lower=0.0, upper=1.0)
                     hits = scored["hit"]
                     metrics = {
