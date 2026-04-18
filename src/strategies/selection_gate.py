@@ -185,12 +185,22 @@ class SelectionGate:
             global _DRIFT_STATUS_CACHE
             league_key = str(p.get('league', 'GLOBAL'))
             cached = _DRIFT_STATUS_CACHE.get(league_key)
-            if cached is None or cached == "STOP":
+            if cached is None:
                 try:
-                    drift_guard = DriftGuardrail()
-                    cached = drift_guard.check_drift(league=league_key)
+                    from src.config import DATA_DIR
+                    league_file = DATA_DIR / "drift" / f"{league_key}_drift_status.json"
+                    if not league_file.exists():
+                        # No league file — inherit global drift status.
+                        drift_guard = DriftGuardrail()
+                        global_status = drift_guard.check_drift()
+                        cached = global_status
+                        logger.debug(
+                            f"No league drift file for {league_key} — inheriting global status: {cached}"
+                        )
+                    else:
+                        drift_guard = DriftGuardrail()
+                        cached = drift_guard.check_drift(league=league_key)
                     _DRIFT_STATUS_CACHE[league_key] = cached
-                    logger.debug(f"Drift status read for {league_key}: {cached}")
                 except Exception as e:
                     logger.warning(f"Drift check failed for {league_key}: {e}, assuming OK")
                     cached = "OK"
