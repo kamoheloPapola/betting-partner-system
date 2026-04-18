@@ -213,6 +213,14 @@ class AuthoritativeResolver:
         outcomes["probability"] = pd.to_numeric(outcomes["probability"], errors="coerce")
         outcomes = outcomes[outcomes["probability"].between(0, 1, inclusive="both")]
 
+        # Normalise legacy numeric outcomes (0/1) to string schema (WON/LOST)
+        outcome_col = outcomes["outcome"]
+        if pd.api.types.is_numeric_dtype(outcome_col):
+            num = pd.to_numeric(outcome_col, errors="coerce")
+            outcomes["outcome"] = num.map({1.0: "WON", 0.0: "LOST"}).fillna(
+                outcome_col.astype(str)
+            )
+
         if not include_void:
             outcomes = outcomes[outcomes["outcome"].isin(["WON", "LOST"])]
 
