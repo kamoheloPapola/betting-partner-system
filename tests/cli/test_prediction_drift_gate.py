@@ -144,3 +144,51 @@ def test_render_output_high_conf_counts_gated_selections(monkeypatch):
 
     output = console.export_text()
     assert "High Conf: 1" in output
+
+
+def test_prepare_bets_labels_double_chance_with_covered_team():
+    preds = [
+        {
+            "league": "PL",
+            "time": pd.Timestamp("2026-04-01T15:00:00Z"),
+            "match": "Home FC vs Away FC",
+            "home_team": "Home FC",
+            "away_team": "Away FC",
+            "match_id": "match-1",
+            "dc_1x": 0.70,
+            "dc_x2": 0.82,
+            "dc_12": 0.76,
+        }
+    ]
+
+    dc_bet = next(
+        bet for bet in prediction_module._prepare_bets(preds)
+        if bet["market"] == "double_chance"
+    )
+
+    assert dc_bet["dc_variant"] == "X2"
+    assert dc_bet["selection"] == "DC X2 (Away FC or Draw)"
+
+
+def test_prepare_bets_labels_double_chance_no_draw_variant():
+    preds = [
+        {
+            "league": "PL",
+            "time": pd.Timestamp("2026-04-01T15:00:00Z"),
+            "match": "Home FC vs Away FC",
+            "home_team": "Home FC",
+            "away_team": "Away FC",
+            "match_id": "match-1",
+            "dc_1x": 0.70,
+            "dc_x2": 0.71,
+            "dc_12": 0.86,
+        }
+    ]
+
+    dc_bet = next(
+        bet for bet in prediction_module._prepare_bets(preds)
+        if bet["market"] == "double_chance"
+    )
+
+    assert dc_bet["dc_variant"] == "12"
+    assert dc_bet["selection"] == "DC 12 (Either team wins)"

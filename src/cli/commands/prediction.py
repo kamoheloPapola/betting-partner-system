@@ -34,6 +34,7 @@ from src.config import (
     GOALS_ENSEMBLE_XGB_WEIGHT,
     GOALS_ENSEMBLE_DIVERGENCE_THRESHOLD,
 )
+from src.config.leagues import ACTIVE_LEAGUES
 from src.config.thresholds import Thresholds
 from src.core.container import ServiceContainer
 from src.core.validators import validate_match_dataframe
@@ -1051,6 +1052,17 @@ def _calc_dc(probs: Dict[str, float], ctx: str) -> Dict[str, float]:
 
 # --- CORE ORCHESTRATION ---
 
+def _resolve_prediction_target_leagues(league: Optional[str]) -> List[str]:
+    """Resolve CLI league input to canonical league codes."""
+    if not league:
+        return list(ACTIVE_LEAGUES)
+
+    resolved = resolve_league_code(league)
+    if resolved is None:
+        raise ValueError(f"Unknown league code or name: {league}")
+    return [resolved.value]
+
+
 @app.command(name="show-predictions")
 def show_predictions(
     date: str = typer.Option("today", help="Date filter: 'yesterday', 'today', 'tomorrow', 'week', 'weekend', 'month', or day name e.g. 'friday', 'saturday'"),
@@ -1070,14 +1082,16 @@ def show_predictions(
 ) -> None:
     """
     Display production match predictions with strict quality gates.
-    
+
+    Defaults to today's fixtures for all active leagues. Use --league to
+    restrict output to one league, or --all to show all future fixtures.
+
     Side Effects:
         - Loads ML models and processes features.
         - Prints multiple tables and panels to the console via _render_output.
         - Logs prediction events to the monitoring system.
     """
     console = Console()
-    ALL_LEAGUES = ["PL", "BL1", "FL1", "SA", "PD"]
     if logging.getLogger().getEffectiveLevel() == logging.WARNING:
         logical_cpus = os.cpu_count() or 1
         os.environ.setdefault("LOKY_MAX_CPU_COUNT", str(max(1, logical_cpus - 1)))
@@ -1101,26 +1115,29 @@ def show_predictions(
             module=r"joblib\.externals\.loky\.backend\.context",
         )
     try:
+        target_leagues = _resolve_prediction_target_leagues(league)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    try:
         # 1. Data Loading
-        target_leagues = ALL_LEAGUES if (all and not league) else [league or "PL"]
         rendered_any = False
+        matched_any_fixture = False
 
         for current_league in target_leagues:
-            lg_val = resolve_league_code(current_league).value if current_league else None
+            lg_val = current_league
             df = ServiceContainer.get_instance().pipeline.run(league=lg_val)
             validate_match_dataframe(
                 df,
-                context=f"show_predictions[{lg_val or 'PL'}]",
+                context=f"show_predictions[{lg_val}]",
             )
 
-            date_filter = date
-            df_target = filter_matches_by_date(df, date_filter, show_all=False, user_timezone=tz)
+            date_filter = DateFilter.ALL if all else date
+            df_target = filter_matches_by_date(df, date_filter, show_all=all, user_timezone=tz)
             if df_target.empty:
-                filter_label = date_filter.value if isinstance(date_filter, DateFilter) else str(date_filter)
-                console.print(
-                    f"[yellow][!] No matches found for filter: {filter_label} ({lg_val or current_league})[/yellow]"
-                )
                 continue
+            matched_any_fixture = True
 
             # 2. Prediction Engine (Flattened)
             results = _run_predict_loop(
@@ -1138,11 +1155,17 @@ def show_predictions(
             rendered_any = True
 
             # Persist predictions to CSV for resolver
-            _persist_predictions(results, current_league)
+            _persist_predictions(results, lg_val)
 
         if not rendered_any:
+            if not matched_any_fixture:
+                filter_label = DateFilter.ALL.value if all else str(date)
+                league_label = target_leagues[0] if league else "all active leagues"
+                console.print(
+                    f"[yellow][!] No matches found for filter: {filter_label} ({league_label})[/yellow]"
+                )
             return
-        
+
     except Exception as e:
         logger.error("Prediction workflow failed", exc_info=True)
         raise typer.Exit(1)
@@ -1659,6 +1682,27 @@ def _safe_prob(p: Dict[str, Any], key: str) -> float:
     return float(val)
 
 
+def _best_double_chance_selection(p: Dict[str, Any]) -> Tuple[str, float, str]:
+    """Return the best DC variant, probability, and team-aware display label."""
+    options = [
+        ("1X", _safe_prob(p, "dc_1x")),
+        ("X2", _safe_prob(p, "dc_x2")),
+        ("12", _safe_prob(p, "dc_12")),
+    ]
+    variant, probability = max(options, key=lambda item: item[1])
+
+    home_team = str(p.get("home_team") or "Home").strip() or "Home"
+    away_team = str(p.get("away_team") or "Away").strip() or "Away"
+    if variant == "1X":
+        label = f"DC 1X ({home_team} or Draw)"
+    elif variant == "X2":
+        label = f"DC X2 ({away_team} or Draw)"
+    else:
+        label = "DC 12 (Either team wins)"
+
+    return variant, probability, label
+
+
 # --- UI ENHANCEMENT HELPERS ---
 
 LEAGUE_PREFIXES = {
@@ -1756,8 +1800,15 @@ def _prepare_bets(preds: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if p.get('card_u55'):
             pool.append({**p, 'market': 'cards_under_5_5', 'probability': _safe_prob(p, 'card_u55'), 'selection': 'Cards U5.5', 'match_id': m_id})
             
-        best_dc = max(p.get('dc_1x', 0), p.get('dc_x2', 0), p.get('dc_12', 0))
-        pool.append({**p, 'market': 'double_chance', 'probability': best_dc, 'selection': 'DC', 'match_id': m_id})
+        dc_variant, best_dc, dc_selection = _best_double_chance_selection(p)
+        pool.append({
+            **p,
+            'market': 'double_chance',
+            'probability': best_dc,
+            'selection': dc_selection,
+            'dc_variant': dc_variant,
+            'match_id': m_id,
+        })
     return pool
 
 def _render_output(
@@ -1880,10 +1931,7 @@ def _render_output(
 
             
             # DC String
-            best_dc = max(p.get('dc_1x', 0), p.get('dc_x2', 0), p.get('dc_12', 0))
-            if best_dc == p.get('dc_1x'): dc_lbl = "1X"
-            elif best_dc == p.get('dc_x2'): dc_lbl = "X2"
-            else: dc_lbl = "12"
+            dc_lbl, best_dc, _ = _best_double_chance_selection(p)
             s_dc = f"{dc_lbl} {_c(best_dc, TH_DC)}"
             
             # EH+2 (Underdog) - New Column Logic
