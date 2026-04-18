@@ -1502,6 +1502,8 @@ def _persist_predictions(
         'away':            'away_win',
         'btts':            'btts_yes',
         'card_u55':        'cards_under_5_5',
+        'dc_1x':           'home_dc',
+        'dc_x2':           'away_dc',
     }
 
     rows = []
