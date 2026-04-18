@@ -162,6 +162,10 @@ class AuthoritativeResolver:
         # Double chance
         'HOME_DC': 'home_dc',
         'AWAY_DC': 'away_dc',
+        'dc_1x': 'home_dc',
+        'dc_x2': 'away_dc',
+        'DC_1X': 'home_dc',
+        'DC_X2': 'away_dc',
     }
     VALID_LEAGUES: ClassVar[Set[str]] = {"PL", "BL1", "PD", "SA", "FL1", "UCL"}
 
