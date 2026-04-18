@@ -6,6 +6,7 @@ import pandas as pd
 import pytest
 
 import src.ml.calibration as calibration_module
+import src.monitoring.performance_engine as performance_engine_module
 import src.strategies.css_math as css_math
 from src.monitoring.confidence_drift import QuantileStratifier
 from src.monitoring.performance_engine import PerformanceTracker
@@ -235,8 +236,14 @@ def test_generate_report_warns_when_reliability_bucket_deviation_is_high(monkeyp
     )
     monkeypatch.setattr(tracker, "_load_all_evaluations", lambda: evals)
 
-    with caplog.at_level(logging.WARNING):
+    performance_logger = logging.getLogger(performance_engine_module.__name__)
+    monkeypatch.setattr(performance_logger, "propagate", True)
+
+    with caplog.at_level(logging.WARNING, logger=performance_engine_module.__name__):
         report = tracker.generate_report()
 
     assert report["reliability_diagrams"]
-    assert "Systematic miscalibration detected" in caplog.text
+    assert any(
+        "Systematic miscalibration detected" in record.getMessage()
+        for record in caplog.records
+    )
