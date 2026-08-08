@@ -15,16 +15,13 @@ if str(ROOT_DIR) not in sys.path:
 import pandas as pd
 from rich.console import Console
 from rich.table import Table
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
-from src.config import LOGS_DIR
-from src.core.container import ServiceContainer
-from src.db.models import ResolvedPrediction
+from src.config import DATA_DIR, LOGS_DIR
 from src.ml.calibration import calculate_ece
 
 DEFAULT_DAYS = 30
 DEFAULT_LOG_FILE = LOGS_DIR / "predictions.log"
+DEFAULT_OUTCOMES_FILE = DATA_DIR / "eval" / "prediction_outcomes.csv"
 ECE_TOLERANCE = 0.005
 LIVE_MARKET_ALIASES = {
     "home_win": "home_win",
@@ -109,33 +106,29 @@ def determine_exit_code(rows: list[ShadowComparisonRow]) -> int:
     return 1
 
 
-def load_live_rows(days: int, container: Optional[ServiceContainer] = None) -> pd.DataFrame:
-    active_container = container or ServiceContainer.get_instance()
-    with Session(active_container.engine) as session:
-        records = session.execute(
-            select(ResolvedPrediction).where(
-                ResolvedPrediction.outcome.in_(("WON", "LOST"))
-            )
-        ).scalars().all()
-
-    if not records:
+def load_live_rows(days: int, outcomes_file: Path = DEFAULT_OUTCOMES_FILE) -> pd.DataFrame:
+    if not outcomes_file.exists():
         return pd.DataFrame(
             columns=["match_hash", "league", "market", "live_probability", "actual_outcome", "resolved_at"]
         )
 
-    frame = pd.DataFrame(
-        [
-            {
-                "match_hash": str(record.match_hash),
-                "league": str(record.league).upper(),
-                "market": record.market,
-                "live_probability": record.probability,
-                "actual_outcome": 1 if record.outcome == "WON" else 0,
-                "resolved_at": record.resolved_at.isoformat() if record.resolved_at else None,
-            }
-            for record in records
-        ]
-    )
+    try:
+        frame = pd.read_csv(outcomes_file)
+    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError):
+        return pd.DataFrame(
+            columns=["match_hash", "league", "market", "live_probability", "actual_outcome", "resolved_at"]
+        )
+
+    required = {"match_hash", "league", "market", "probability", "outcome", "resolved_at"}
+    if not required.issubset(frame.columns):
+        return pd.DataFrame(
+            columns=["match_hash", "league", "market", "live_probability", "actual_outcome", "resolved_at"]
+        )
+    frame["league"] = frame["league"].astype(str).str.upper()
+    frame["outcome"] = frame["outcome"].astype(str).str.upper()
+    frame = frame[frame["outcome"].isin(("WON", "LOST"))].copy()
+    frame["live_probability"] = frame["probability"]
+    frame["actual_outcome"] = frame["outcome"].map({"WON": 1, "LOST": 0})
     frame["resolved_at"] = pd.to_datetime(frame["resolved_at"], utc=True, errors="coerce")
     cutoff = pd.Timestamp(datetime.now(timezone.utc) - timedelta(days=days))
     frame = frame[frame["resolved_at"] >= cutoff]
@@ -183,9 +176,9 @@ def build_comparison_rows(
     *,
     days: int = DEFAULT_DAYS,
     log_file: Path = DEFAULT_LOG_FILE,
-    container: Optional[ServiceContainer] = None,
+    outcomes_file: Path = DEFAULT_OUTCOMES_FILE,
 ) -> list[ShadowComparisonRow]:
-    live_rows = load_live_rows(days, container=container)
+    live_rows = load_live_rows(days, outcomes_file=outcomes_file)
     shadow_rows = parse_shadow_log(log_file)
     if live_rows.empty or shadow_rows.empty:
         return []

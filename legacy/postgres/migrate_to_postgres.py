@@ -1,3 +1,9 @@
+"""LEGACY/UNUSED one-way importer into the disabled PostgreSQL backend.
+
+Retained for audit history only. It is unsupported by the current dependency set
+and must not be used as an application entrypoint.
+"""
+
 from __future__ import annotations
 
 import csv

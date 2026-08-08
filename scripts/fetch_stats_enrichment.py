@@ -19,6 +19,13 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 load_dotenv()
 
+from src.config.env_contract import ENRICHMENT_PROCESS
+from src.config.startup import main as startup_preflight_main
+
+_startup_preflight_exit = startup_preflight_main([ENRICHMENT_PROCESS])
+if _startup_preflight_exit:
+    raise SystemExit(_startup_preflight_exit)
+
 API_BASE = "https://v3.football.api-sports.io"
 LEAGUE_IDS = {"PL": 39, "BL1": 78, "FL1": 61, "SA": 135, "PD": 140}
 DATA_DIR = PROJECT_ROOT / "data" / "processed" / "matches"
@@ -26,10 +33,7 @@ MASTER_PATH = PROJECT_ROOT / "data" / "results" / "normalized" / "results_master
 LOOKBACK_DAYS = 4
 REQUEST_DELAY = 1.2
 
-API_KEY = os.getenv("API_FOOTBALL_KEY")
-if API_KEY is None:
-    print("ERROR: API_FOOTBALL_KEY is not set in the environment.", file=sys.stderr)
-    raise SystemExit(1)
+API_KEY = os.environ["API_FOOTBALL_KEY"]
 
 HEADERS = {"x-apisports-key": API_KEY}
 

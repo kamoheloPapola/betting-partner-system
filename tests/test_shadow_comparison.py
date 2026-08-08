@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+from datetime import datetime, timezone
 
 import pandas as pd
 import pytest
@@ -60,6 +61,40 @@ def test_exit_code_logic():
     assert shadow_comparison.determine_exit_code(promote_rows) == 0
     assert shadow_comparison.determine_exit_code(hold_rows) == 1
     assert shadow_comparison.determine_exit_code(revert_rows) == 2
+
+
+def test_build_comparison_rows_reads_authoritative_outcomes_csv(tmp_path):
+    outcomes_file = tmp_path / "prediction_outcomes.csv"
+    log_file = tmp_path / "predictions.log"
+    pd.DataFrame(
+        [
+            {
+                "match_hash": "match-1",
+                "league": "PL",
+                "market": "home_win",
+                "probability": 0.70,
+                "outcome": "WON",
+                "resolved_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+    ).to_csv(outcomes_file, index=False)
+    log_file.write_text(
+        "[RL-SHADOW] match_id=match-1 context=PL:home_win weights={} "
+        "home=0.80 draw=0.10 away=0.10 over_2_5=0.60 btts_yes=0.55 applied=true\n",
+        encoding="utf-8",
+    )
+
+    rows = shadow_comparison.build_comparison_rows(
+        days=30,
+        log_file=log_file,
+        outcomes_file=outcomes_file,
+    )
+
+    assert len(rows) == 1
+    assert rows[0].bucket == "PL:home_win"
+    assert rows[0].live_ece == pytest.approx(0.30)
+    assert rows[0].shadow_ece == pytest.approx(0.20)
+    assert rows[0].verdict == "PROMOTE"
 
 
 def test_train_batch_bandit_failure_is_non_fatal(monkeypatch, capsys):

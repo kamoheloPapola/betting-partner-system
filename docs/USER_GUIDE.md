@@ -2,7 +2,7 @@
 
 ## Overview
 
-A professional ML-powered betting prediction system with:
+A development-stage ML-powered football forecasting system with:
 - Statistical models for goals, corners, and cards
 - League-specific optimization
 - Drift monitoring and alerting
@@ -97,7 +97,7 @@ SMTP_PORT=25
 
 # API Keys
 ODDS_API_KEY=your-key
-FOOTBALL_DATA_ORG_KEY=your-key
+FOOTBALL_DATA_API_KEY=your-key
 ```
 
 ---

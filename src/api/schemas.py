@@ -61,37 +61,6 @@ class PredictionTriggerResponse(BaseModel):
     reason: Optional[str] = None
 
 
-class ForbiddenFruitSlipLeg(BaseModel):
-    """Single leg returned by the slip builder."""
-
-    match_id: Optional[str] = None
-    match: str
-    market: str
-    probability: float
-    confidence: float
-    league: str
-    date: Optional[datetime] = None
-    action_tier: Optional[str] = None
-    tier: Optional[int] = None
-    odds: Optional[float] = None
-    implied_probability: Optional[float] = None
-    edge: Optional[float] = None
-    ev: Optional[float] = None
-    passes_value_threshold: Optional[bool] = None
-    value_reason: Optional[str] = None
-
-
-class ForbiddenFruitSlipResponse(BaseModel):
-    """Slip-building response returned by the API."""
-
-    generated_at: datetime
-    model_state: str
-    slip: List[ForbiddenFruitSlipLeg]
-    drift_status: Optional[str] = None
-    blocked: bool = False
-    message: Optional[str] = None
-
-
 class HealthCheck(BaseModel):
     status: str
     model_version: str

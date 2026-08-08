@@ -13,13 +13,12 @@ of matches, ~70% of those should actually be home wins.
 
 import json
 import logging
-from pathlib import Path
 
-import joblib
 import numpy as np
 import pandas as pd
 
-from src.config import DATA_DIR
+from src.config import DATA_DIR, MODELS_DIR
+from src.ml.registry import ModelRegistry
 from src.simulation.match_simulator import MatchSimulator, clamp_lambda
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -27,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 # --- Config ---
 FEATURES_PATH = DATA_DIR / "features" / "feature_matrix.csv"
-MODELS_DIR = Path("models")
 N_BACKTEST = 300
 N_SIM = 10_000
 SEED = 42
@@ -45,8 +43,9 @@ EXCLUDE_COLS = [
 
 def load_models():
     """Load trained home/away goal models and feature columns."""
-    home_model = joblib.load(MODELS_DIR / "home_goals_model.pkl")
-    away_model = joblib.load(MODELS_DIR / "away_goals_model.pkl")
+    registry = ModelRegistry()
+    home_model = registry.load_model("home_goals", deserializer="joblib")
+    away_model = registry.load_model("away_goals", deserializer="joblib")
 
     with open(MODELS_DIR / "feature_columns.json") as f:
         features = json.load(f)

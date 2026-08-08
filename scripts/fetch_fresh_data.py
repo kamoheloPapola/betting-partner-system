@@ -14,14 +14,14 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 load_dotenv()
 
-API_KEY = os.getenv("FOOTBALL_DATA_API_KEY")
-if API_KEY is None:
-    print(
-        "ERROR: FOOTBALL_DATA_API_KEY is not set. "
-        "Add it to your .env file.",
-        file=sys.stderr,
-    )
-    raise SystemExit(1)
+from src.config.env_contract import DATA_FETCH_PROCESS
+from src.config.startup import main as startup_preflight_main
+
+_startup_preflight_exit = startup_preflight_main([DATA_FETCH_PROCESS])
+if _startup_preflight_exit:
+    raise SystemExit(_startup_preflight_exit)
+
+API_KEY = os.environ["FOOTBALL_DATA_API_KEY"]
 BASE = "https://api.football-data.org/v4"
 HEADERS = {"X-Auth-Token": API_KEY}
 

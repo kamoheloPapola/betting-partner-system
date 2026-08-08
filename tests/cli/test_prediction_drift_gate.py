@@ -95,7 +95,6 @@ def test_run_predict_loop_reads_persisted_global_drift_state(monkeypatch):
 
 def test_render_output_high_conf_counts_gated_selections(monkeypatch):
     monkeypatch.setattr(prediction_module, "_get_terminal_width", lambda: 140)
-    monkeypatch.setattr(prediction_module, "_render_ff", lambda preds, console: None)
 
     console = Console(record=True, width=160)
     match_time = pd.Timestamp("2026-04-01T15:00:00Z")
@@ -144,6 +143,10 @@ def test_render_output_high_conf_counts_gated_selections(monkeypatch):
 
     output = console.export_text()
     assert "High Conf: 1" in output
+    assert "SUGGESTED SLIP" not in output
+    assert "Suggested Slip" not in output
+    assert "Best pick" not in output
+    assert "Do not add extra legs" not in output
 
 
 def test_prepare_bets_labels_double_chance_with_covered_team():

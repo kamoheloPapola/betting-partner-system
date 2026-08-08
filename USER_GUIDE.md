@@ -1,6 +1,6 @@
 # Betting Partner System: User Guide
 
-Welcome to the **Betting Partner System**, a production-grade, AI-driven football prediction engine. This system is designed to generate data-driven betting advice ("Forbidden Fruit") without relying on bookmaker odds, ensuring true independent statistical value.
+Welcome to the **Betting Partner System**, a development-stage, AI-driven football forecasting engine. It generates statistical match-outcome probabilities without using bookmaker prices.
 
 ---
 
@@ -30,9 +30,9 @@ Welcome to the **Betting Partner System**, a production-grade, AI-driven footbal
 4.  **Environment Configuration**:
     Create a `.env` file in the root directory. You can copy `.env.example` as a template.
     **Required Keys:**
-    - `RAPIDAPI_KEY` (for API-Football)
+    - `API_FOOTBALL_KEY` (for direct API-Sports/API-Football access)
     - `ODDS_API_KEY` (for The Odds API)
-    - `FOOTBALL_DATA_ORG_KEY` (Optional, for secondary data)
+    - `FOOTBALL_DATA_API_KEY` (for football-data.org)
 
 ---
 
@@ -136,7 +136,7 @@ The **Forbidden Fruit** is the system's "Flagship Product". It selects a localiz
 
 ### 🛡️ Drift Guard
 The system monitors "concept drift" – when football reality changes (e.g., end-of-season weirdness).
-- **Green**: Safe to bet.
+- **Green**: Forecast generation is permitted by the current drift checks.
 - **Red**: High variance detected. The system minimizes risk or halts.
 
 ### (@) Accumulator Engine (Meta-Layer)
@@ -178,7 +178,7 @@ The system uses an ensemble of:
 
 **Issue: "Drift Verification Failed"**
 - The system is protecting you. This happens when recent results have been highly unpredictable.
-- **Action**: Skip betting for the day or reduce stake sizes. Do not force predictions.
+- **Action**: Treat forecasts as unavailable until the drift condition has been reviewed. Do not force predictions.
 
 **Issue: System returns empty slip**
 - No matches met the strict >= 60% probability criteria or the "Value" threshold.

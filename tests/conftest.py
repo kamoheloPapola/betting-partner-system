@@ -1,3 +1,4 @@
+import os
 import shutil
 import uuid
 from pathlib import Path
@@ -6,6 +7,19 @@ import pytest
 
 
 TMP_ROOT = Path(__file__).resolve().parents[1] / ".tmp" / "test-fixtures"
+
+# The production default is the canonical container path. Tests run directly on
+# the host and must explicitly supply their writable local override before any
+# application module performs import-time path initialization.
+os.environ.setdefault("MODELS_DIR", str(TMP_ROOT / "default-models"))
+os.environ.setdefault("ARTIFACT_SIGNING_KEY", "test-artifact-signing-key-at-least-32-bytes")
+os.environ.setdefault("CLI_AUTH_TOKENS", '{"test-cli-token":"admin"}')
+os.environ.setdefault("FOOTBALL_DATA_API_KEY", "test-football-data-key")
+os.environ.setdefault("ODDS_API_KEY", "test-odds-api-key")
+# Non-empty satisfies the startup contract; malformed prevents the SDK from
+# enabling or contacting an external service during tests.
+os.environ.setdefault("SENTRY_DSN", "test-sentry-dsn")
+os.environ.setdefault("SKIP_MODEL_LOCK_CHECK", "true")
 
 
 @pytest.fixture
@@ -87,17 +101,27 @@ def isolated_repo_state(repo_state_paths, monkeypatch):
         "BASELINE_FILE",
         repo_state_paths["drift_baseline_file"],
     )
-
     return repo_state_paths
 
 
 @pytest.fixture(autouse=True)
 def isolate_drift_guard_files(repo_state_paths, monkeypatch):
     from src.ml.model_db import ModelHistoryDB
+    from src.monitoring import alerter, nightly_heartbeat
     from src.monitoring.drift_orchestrator import DriftOrchestrator
     from src.strategies.drift_guard import DriftGuardrail
 
     monkeypatch.setattr(ModelHistoryDB, "DB_FILE", repo_state_paths["history_db_file"])
+    monkeypatch.setattr(
+        alerter,
+        "ALERT_HISTORY_FILE",
+        repo_state_paths["data_dir"] / "monitoring" / ".alert_history.json",
+    )
+    monkeypatch.setattr(
+        nightly_heartbeat,
+        "HEARTBEAT_FILE",
+        repo_state_paths["data_dir"] / "monitoring" / "nightly_heartbeat.json",
+    )
     monkeypatch.setattr(DriftOrchestrator, "DEFAULT_STATUS_FILE", repo_state_paths["drift_status_file"])
     monkeypatch.setattr(
         DriftOrchestrator,
@@ -116,15 +140,3 @@ def isolate_drift_guard_files(repo_state_paths, monkeypatch):
         "BASELINE_FILE",
         repo_state_paths["drift_baseline_file"],
     )
-
-
-@pytest.fixture(autouse=True)
-def isolate_database_url(monkeypatch):
-    from src.db import connection as connection_module
-
-    connection_module.get_engine.cache_clear()
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    try:
-        yield
-    finally:
-        connection_module.get_engine.cache_clear()

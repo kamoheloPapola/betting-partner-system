@@ -1,32 +1,27 @@
 services:
-  db:
-    image: alpine:3.21
-    container_name: betting-db
-    command: ["sh", "-c", "mkdir -p /data/models && tail -f /dev/null"]
-    volumes:
-      - model_db:/data/models
-
   api:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: betting-api
-    depends_on:
-      - db
     environment:
+      ARTIFACT_SIGNING_KEY: ${ARTIFACT_SIGNING_KEY:-}
+      CLI_AUTH_TOKENS: ${CLI_AUTH_TOKENS:-}
+      FOOTBALL_DATA_API_KEY: ${FOOTBALL_DATA_API_KEY:-}
+      MODELS_DIR: /app/data/models
+      ODDS_API_KEY: ${ODDS_API_KEY:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
       - "8000:8000"
     volumes:
       - ./data:/app/data
-      - model_db:/app/data/models
     healthcheck:
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import sys,urllib.request;resp=urllib.request.urlopen('http://127.0.0.1:8000/api/v1/model-health', timeout=5);sys.exit(0 if resp.getcode()==200 else 1)"
+          "import json,sys,urllib.request;resp=urllib.request.urlopen('http://127.0.0.1:8000/api/v1/model-health', timeout=5);payload=json.load(resp);models=payload.get('models',[]);ready=resp.getcode()==200 and payload.get('status')=='ok' and payload.get('model_count',0)>0 and all(model.get('status')!='missing_file' for model in models);sys.exit(0 if ready else 1)"
         ]
       interval: 30s
       timeout: 10s
@@ -34,30 +29,17 @@ services:
       start_period: 20s
 
   scheduler:
+    profiles: ["scheduler"]
     build:
       context: .
       dockerfile: Dockerfile.scheduler
     container_name: betting-scheduler
     depends_on:
-      - db
+      api:
+        condition: service_healthy
     environment:
+      ARTIFACT_SIGNING_KEY: ${ARTIFACT_SIGNING_KEY:-}
+      MODELS_DIR: /app/data/models
       SENTRY_DSN: ${SENTRY_DSN:-}
     volumes:
-      - model_db:/app/data/models
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: football_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: football_intelligence
-      POSTGRES_USER: football
-      POSTGRES_PASSWORD: football_dev
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-volumes:
-  model_db:
-  postgres_data:
+      - ./data:/app/data

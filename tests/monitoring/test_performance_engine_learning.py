@@ -7,7 +7,6 @@ import pytest
 
 import src.ml.calibration as calibration_module
 import src.monitoring.performance_engine as performance_engine_module
-import src.strategies.css_math as css_math
 from src.monitoring.confidence_drift import QuantileStratifier
 from src.monitoring.performance_engine import PerformanceTracker
 
@@ -86,72 +85,24 @@ def test_live_ece_feedback_reduces_dampening_for_underconfident_market(monkeypat
     assert saved["away_win"] == pytest.approx(0.85)
 
 
-def _configure_isolated_css_store(monkeypatch, tmp_path):
-    monkeypatch.setattr(css_math, "CSS_WEIGHTS_FILE", tmp_path / "css_market_weights.json")
-    monkeypatch.setattr(
-        css_math,
-        "MARKET_WEIGHTS",
-        {
-            "TG_U1.5": 1.00,
-            "CORNERS_U11.5": 0.95,
-            "CORNERS_O7.5": 0.90,
-            "DC": 0.88,
-            "1X2": 0.75,
-            "CARDS_U5.5": 0.85,
-            "CARDS_O2.5": 0.80,
-        },
-    )
-    monkeypatch.setattr(css_math, "_weights_loaded", True)
-
-
-def test_css_weight_refresh_reranks_and_persists_after_200_settled_bets(monkeypatch, tmp_path):
+def test_generate_report_omits_combination_strategy_weight_updates(monkeypatch, tmp_path):
     _configure_isolated_alpha_store(monkeypatch, tmp_path)
-    _configure_isolated_css_store(monkeypatch, tmp_path)
     tracker = _build_tracker(monkeypatch, tmp_path)
 
     evals = pd.DataFrame(
         {
-            "market": (["1X2"] * 220) + (["TG_U1.5"] * 220),
-            "predicted_probability": ([0.90] * 220) + ([0.90] * 220),
-            "actual_outcome": ([1.0] * 220) + ([0.0] * 220),
-            "model_version": (["m_1x2"] * 220) + (["m_tg"] * 220),
-            "prediction_date": ["2026-03-30"] * 440,
+            "market": ["home_win", "away_win"],
+            "predicted_probability": [0.65, 0.35],
+            "actual_outcome": [1.0, 0.0],
+            "model_version": ["v1", "v1"],
+            "prediction_date": ["2026-03-30", "2026-03-30"],
         }
     )
     monkeypatch.setattr(tracker, "_load_all_evaluations", lambda: evals)
 
     report = tracker.generate_report()
 
-    assert report["css_weight_updates"]
-    assert report["css_weight_updates"]["1X2"] == 1.0
-    assert report["css_weight_updates"]["TG_U1.5"] == 0.75
-    assert css_math.CSS_WEIGHTS_FILE.exists()
-
-    saved = json.loads(css_math.CSS_WEIGHTS_FILE.read_text(encoding="utf-8"))
-    assert saved["1X2"] == 1.0
-    assert saved["TG_U1.5"] == 0.75
-
-
-def test_css_weight_refresh_waits_until_200_settled_bets(monkeypatch, tmp_path):
-    _configure_isolated_alpha_store(monkeypatch, tmp_path)
-    _configure_isolated_css_store(monkeypatch, tmp_path)
-    tracker = _build_tracker(monkeypatch, tmp_path)
-
-    evals = pd.DataFrame(
-        {
-            "market": (["1X2"] * 150) + (["TG_U1.5"] * 150),
-            "predicted_probability": ([0.90] * 150) + ([0.90] * 150),
-            "actual_outcome": ([1.0] * 150) + ([0.0] * 150),
-            "model_version": (["m_1x2"] * 150) + (["m_tg"] * 150),
-            "prediction_date": ["2026-03-30"] * 300,
-        }
-    )
-    monkeypatch.setattr(tracker, "_load_all_evaluations", lambda: evals)
-
-    report = tracker.generate_report()
-
-    assert report["css_weight_updates"] == {}
-    assert not css_math.CSS_WEIGHTS_FILE.exists()
+    assert "css_weight_updates" not in report
 
 
 def test_quantile_stratifier_cold_start_blends_30_70_when_under_100_samples():

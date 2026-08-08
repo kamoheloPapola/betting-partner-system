@@ -7,15 +7,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Depends
 
+from src.api.auth import require_cli_admin
 from src.api.cache import MODEL_HEALTH_CACHE_KEY, prediction_cache, prediction_cache_key
 from src.config.model_state import get_model_state
 from src.ml.registry import ModelRegistry
 from src.monitoring.drift_orchestrator import DriftOrchestrator
 from src.predictions.predictor import Predictor
 
-router = APIRouter(prefix="/cli", tags=["cli"])
+router = APIRouter(
+    prefix="/cli",
+    tags=["cli"],
+    dependencies=[Depends(require_cli_admin)],
+)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 logger = logging.getLogger(__name__)
 

@@ -8,11 +8,15 @@ Usage: python scripts/prune_manifest.py
 import json
 from pathlib import Path
 
+from src.config.model_state import require_unlocked
+
 MANIFEST_PATH = Path("src/ml/models/manifest.json")
 MODELS_BASE = Path("models")
 
 # Keys that are index/metadata entries, not model entries
 INDEX_KEYS = {"active_models", "shadow_models"}
+
+require_unlocked("Manifest pruning")
 
 with open(MANIFEST_PATH) as f:
     manifest = json.load(f)

@@ -6,8 +6,6 @@ import {
   leagueFlag,
   pct,
   probabilityForMarket,
-  selectionFromMatch,
-  showToast,
 } from "./utils.js";
 
 let appStore = null;
@@ -76,7 +74,6 @@ export function initPredictionsPage(store) {
 
   window.applyFilters = applyFilters;
   window.clearFilters = clearFilters;
-  window.addToSlip = addToSlip;
 
   if (cachedPredictions.length) {
     renderPredictionResults(cachedPredictions);
@@ -233,7 +230,6 @@ function renderMatchCard(match) {
       </div>
 
       <div class="card-footer">
-        <button class="btn-add-slip" type="button" onclick="addToSlip('${match.id}')">+ Add to Slip</button>
         <div class="confidence-badge confidence-${match.confidence_tier}">
           <span class="confidence-dot"></span>
           ${match.confidence_tier?.toUpperCase() ?? "LOW"}
@@ -328,32 +324,4 @@ function clearFilters() {
   }
 
   renderPredictionResults(cachedPredictions);
-}
-
-function addToSlip(matchId) {
-  const match = cachedPredictions.find((entry) => entry.id === matchId);
-  if (!match) {
-    return;
-  }
-
-  const pick = selectionFromMatch(match);
-  const store = window.__pitchsenseStore;
-  const entry = {
-    id: match.id,
-    match: `${match.home_team} vs ${match.away_team}`,
-    selection: pick.label,
-    market: pick.market,
-    prob: pick.prob,
-    league: match.league,
-  };
-
-  const existingIndex = store.manualSlip.findIndex((item) => item.id === entry.id);
-  if (existingIndex >= 0) {
-    store.manualSlip.splice(existingIndex, 1, entry);
-  } else {
-    store.manualSlip.push(entry);
-  }
-
-  showToast("Added to slip");
-  window.navigateTo("slip-builder");
 }

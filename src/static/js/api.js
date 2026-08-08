@@ -42,19 +42,6 @@ export async function fetchPredictions({ league, dateFrom, dateTo, market, minCo
   return fetchJson(`/predictions${query ? `?${query}` : ""}`);
 }
 
-export async function fetchSlip({ league, minProb = 0.65, maxSelections = 4 } = {}) {
-  const params = new URLSearchParams({
-    min_prob: String(minProb),
-    max_selections: String(maxSelections),
-  });
-
-  if (league) {
-    return fetchJson(`/api/v1/slips/${league}?${params}`);
-  }
-
-  return fetchJson(`/api/v1/slips/forbidden-fruit?${params}`);
-}
-
 export async function fetchModelHealth() {
   return fetchJson("/model-health");
 }

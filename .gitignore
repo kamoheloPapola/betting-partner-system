@@ -43,6 +43,10 @@ venv/
 /logs/
 *.log
 *.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.db-wal
+*.db-shm
 
 # Models
 *.pkl

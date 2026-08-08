@@ -22,6 +22,7 @@ import pandas as pd
 # from sklearn.metrics import mean_absolute_error  # Lazy imported in _evaluate_model
 
 from src.config import DATA_DIR, MODELS_DIR
+from src.config.model_state import require_unlocked
 from src.ml.calibration import (
     apply_binary_calibrator,
     fit_best_binary_calibrator,
@@ -145,6 +146,8 @@ class ModelTrainer:
         Returns:
             Tuple of (trained_model, metadata_dict).
         """
+        require_unlocked("Model training")
+
         # 1. Guards
         if league:
              guard_single_league(df, league)

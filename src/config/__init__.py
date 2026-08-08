@@ -1,7 +1,6 @@
 import os
 from .thresholds import Thresholds
 from pathlib import Path
-from .strategies import STRATEGY_REQUIREMENTS
 from dotenv import load_dotenv
 
 # Load env vars
@@ -14,7 +13,7 @@ DATA_DIR = BASE_DIR / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
 LOGS_DIR = BASE_DIR / "logs"
-MODELS_DIR = Path(os.getenv("MODELS_DIR", str(BASE_DIR / "src" / "ml" / "models")))
+MODELS_DIR = Path(os.getenv("MODELS_DIR", "/app/data/models"))
 
 # App Config
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -51,8 +50,8 @@ def get_required_env(name: str) -> str:
     raise RuntimeError(f"{name} not set - check your environment or .env file")
 
 # API Keys
-FOOTBALL_DATA_ORG_KEY = os.getenv("FOOTBALL_DATA_ORG_KEY")
-RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
+FOOTBALL_DATA_API_KEY = os.getenv("FOOTBALL_DATA_API_KEY")
+API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY")
 ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 
 # Training & Leagues

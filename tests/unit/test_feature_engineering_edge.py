@@ -223,7 +223,6 @@ class TestFeatureEngineeringEdgeCases:
 
     def test_weather_feature_fails_safe_without_api_key(self, engineer, monkeypatch):
         """Weather features should default to 0 when API key is unavailable."""
-        monkeypatch.delenv("OPENWEATHERMAP_API_KEY", raising=False)
         monkeypatch.delenv("OPENWEATHER_API_KEY", raising=False)
 
         df = pd.DataFrame({

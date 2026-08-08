@@ -271,7 +271,11 @@ class Alerter:
             msg["From"] = self.config.email_from
             msg["To"] = self.config.email_to
             
-            with smtplib.SMTP(self.config.smtp_host, self.config.smtp_port) as server:
+            with smtplib.SMTP(
+                self.config.smtp_host,
+                self.config.smtp_port,
+                timeout=10,
+            ) as server:
                 server.send_message(msg)
             
             logger.info(f"Email alert sent to {self.config.email_to}")

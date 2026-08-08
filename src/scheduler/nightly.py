@@ -27,6 +27,9 @@ import pandas as pd
 
 from scripts.cleanup_old_models import cleanup_models
 from src.config import DATA_DIR
+from src.config.env_contract import SCHEDULER_PROCESS
+from src.config.model_state import ModelStateError
+from src.config.startup import main as startup_preflight_main
 from src.features.build_feature_matrix import FeatureMatrixBuilder
 from src.fetch.fetch_latest_season_csvs import SeasonFetcher
 from src.ml.registry import ModelRegistry
@@ -35,6 +38,8 @@ from src.ml.training.data_validator import filter_historical_matches, load_featu
 from src.ml.training.feature_selector import select_features
 from src.ml.training.model_configs import MODEL_CONFIGS, ModelType
 from src.monitoring.alerter import Alerter
+from src.monitoring.alert_pipeline import dispatch_alert
+from src.monitoring.nightly_heartbeat import record_nightly_success
 from src.monitoring.performance_engine import PerformanceTracker
 from src.monitoring.telemetry import capture_alert, capture_exception, init_sentry
 
@@ -583,6 +588,8 @@ def auto_retrain_underperforming_models(
                 },
                 mode="production",
             )
+        except ModelStateError:
+            raise
         except Exception as exc:
             capture_exception(
                 exc,
@@ -919,22 +926,47 @@ def run_nightly(
         "cleanup_freed_bytes": int(cleanup_summary.get("freed_bytes", 0)),
         "report_status": report.get("status", "OK") if isinstance(report, dict) else "OK",
     }
+    record_nightly_success(
+        summary={"status": summary["status"], "season": summary["season"]}
+    )
     logger.info("Nightly pipeline completed: %s", summary)
     return summary
 
 
 def main(argv: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+    preflight_exit = startup_preflight_main([SCHEDULER_PROCESS])
+    if preflight_exit:
+        raise SystemExit(preflight_exit)
+
     parser = argparse.ArgumentParser(description="Run nightly ML pipeline automation.")
     parser.add_argument("--season", default=None, help="Season token in YYZZ format (default: inferred).")
     parser.add_argument("--force-fetch", action="store_true", help="Force data fetch even when files are unchanged.")
     parser.add_argument("--stale-days", type=int, default=7, help="Retrain threshold for stale models.")
     args = parser.parse_args(argv)
 
-    return run_nightly(
-        season=args.season,
-        force_fetch=bool(args.force_fetch),
-        stale_days=int(args.stale_days),
-    )
+    try:
+        return run_nightly(
+            season=args.season,
+            force_fetch=bool(args.force_fetch),
+            stale_days=int(args.stale_days),
+        )
+    except ModelStateError as exc:
+        logger.error(
+            "nightly_pipeline_blocked reason=model_state error_type=%s detail=%s",
+            type(exc).__name__,
+            exc,
+        )
+        dispatch_alert(
+            source="nightly_pipeline_blocked",
+            severity="CRITICAL",
+            message="Nightly pipeline blocked by model state",
+            context={
+                "error_type": type(exc).__name__,
+                "detail": str(exc),
+                "exit_code": 3,
+            },
+        )
+        raise SystemExit(3) from exc
 
 
 if __name__ == "__main__":

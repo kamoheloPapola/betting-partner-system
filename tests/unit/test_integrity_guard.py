@@ -81,46 +81,6 @@ class TestIntegrityGuard:
         with pytest.raises(IntegrityError, match="is stale"):
             guard.verify_system(matches, ['m'], 'strat')
 
-    def test_forbidden_fruit_requirements(self, guard):
-        # 1. Missing tier
-        candidates = [{'match': 'A vs B'}] # No tier
-        with pytest.raises(IntegrityError, match="requires tiered candidates"):
-            guard.verify_strategy(candidates, "forbidden-fruit")
-            
-        # 2. Valid
-        candidates = [{'match': 'A vs B', 'tier': 1}]
-        result = guard.verify_strategy(candidates, "forbidden-fruit")
-        assert result["verified"] is True
-        assert "tier_presence" in result["checks_performed"]
-
-    def test_accumulator_requirements(self, guard):
-        # 1. Not enough candidates
-        candidates = [{'match': 'A vs B', 'confidence': 0.7, 'market': 'BTTS'}]
-        with pytest.raises(IntegrityError, match="requires at least 2 candidates"):
-            guard.verify_strategy(candidates, "accumulator")
-            
-        # 2. Missing fields
-        candidates = [
-            {'match': 'A vs B', 'confidence': 0.7, 'market': 'BTTS'},
-            {'match': 'C vs D'} # Missing fields
-        ]
-        with pytest.raises(IntegrityError, match="missing required fields"):
-            guard.verify_strategy(candidates, "accumulator")
-            
-        # 3. Valid
-        candidates = [
-            {'match': 'A vs B', 'confidence': 0.7, 'market': 'BTTS'},
-            {'match': 'C vs D', 'confidence': 0.6, 'market': 'O25'}
-        ]
-        result = guard.verify_strategy(candidates, "accumulator")
-        assert result["verified"] is True
-        assert "min_count" in result["checks_performed"]
-
-    def test_empty_candidates_warning(self, guard):
-        result = guard.verify_strategy([], "any-strategy")
-        assert result["verified"] is True
-        assert result["note"] == "No candidates to verify"
-
     def test_drift_caution(self, guard):
         matches = [{'league': 'PL', 'match_id': '1'}]
         guard.registry.get_production_model_for_league.return_value = {

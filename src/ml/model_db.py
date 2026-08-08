@@ -23,6 +23,7 @@ class ModelHistoryDB:
     """Persist model lifecycle events to SQLite."""
 
     DB_FILE: Path = DATA_DIR / "models" / "model_history.db"
+    BUSY_TIMEOUT_MS = 30_000
 
     def __init__(self, db_path: Optional[Path] = None) -> None:
         self.db_path = Path(db_path) if db_path else self.DB_FILE
@@ -30,10 +31,21 @@ class ModelHistoryDB:
         self._ensure_schema()
 
     def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
+        connection = sqlite3.connect(
+            self.db_path,
+            timeout=self.BUSY_TIMEOUT_MS / 1000,
+        )
+        connection.execute(f"PRAGMA busy_timeout = {self.BUSY_TIMEOUT_MS}")
+        return connection
 
     def _ensure_schema(self) -> None:
         with self._connect() as conn:
+            journal_mode = conn.execute("PRAGMA journal_mode = WAL").fetchone()
+            if not journal_mode or str(journal_mode[0]).lower() != "wal":
+                raise RuntimeError(
+                    f"SQLite WAL mode unavailable for model history: {self.db_path}"
+                )
+            conn.execute("PRAGMA synchronous = NORMAL")
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS model_history (

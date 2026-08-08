@@ -16,9 +16,8 @@ from typing import TypedDict, Optional
 
 from src.cli.base import app
 from src.core.validators import validate_match_dataframe
-from src.guards.integrity_guard import verify_system, IntegrityError
-from src.core.exceptions import PredictionSystemError, DataValidationError, ModelNotFoundError
-from src.config import PROCESSED_DATA_DIR, STRATEGY_REQUIREMENTS, Thresholds
+from src.core.exceptions import PredictionSystemError, DataValidationError
+from src.config import PROCESSED_DATA_DIR, Thresholds
 
 logger = logging.getLogger(__name__)
 
@@ -112,55 +111,6 @@ def _send_pipeline_failure_alert(
     except Exception:
         logger.exception("Failed to dispatch pipeline failure alert")
         return False
-
-def run_mpig_gate(matches_df: pd.DataFrame, strategy: str) -> None:
-    """
-    Execute Model & Prediction Integrity Guard (MPIG).
-    
-    Verifies that all required model components for a given strategy exist
-    and cover the provided matches. Prevents "Zombie Predictions" where
-    models are missing but code proceeds silently.
-    
-    Args:
-        matches_df: DataFrame of matches to predict
-        strategy: Name of strategy to validate requirements for
-        
-    Raises:
-        DataValidationError: If integrity check fails or strategy unknown
-        PredictionSystemError: If unexpected critical error occurs
-    """
-    required_markets = STRATEGY_REQUIREMENTS.get(strategy)
-    if required_markets is None:
-        raise DataValidationError(
-            f"Unknown strategy: {strategy}",
-            context={"available_strategies": list(STRATEGY_REQUIREMENTS.keys())}
-        )
-        
-    try:
-        verify_system(matches_df.to_dict('records'), required_markets, strategy)
-        logger.info(
-            "MPIG integrity verified", 
-            extra={
-                "strategy": strategy, 
-                "markets_checked": len(required_markets),
-                "matches_validated": len(matches_df)
-            }
-        )
-    except (ModelNotFoundError, IntegrityError) as e:
-        raise DataValidationError(
-            f"MPIG check failed: {type(e).__name__}: {str(e)}",
-            context={
-                "strategy": strategy, 
-                "required_markets": required_markets,
-                "error_type": type(e).__name__
-            }
-        ) from e
-    except Exception as e:
-        logger.error("Unexpected error during MPIG", exc_info=True, extra={"strategy": strategy})
-        raise PredictionSystemError(
-            f"Critical MPIG failure: {e}",
-            context={"strategy": strategy}
-        ) from e
 
 @app.command("inspect-drift")
 def inspect_drift() -> None:
@@ -799,38 +749,6 @@ def check_models() -> None:
         raise typer.Exit(1)
     else:
         typer.echo("\n[PASS] All registered artifacts present on disk.")
-
-
-@app.command("init-db")
-def init_db() -> None:
-    """Initialize the optional SQL database schema for the active backend."""
-    from pathlib import Path
-
-    from rich.console import Console
-
-    from src.db.connection import get_engine
-
-    console = Console()
-    migration_path = Path(__file__).resolve().parents[2] / "db" / "migrations" / "001_initial.sql"
-
-    try:
-        migration_sql = migration_path.read_text(encoding="utf-8")
-        statements = [statement.strip() for statement in migration_sql.split(";") if statement.strip()]
-        if not statements:
-            raise RuntimeError(f"No SQL statements found in migration: {migration_path}")
-
-        engine = get_engine()
-        with engine.begin() as conn:
-            for statement in statements:
-                conn.exec_driver_sql(statement)
-
-        console.print(
-            f"[green]Initialized database schema using {engine.dialect.name}[/green]"
-        )
-    except Exception as exc:
-        logger.error("Database initialization failed", exc_info=True)
-        console.print(f"[red]{type(exc).__name__}: {exc}[/red]")
-        raise typer.Exit(code=1) from exc
 
 
 @app.command("run-daily-pipeline")

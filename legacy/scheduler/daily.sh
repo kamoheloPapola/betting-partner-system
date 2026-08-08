@@ -1,7 +1,8 @@
 #!/bin/bash
-# Daily automation script — runs on Render Cron at 6am UTC
-# Fetches fresh fixtures, then runs daily pipeline for all leagues
+# LEGACY/UNUSED: superseded by Dockerfile.scheduler and deploy/cron/betting-nightly.
+# Retained for audit history only. Do not execute.
 
+# Former Render Cron claim: run at 6am UTC.
 set -e
 cd /app
 

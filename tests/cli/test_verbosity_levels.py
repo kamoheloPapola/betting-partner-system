@@ -43,7 +43,7 @@ class TestCLIVerbosityLevels:
         assert "Loaded PL_" not in combined
         assert "[CSS BREAKDOWN]" not in combined
         assert (
-            "No matches found for filter: today" in combined
+            "No matches found for filter: all" in combined
             or "Match" in combined
             or "DRIFT STOP" in combined
             or "No valid predictions generated." in combined
@@ -58,7 +58,12 @@ class TestCLIVerbosityLevels:
         combined = stdout + stderr
 
         assert code == 0
-        assert "[Pipeline] Cache miss/expired for PL." in combined or "Slip Score:" in combined
+        assert (
+            "[Pipeline] Cache miss/expired for PL." in combined
+            or "No matches found for filter: all" in combined
+            or "Match" in combined
+            or "DRIFT STOP" in combined
+        )
 
     def test_debug_mode_shows_debug_logs(self, run_cli):
         stdout, stderr, code = run_cli([
@@ -70,7 +75,8 @@ class TestCLIVerbosityLevels:
 
         assert code == 0
         assert "DEBUG" in combined
-        assert "Loaded PL_" in combined or "[CSS BREAKDOWN]" in combined
+        assert "Loaded PL_" in combined or "No matches found for filter: all" in combined
+        assert "[CSS BREAKDOWN]" not in combined
 
     def test_default_matches_quiet_log_visibility(self, run_cli):
         stdout_default, stderr_default, code_default = run_cli([

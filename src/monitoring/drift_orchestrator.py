@@ -9,7 +9,6 @@ This module merges:
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import logging
 import os
@@ -22,7 +21,6 @@ import numpy as np
 import pandas as pd
 
 from src.config import DATA_DIR
-from src.db.connection import database_is_configured, get_engine
 from src.monitoring.telemetry import capture_alert
 
 logger = logging.getLogger(__name__)
@@ -224,14 +222,8 @@ class DriftOrchestrator:
         with open(tmp_path, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
         os.replace(tmp_path, self.status_file)
-        self._persist_global_state_to_db(payload)
 
     def load_global_state(self) -> None:
-        db_payload = self._load_global_state_from_db()
-        if db_payload is not None:
-            self._apply_global_state_payload(db_payload)
-            return
-
         if not self.status_file.exists():
             self.global_status = self.STOP
             self.global_alerts = []
@@ -382,7 +374,6 @@ class DriftOrchestrator:
             for index, alert in enumerate(alerts)
         ]
         self._append_alert_rows_to_csv(rows)
-        self._append_alert_rows_to_db(rows)
 
     # ------------------------------------------------------------------
     # Confidence drift monitor (legacy ConfidenceDriftMonitor responsibilities)
@@ -742,82 +733,6 @@ class DriftOrchestrator:
         legacy_date = data.get("date")
         self.global_legacy_date = legacy_date if legacy_date and not self.global_evaluated_at else None
 
-    def _persist_global_state_to_db(self, payload: Dict[str, Any]) -> None:
-        if not database_is_configured():
-            return
-
-        try:
-            from sqlalchemy.orm import Session
-
-            from src.db.models import DriftEvent
-
-            with Session(get_engine()) as session:
-                session.merge(
-                    DriftEvent(
-                        event_id=self._make_event_id(
-                            self.GLOBAL_STATE_EVENT_TYPE,
-                            payload.get("evaluated_at"),
-                            payload.get("status"),
-                        ),
-                        event_type=self.GLOBAL_STATE_EVENT_TYPE,
-                        league="GLOBAL",
-                        market=None,
-                        severity=str(payload.get("status")),
-                        metric="global_status",
-                        value=None,
-                        threshold=None,
-                        detected_at=self._parse_iso_datetime(payload.get("evaluated_at")),
-                        payload_json=json.dumps(payload, default=str, sort_keys=True),
-                    )
-                )
-                session.commit()
-        except Exception as exc:
-            logger.warning("Failed to persist global drift state to database: %s", exc)
-
-    def _load_global_state_from_db(self) -> Optional[Dict[str, Any]]:
-        if not database_is_configured():
-            return None
-
-        try:
-            from sqlalchemy import select
-            from sqlalchemy.orm import Session
-
-            from src.db.models import DriftEvent
-
-            with Session(get_engine()) as session:
-                row = session.execute(
-                    select(DriftEvent)
-                    .where(DriftEvent.event_type == self.GLOBAL_STATE_EVENT_TYPE)
-                    .order_by(DriftEvent.detected_at.desc())
-                ).scalars().first()
-        except Exception as exc:
-            logger.warning("Failed to load global drift state from database: %s", exc)
-            return None
-
-        if row is None:
-            return None
-
-        payload: Dict[str, Any] = {}
-        if row.payload_json:
-            try:
-                loaded = json.loads(row.payload_json)
-                if isinstance(loaded, dict):
-                    payload = loaded
-            except Exception as exc:
-                logger.warning("Failed to decode global drift payload from database: %s", exc)
-
-        if "status" not in payload:
-            payload["status"] = row.severity or self.GO
-        if "alerts" not in payload:
-            payload["alerts"] = []
-        if "metrics" not in payload:
-            payload["metrics"] = {}
-        if "evaluated_at" not in payload and row.detected_at is not None:
-            payload["evaluated_at"] = row.detected_at.isoformat()
-        if "date" not in payload and payload.get("evaluated_at"):
-            payload["date"] = str(payload["evaluated_at"])[:10]
-        return payload
-
     def _format_drift_alert_row(
         self,
         alert: str,
@@ -870,58 +785,6 @@ class DriftOrchestrator:
                 writer.writeheader()
             for row in rows:
                 writer.writerow({name: row.get(name, "") for name in fieldnames})
-
-    def _append_alert_rows_to_db(self, rows: List[Dict[str, Any]]) -> None:
-        if not rows or not database_is_configured():
-            return
-
-        try:
-            from sqlalchemy.orm import Session
-
-            from src.db.models import DriftEvent
-
-            with Session(get_engine()) as session:
-                for row in rows:
-                    session.merge(
-                        DriftEvent(
-                            event_id=self._make_event_id(
-                                row.get("type"),
-                                row.get("league"),
-                                row.get("market"),
-                                row.get("detected_at"),
-                                row.get("payload_json"),
-                            ),
-                            event_type=str(row.get("type")),
-                            league=str(row.get("league") or "") or None,
-                            market=str(row.get("market") or "") or None,
-                            severity=str(row.get("severity") or "") or None,
-                            metric=str(row.get("metric") or "") or None,
-                            value=row.get("value"),
-                            threshold=row.get("threshold"),
-                            detected_at=self._parse_iso_datetime(row.get("detected_at")),
-                            payload_json=row.get("payload_json"),
-                        )
-                    )
-                session.commit()
-        except Exception as exc:
-            logger.warning("Failed to persist drift alerts to database: %s", exc)
-
-    @staticmethod
-    def _make_event_id(*parts: Any) -> str:
-        raw = "|".join("" if part is None else str(part) for part in parts)
-        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-    @staticmethod
-    def _parse_iso_datetime(value: Any) -> Optional[datetime]:
-        if value in {None, ""}:
-            return None
-        if isinstance(value, datetime):
-            return value
-        try:
-            normalized = str(value).replace("Z", "+00:00")
-            return datetime.fromisoformat(normalized)
-        except Exception:
-            return None
 
     @classmethod
     def _extract_alert_metrics(

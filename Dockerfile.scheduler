@@ -1,9 +1,15 @@
-FROM python:3.14-slim
+FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV MODELS_DIR=/app/data/models
 
 WORKDIR /app
+
+# libgomp1 is required by the LightGBM runtime used by the nightly trainer.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip \
@@ -11,4 +17,6 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY . /app
 
-CMD ["python", "-m", "src.scheduler.nightly"]
+RUN mkdir -p /app/data/models
+
+CMD ["sh", "-c", "python -m src.config.startup scheduler && python -m src.scheduler.nightly"]

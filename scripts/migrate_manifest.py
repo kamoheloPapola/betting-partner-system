@@ -2,10 +2,13 @@
 import json
 from pathlib import Path
 
+from src.config.model_state import require_unlocked
+
 MODELS_DIR = Path("src/ml/models")
 MANIFEST_FILE = MODELS_DIR / "manifest.json"
 
 def migrate():
+    require_unlocked("Manifest migration")
     if not MANIFEST_FILE.exists():
         print("No manifest found.")
         return

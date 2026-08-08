@@ -1,6 +1,6 @@
-# AI-Powered Football Betting Assistant
+# AI-Powered Football Forecasting System
 
-A production-grade, AI-driven football betting system that generates data-driven predictions without relying on bookmaker odds.
+An AI-driven football forecasting system that generates statistical match-outcome probabilities without using bookmaker prices.
 
 ## Core Design Principles
 1. **Odds-Independence**: Predictions are based on stats, not market odds.
@@ -23,7 +23,7 @@ A production-grade, AI-driven football betting system that generates data-driven
 
 3. Setup Environment Variables:
    Copy `.env.example` to `.env` and fill in keys.
-   Set `MODELS_DIR` in your `.env` to override the default model storage location (`src/ml/models`). See `.env.example` for all configurable variables.
+   Models default to the canonical container path `/app/data/models`. Local development may set `MODELS_DIR` explicitly to another absolute path. See `.env.example` for all configurable variables.
 
 ## Architecture
 
@@ -58,7 +58,7 @@ Before generating any slips, verify that the statistical engine is stable.
 python -m src.cli refresh-drift
 ```
 > [!IMPORTANT]
-> If `refresh-drift` returns **[FAIL]**, the `show-predictions` command will warn you. Do not place bets during degraded model state.
+> If `refresh-drift` returns **[FAIL]**, treat forecasts as unavailable until the degraded model state has been reviewed.
 
 ### 3. Prediction Generation
 Generate predictions with the market-agnostic decision engine.
@@ -79,10 +79,10 @@ python -m src.cli reconcile --date-str 2026-01-10
 ---
 
 ## 🛠️ System Architecture (3.0 Era)
-- **Engine Status**: ❄️ **DEV-FROZEN** (Logic is sealed and certified)
+- **Engine Status**: ❄️ **DEV-FROZEN** (Development baseline; not production-certified)
 - **Primary Strategy**: Market-Agnostic Competitive Selection.
 - **Risk Control**: Cross-Market Dissonance Penalty (10% softening on conflicting signals).
 - **Safety Floor**: Absolute probability gate (0.60 - 0.70 depending on market).
 - **Momentum Divergence Gate**: Dynamic risk adjustments based on league standings and recent form (Trap Detection & Surging Underdog modifiers).
 ---
-*Certified for Production by Antigravity on Jan 10, 2026.*
+*Production audit signoff is withdrawn pending remediation and deployment verification.*

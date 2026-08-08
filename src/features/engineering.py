@@ -573,7 +573,6 @@ class FeatureEngineer:
 
         resolved_api_key = (
             api_key
-            or os.getenv("OPENWEATHERMAP_API_KEY")
             or os.getenv("OPENWEATHER_API_KEY")
         )
         if not resolved_api_key:

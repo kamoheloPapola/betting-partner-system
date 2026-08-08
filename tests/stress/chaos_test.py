@@ -16,7 +16,6 @@ from src.core.exceptions import ModelNotFoundError, DataValidationError
 from src.ml.registry import ModelRegistry
 from src.ml.guards import PredictionGuard
 from src.cli.commands.prediction import _predict_scalar
-from src.strategies.forbidden_fruit import ForbiddenFruitEvaluator
 
 class TestChaosFailureModes(unittest.TestCase):
     
@@ -61,29 +60,6 @@ class TestChaosFailureModes(unittest.TestCase):
             PredictionGuard.validate_prediction_integrity(self.mock_model, bad_df, self.context)
         
         self.assertIn("Schema Mismatch", str(cm.exception))
-
-    # --- Case D: Missing Standings ---
-    def test_force_missing_standings(self):
-        """Case D: Force Missing Standings -> Verify Handling"""
-        evaluator = ForbiddenFruitEvaluator()
-        preds = {'home_win': 0.8, 'away_win': 0.1, 'draw': 0.1}
-        
-        # 1. With Standings (Normal)
-        # We need a market... 1X2 always generated logic check
-        # Hidden dependency: _parse_inputs calls _validate_underdog_standings only if underdog logic triggered
-        
-        # Let's test specific method handling
-        # If standings is None, it should return default gate (True/1.0)
-        gate = evaluator._get_adjusted_gate({'type': 'CORNERS'}, None)
-        self.assertEqual(gate, evaluator.HARD_GATES['CORNERS'], "Should fallback to hard gate without standings")
-        
-        
-        # Ensure it doesn't crash
-        try:
-             res = evaluator.evaluate(preds, standings_context=None)
-             self.assertIsInstance(res, list)
-        except Exception as e:
-            self.fail(f"Missing standings caused crash: {e}")
 
 if __name__ == '__main__':
     unittest.main()

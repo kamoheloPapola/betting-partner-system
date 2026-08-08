@@ -10,8 +10,12 @@ Usage:
     require_unlocked()  # Raises if locked
     # ... proceed with training/tuning
 """
-from typing import Final
+import logging
+import re
 from pathlib import Path
+from typing import Final
+
+logger = logging.getLogger(__name__)
 
 # Define public API
 __all__ = [
@@ -19,6 +23,9 @@ __all__ = [
     "NEXT_LOCK_VERSION", 
     "is_locked", 
     "require_unlocked",
+    "ModelStateError",
+    "ModelStateLockedError",
+    "InvalidModelStateError",
     "freeze",
     "get_state_file"
 ]
@@ -29,6 +36,19 @@ _STATE_FILE = Path(__file__).parent.parent.parent / "data" / ".model_state"
 # --- VERSION CONSTANTS ---
 NEXT_LOCK_VERSION: Final[str] = "LOCKED_v14.0"
 _UNLOCKED: Final[str] = "UNLOCKED"
+_LOCKED_STATE_PATTERN = re.compile(r"^LOCKED_v\d+(?:\.\d+){1,2}$")
+
+
+class ModelStateError(RuntimeError):
+    """Base error for model-state enforcement failures."""
+
+
+class ModelStateLockedError(ModelStateError):
+    """Raised when a mutation is attempted while the model state is locked."""
+
+
+class InvalidModelStateError(ModelStateError):
+    """Raised when the model-state marker cannot be trusted."""
 
 
 def get_state_file() -> Path:
@@ -38,9 +58,27 @@ def get_state_file() -> Path:
 
 def _read_state() -> str:
     """Read current state from disk."""
-    if _STATE_FILE.exists():
-        return _STATE_FILE.read_text().strip()
-    return _UNLOCKED
+    try:
+        if not _STATE_FILE.exists():
+            return _UNLOCKED
+        state = _STATE_FILE.read_text(encoding="utf-8").strip()
+    except (OSError, UnicodeError) as exc:
+        logger.error(
+            "model_state_unreadable path=%s error_type=%s",
+            _STATE_FILE,
+            type(exc).__name__,
+        )
+        raise InvalidModelStateError(
+            f"Model state at {_STATE_FILE} is unreadable; mutations are blocked."
+        ) from exc
+
+    if state == _UNLOCKED or _LOCKED_STATE_PATTERN.fullmatch(state):
+        return state
+
+    logger.error("model_state_invalid path=%s", _STATE_FILE)
+    raise InvalidModelStateError(
+        f"Model state at {_STATE_FILE} is invalid; mutations are blocked."
+    )
 
 
 def _write_state(state: str) -> None:
@@ -85,11 +123,12 @@ def require_unlocked(operation: str = "This operation") -> None:
         operation: Description of blocked operation for error message.
         
     Raises:
-        RuntimeError: If MODEL_STATE starts with LOCKED_
+        ModelStateLockedError: If MODEL_STATE is locked.
+        InvalidModelStateError: If the state marker cannot be trusted.
     """
-    if is_locked():
-        state = _read_state()
-        raise RuntimeError(
+    state = _read_state()
+    if state.startswith("LOCKED_"):
+        raise ModelStateLockedError(
             f"{operation} is blocked. Model pipeline is LOCKED ({state}). "
             "To make changes, you must explicitly unlock the system first."
         )

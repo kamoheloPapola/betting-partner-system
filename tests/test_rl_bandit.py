@@ -5,17 +5,13 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-
 import src.cli.commands.prediction as prediction_module
 import src.ml.registry as registry_module
 import src.monitoring.drift_monitor as drift_monitor_module
 import src.simulation.rl_bandit as rl_bandit_module
 from src.core.constants import RESOLVER_LOOKBACK_DAYS
-from src.db.models import Base, ResolvedPrediction
 from src.simulation.match_simulator import MatchSimulator
-from src.simulation.rl_bandit import ContextualBandit, load_resolved_predictions_from_db
+from src.simulation.rl_bandit import ContextualBandit, load_resolved_predictions
 
 
 class _DummyProgress:
@@ -70,8 +66,8 @@ class _FixedDateTime:
 def test_cold_start_initializes_weights_to_one(monkeypatch, tmp_path):
     monkeypatch.setattr(
         rl_bandit_module,
-        "load_resolved_predictions_from_db",
-        lambda container=None: pd.DataFrame(),
+        "load_resolved_predictions",
+        lambda outcomes_path=None: pd.DataFrame(),
     )
 
     bandit = ContextualBandit(state_path=tmp_path / "bandit.json", auto_load=False, auto_bootstrap=True)
@@ -147,13 +143,8 @@ def test_refresh_skips_thin_ece_buckets(monkeypatch, tmp_path, caplog):
     monkeypatch.setattr(rl_bandit_module, "calculate_ece", lambda actuals, probs, n_bins: 0.2)
     monkeypatch.setattr(
         rl_bandit_module,
-        "load_resolved_predictions_from_db",
-        lambda container=None: resolved,
-    )
-    monkeypatch.setattr(
-        rl_bandit_module.ServiceContainer,
-        "get_instance",
-        classmethod(lambda cls: object()),
+        "load_resolved_predictions",
+        lambda outcomes_path=None: resolved,
     )
 
     bandit = ContextualBandit(
@@ -177,62 +168,52 @@ def test_refresh_skips_thin_ece_buckets(monkeypatch, tmp_path, caplog):
 
 
 def test_load_resolved_predictions_respects_lookback(tmp_path):
-    db_path = tmp_path / "resolved_predictions.db"
-    engine = create_engine(f"sqlite:///{db_path.as_posix()}")
-    Base.metadata.create_all(engine)
-
     old_kickoff = datetime.now(timezone.utc) - timedelta(days=RESOLVER_LOOKBACK_DAYS + 10)
     recent_kickoff = datetime.now(timezone.utc) - timedelta(days=5)
     resolved_at = datetime.now(timezone.utc)
+    outcomes_path = tmp_path / "prediction_outcomes.csv"
+    pd.DataFrame(
+        [
+            {
+                "prediction_id": "old_pred",
+                "match_hash": "hash_old",
+                "league": "PL",
+                "kickoff_date": old_kickoff.isoformat(),
+                "market": "btts_yes",
+                "probability": 0.61,
+                "outcome": "WON",
+                "resolved_at": resolved_at.isoformat(),
+            },
+            {
+                "prediction_id": "recent_pred",
+                "match_hash": "hash_recent",
+                "league": "PL",
+                "kickoff_date": recent_kickoff.isoformat(),
+                "market": "btts_yes",
+                "probability": 0.57,
+                "outcome": "LOST",
+                "resolved_at": resolved_at.isoformat(),
+            },
+            {
+                "prediction_id": "null_kickoff_pred",
+                "match_hash": "hash_null",
+                "league": "PL",
+                "kickoff_date": None,
+                "market": "btts_yes",
+                "probability": 0.52,
+                "outcome": "WON",
+                "resolved_at": resolved_at.isoformat(),
+            },
+        ]
+    ).to_csv(outcomes_path, index=False)
 
-    try:
-        with Session(engine) as session:
-            session.add_all(
-                [
-                    ResolvedPrediction(
-                        prediction_id="old_pred",
-                        match_hash="hash_old",
-                        league="PL",
-                        kickoff_date=old_kickoff,
-                        market="btts_yes",
-                        probability=0.61,
-                        outcome="WON",
-                        resolved_at=resolved_at,
-                    ),
-                    ResolvedPrediction(
-                        prediction_id="recent_pred",
-                        match_hash="hash_recent",
-                        league="PL",
-                        kickoff_date=recent_kickoff,
-                        market="btts_yes",
-                        probability=0.57,
-                        outcome="LOST",
-                        resolved_at=resolved_at,
-                    ),
-                    ResolvedPrediction(
-                        prediction_id="null_kickoff_pred",
-                        match_hash="hash_null",
-                        league="PL",
-                        kickoff_date=None,
-                        market="btts_yes",
-                        probability=0.52,
-                        outcome="WON",
-                        resolved_at=resolved_at,
-                    ),
-                ]
-            )
-            session.commit()
+    result = load_resolved_predictions(outcomes_path)
 
-        container = type("FakeContainer", (), {"engine": engine})()
-        result = load_resolved_predictions_from_db(container)
-
-        assert len(result) == 1
-        assert result.iloc[0]["league"] == "PL"
-        assert result.iloc[0]["market"] == "btts_yes"
-        assert result.iloc[0]["probability"] == pytest.approx(0.57)
-        assert result.iloc[0]["actual_outcome"] == 0
-    finally:
-        engine.dispose()
+    assert len(result) == 1
+    assert result.iloc[0]["league"] == "PL"
+    assert result.iloc[0]["market"] == "btts_yes"
+    assert result.iloc[0]["probability"] == pytest.approx(0.57)
+    assert result.iloc[0]["actual_outcome"] == 0
 
 
 def test_simulate_with_rl_weights_changes_output():

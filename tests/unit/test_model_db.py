@@ -1,3 +1,9 @@
+import sqlite3
+import threading
+import time
+
+import pytest
+
 from src.ml.model_db import ModelHistoryDB
 from src.ml.registry import ModelRegistry
 
@@ -22,7 +28,87 @@ def test_model_history_db_writes_and_reads_events(tmp_path):
     assert events[0]["brier_score"] == 0.182
 
 
+def test_model_history_db_enables_wal_and_30_second_busy_timeout(tmp_path):
+    db = ModelHistoryDB(db_path=tmp_path / "model_history.db")
+
+    with db._connect() as connection:
+        journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
+        busy_timeout = connection.execute("PRAGMA busy_timeout").fetchone()[0]
+
+    assert str(journal_mode).lower() == "wal"
+    assert busy_timeout == 30_000
+
+
+def test_model_history_concurrent_writes_wait_instead_of_failing_locked(tmp_path):
+    db = ModelHistoryDB(db_path=tmp_path / "model_history.db")
+    lock_acquired = threading.Event()
+    release_lock = threading.Event()
+    errors: list[BaseException] = []
+
+    def hold_write_lock() -> None:
+        try:
+            with db._connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    """
+                    INSERT INTO model_history (
+                        model_name, league, version, timestamp, event_type
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    ("holder", "PL", "1.0.0", "2026-08-08T00:00:00+00:00", "holder"),
+                )
+                lock_acquired.set()
+                if not release_lock.wait(timeout=5):
+                    raise TimeoutError("test did not release SQLite writer lock")
+                connection.commit()
+        except BaseException as exc:  # pragma: no cover - surfaced below
+            errors.append(exc)
+
+    def competing_write() -> None:
+        try:
+            db.write_event(
+                model_name="contender",
+                league="PL",
+                version="1.0.0",
+                brier_score=0.2,
+                ece=0.03,
+                train_size=100,
+                event_type="contender",
+            )
+        except BaseException as exc:  # pragma: no cover - surfaced below
+            errors.append(exc)
+
+    holder = threading.Thread(target=hold_write_lock)
+    holder.start()
+    assert lock_acquired.wait(timeout=2)
+
+    with sqlite3.connect(db.db_path, timeout=0) as no_wait_connection:
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            no_wait_connection.execute(
+                "INSERT INTO model_history (model_name, league, version, timestamp, event_type) "
+                "VALUES ('no-wait', 'PL', '1.0.0', '2026-08-08T00:00:00+00:00', 'no-wait')"
+            )
+
+    contender = threading.Thread(target=competing_write)
+    contender.start()
+    time.sleep(0.1)
+    assert contender.is_alive(), "configured writer should wait while the lock is held"
+
+    release_lock.set()
+    holder.join(timeout=5)
+    contender.join(timeout=5)
+
+    assert not holder.is_alive()
+    assert not contender.is_alive()
+    assert errors == []
+    assert {event["event_type"] for event in db.fetch_events(limit=10)} == {
+        "holder",
+        "contender",
+    }
+
+
 def test_registry_logs_train_promote_and_rollback_events(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARTIFACT_SIGNING_KEY", "test-signing-key-with-at-least-32-bytes")
     manifest_file = tmp_path / "models" / "manifest.json"
     backup_file = tmp_path / "models" / "manifest.json.bak"
     db_file = tmp_path / "models" / "model_history.db"

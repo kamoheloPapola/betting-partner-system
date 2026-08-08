@@ -2,6 +2,7 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV MODELS_DIR=/app/data/models
 
 WORKDIR /app
 
@@ -17,6 +18,6 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY . /app
 
 RUN chmod +x /app/scripts/download_models.sh
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data/models
 
-CMD ["/bin/bash", "-c", "/app/scripts/download_models.sh && python scripts/fetch_fresh_data.py && uvicorn src.api.main:app --host 0.0.0.0 --port 8000"]
+CMD ["/bin/bash", "-c", "python -m src.config.startup api && /app/scripts/download_models.sh && python scripts/fetch_fresh_data.py && uvicorn src.api.main:app --host 0.0.0.0 --port 8000"]

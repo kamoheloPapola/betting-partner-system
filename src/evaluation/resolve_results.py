@@ -21,16 +21,12 @@ from pathlib import Path
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from typing import ClassVar, List, Dict, Any, Set, Optional, Iterator, TypeAlias
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 # Add project root relative to this file
 try:
     from src.config import DATA_DIR
     from src.utils.naming import generate_match_fingerprint
     from src.core.exceptions import DataValidationError
-    from src.db.connection import database_is_configured, get_engine
-    from src.db.models import ResolvedPrediction
 except ImportError:
     PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
     if str(PROJECT_ROOT) not in sys.path:
@@ -38,8 +34,6 @@ except ImportError:
     from src.config import DATA_DIR
     from src.utils.naming import generate_match_fingerprint
     from src.core.exceptions import DataValidationError
-    from src.db.connection import database_is_configured, get_engine
-    from src.db.models import ResolvedPrediction
 
 logger = logging.getLogger(__name__)
 
@@ -300,11 +294,6 @@ class AuthoritativeResolver:
 
     def _load_existing_outcomes(self) -> Set[str]:
         """Load previously processed prediction IDs."""
-        if database_is_configured():
-            db_prediction_ids = self._load_existing_outcome_ids_from_db()
-            if db_prediction_ids:
-                return db_prediction_ids
-
         if not self.outcomes_path.exists():
             return set()
         
@@ -317,11 +306,6 @@ class AuthoritativeResolver:
             return set()
 
     def _load_outcomes_frame(self) -> pd.DataFrame:
-        if database_is_configured():
-            db_outcomes = self._load_outcomes_from_db()
-            if db_outcomes is not None:
-                return db_outcomes
-
         if not self.outcomes_path.exists():
             return pd.DataFrame(columns=self.OUTCOME_COLUMNS)
 
@@ -329,46 +313,6 @@ class AuthoritativeResolver:
             return pd.read_csv(self.outcomes_path)
         except pd.errors.EmptyDataError:
             return pd.DataFrame(columns=self.OUTCOME_COLUMNS)
-
-    def _load_outcomes_from_db(self) -> Optional[pd.DataFrame]:
-        try:
-            with Session(get_engine()) as session:
-                rows = session.execute(
-                    select(ResolvedPrediction).order_by(ResolvedPrediction.resolved_at.asc())
-                ).scalars().all()
-        except Exception as exc:
-            logger.warning("Failed to load resolved predictions from database: %s", exc)
-            return None
-
-        if not rows:
-            return None
-
-        return pd.DataFrame(
-            [
-                {
-                    "prediction_id": row.prediction_id,
-                    "match_hash": row.match_hash,
-                    "league": row.league,
-                    "kickoff_date": row.kickoff_date.isoformat() if row.kickoff_date else None,
-                    "market": row.market,
-                    "probability": row.probability,
-                    "outcome": row.outcome,
-                    "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
-                }
-                for row in rows
-            ],
-            columns=self.OUTCOME_COLUMNS,
-        )
-
-    def _load_existing_outcome_ids_from_db(self) -> Set[str]:
-        try:
-            with Session(get_engine()) as session:
-                rows = session.execute(select(ResolvedPrediction.prediction_id)).all()
-        except Exception as exc:
-            logger.warning("Failed to load resolved prediction ids from database: %s", exc)
-            return set()
-
-        return {str(row[0]) for row in rows if row and row[0]}
 
     def _iter_prediction_files(self) -> Iterator[Path]:
         """Yield prediction files to process."""
@@ -695,7 +639,6 @@ class AuthoritativeResolver:
                  header = False
              
             new_df.to_csv(tmp_path, mode=mode, header=header, index=False)
-            self._save_outcomes_batch_to_db(normalized_batch)
             total_saved += len(batch)
         if tmp_path.exists():
             if self.outcomes_path.exists() and (tmp_path.stat().st_size == 0):
@@ -775,31 +718,6 @@ class AuthoritativeResolver:
 
         return normalized
 
-    def _save_outcomes_batch_to_db(self, outcomes: List[Dict[str, Any]]) -> None:
-        if not outcomes or not database_is_configured():
-            return
-
-        try:
-            with Session(get_engine()) as session:
-                for outcome in outcomes:
-                    session.merge(
-                        ResolvedPrediction(
-                            prediction_id=str(outcome.get("prediction_id")),
-                            match_hash=str(outcome.get("match_hash")),
-                            league=str(outcome.get("league")),
-                            kickoff_date=self._parse_datetime(outcome.get("kickoff_date")),
-                            market=str(outcome.get("market")) if outcome.get("market") is not None else None,
-                            probability=float(outcome["probability"])
-                            if outcome.get("probability") is not None
-                            else None,
-                            outcome=str(outcome.get("outcome")) if outcome.get("outcome") is not None else None,
-                            resolved_at=self._parse_datetime(outcome.get("resolved_at")),
-                        )
-                    )
-                session.commit()
-        except Exception as exc:
-            logger.warning("Failed to persist resolved predictions to database: %s", exc)
-        
 MARKET_ALIASES = AuthoritativeResolver.MARKET_ALIASES
 
 if __name__ == "__main__":

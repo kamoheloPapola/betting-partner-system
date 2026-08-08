@@ -23,7 +23,6 @@ from src.ml.calibration import (
     calculate_ece,
     get_dampening_alpha,
 )
-from src.strategies.css_math import refresh_market_weights
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +93,6 @@ class PerformanceTracker:
             "roi": self._compute_roi(),
         }
         report["auto_calibration_adjustments"] = self._apply_live_ece_feedback(report["ece_by_market"])
-        report["css_weight_updates"] = self._refresh_css_market_weights(accuracy_by_market)
         report["reliability_diagrams"] = self._generate_reliability_diagrams(evals_df)
 
         # Persist report
@@ -408,13 +406,6 @@ class PerformanceTracker:
                 ),
             }
         return result
-
-    @staticmethod
-    def _refresh_css_market_weights(accuracy_by_market: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Refresh css_math MARKET_WEIGHTS once a market accumulates enough settled samples.
-        """
-        return refresh_market_weights(accuracy_by_market, min_settled_bets=200)
 
     # ------------------------------------------------------------------
     # ROI from Bet Log

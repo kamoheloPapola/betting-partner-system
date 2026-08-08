@@ -11,8 +11,6 @@ import pandas as pd
 import pytest
 
 from src.core.exceptions import DataValidationError
-from src.db import connection as connection_module
-from src.db.models import Base
 from src.evaluation.resolve_results import AuthoritativeResolver, ResolutionStats
 
 
@@ -312,47 +310,27 @@ class TestIntegration:
         assert repaired["probability"] == 0.25
         assert repaired["outcome"] == 0
 
-    def test_save_and_load_outcomes_prefer_database_when_configured(self, tmp_path, monkeypatch):
-        db_path = tmp_path / "resolved_predictions.db"
-        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path.as_posix()}")
-        connection_module.get_engine.cache_clear()
-        engine = connection_module.get_engine()
-        Base.metadata.create_all(engine)
-
+    def test_save_and_load_outcomes_use_authoritative_csv(self, tmp_path):
         outcomes_path = tmp_path / "prediction_outcomes.csv"
         resolver = AuthoritativeResolver(outcomes_path=outcomes_path)
+        resolver._save_outcomes(
+            [
+                {
+                    "prediction_id": "hash1_HOME_WIN",
+                    "match_hash": "hash1",
+                    "league": "PL",
+                    "kickoff_date": "2026-03-01T12:00:00+00:00",
+                    "market": "HOME_WIN",
+                    "probability": 0.75,
+                    "outcome": "WON",
+                    "resolved_at": "2026-03-01T18:00:00+00:00",
+                }
+            ]
+        )
 
-        try:
-            resolver._save_outcomes(
-                [
-                    {
-                        "prediction_id": "hash1_HOME_WIN",
-                        "match_hash": "hash1",
-                        "league": "PL",
-                        "kickoff_date": "2026-03-01T12:00:00+00:00",
-                        "market": "HOME_WIN",
-                        "probability": 0.75,
-                        "outcome": "WON",
-                        "resolved_at": "2026-03-01T18:00:00+00:00",
-                    }
-                ]
-            )
+        outcomes = resolver.load_outcomes(include_void=True)
 
-            outcomes_path.write_text(
-                "\n".join(
-                    [
-                        "prediction_id,match_hash,league,kickoff_date,market,probability,outcome,resolved_at",
-                        "wrong_id,wrong_hash,PL,2026-03-01T12:00:00Z,AWAY_WIN,0.20,LOST,2026-03-01T18:00:00Z",
-                    ]
-                ),
-                encoding="utf-8",
-            )
-
-            outcomes = resolver.load_outcomes(include_void=True)
-
-            assert outcomes["prediction_id"].tolist() == ["hash1_HOME_WIN"]
-            assert outcomes["market"].tolist() == ["HOME_WIN"]
-            assert outcomes["outcome"].tolist() == [1]
-        finally:
-            engine.dispose()
-            connection_module.get_engine.cache_clear()
+        assert outcomes_path.exists()
+        assert outcomes["prediction_id"].tolist() == ["hash1_HOME_WIN"]
+        assert outcomes["market"].tolist() == ["HOME_WIN"]
+        assert outcomes["outcome"].tolist() == [1]

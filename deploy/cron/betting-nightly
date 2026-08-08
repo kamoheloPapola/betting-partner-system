@@ -1,0 +1,8 @@
+# Canonical scheduler trigger for a Docker Compose self-hosted deployment.
+# Install as /etc/cron.d/betting-nightly after adjusting the repository path.
+# 06:00 UTC is 08:00 Africa/Johannesburg.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+SCHEDULER_TRIGGER_LOCK_FILE=/run/lock/betting-nightly.lock
+
+0 6 * * * root /bin/bash /opt/betting_partner_system/scripts/run_scheduler_container.sh >> /var/log/betting-nightly.log 2>&1

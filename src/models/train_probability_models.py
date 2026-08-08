@@ -19,6 +19,9 @@ from sklearn.metrics import (
 from xgboost import XGBRegressor
 
 from src.config import DATA_DIR, MODELS_DIR
+from src.config.model_state import require_unlocked
+from src.core.exceptions import ModelNotFoundError
+from src.ml.artifact_signing import ArtifactVerificationError
 from src.ml.calibration import fit_best_binary_calibrator, save_binary_calibrator_artifact
 from src.ml.distributions import NegativeBinomialEngine
 from src.ml.registry import ModelRegistry
@@ -87,6 +90,41 @@ class ProbabilityModelTrainer:
         self.models_dir.mkdir(parents=True, exist_ok=True)
         self.registry = ModelRegistry()
         self._serving_columns_cache: Dict[str, set[str]] = {}
+
+    def _load_verified_warm_start(
+        self,
+        *,
+        existing_model_path: Optional[Path],
+        model_name: str,
+        league: str,
+    ) -> Optional[Any]:
+        """Load a prior published model through the signed registry boundary."""
+        if existing_model_path is None or not existing_model_path.exists():
+            return None
+
+        try:
+            return self.registry.load_model(
+                model_name,
+                league=league,
+                deserializer="joblib",
+            )
+        except ModelNotFoundError as exc:
+            logger.error(
+                "warm_start_verification_failed path=%s model=%s league=%s "
+                "reason=missing_manifest",
+                existing_model_path,
+                model_name,
+                league,
+            )
+            raise ArtifactVerificationError(
+                "Warm-start artifact verification failed: published artifact is not registered",
+                context={
+                    "path": str(existing_model_path),
+                    "model_name": model_name,
+                    "league": league,
+                    "reason": "missing_manifest",
+                },
+            ) from exc
 
     def load_and_engineer_data(self) -> pd.DataFrame:
         logger.info("Loading features from %s", self.features_path)
@@ -307,6 +345,8 @@ class ProbabilityModelTrainer:
         y_test: pd.Series,
         *,
         existing_model_path: Optional[Path] = None,
+        existing_model_name: str,
+        league: str,
         full_retrain: bool = False,
     ) -> Tuple[Any, Dict[str, Any]]:
         logger.info("Training %s Model (LGBMRegressor Poisson)...", name)
@@ -320,25 +360,21 @@ class ProbabilityModelTrainer:
             verbose=-1,
         )
         fit_kwargs: Dict[str, Any] = {}
-        if (
-            not full_retrain
-            and existing_model_path is not None
-            and existing_model_path.exists()
-        ):
-            try:
-                existing_model = joblib.load(existing_model_path)
+        if not full_retrain:
+            existing_model = self._load_verified_warm_start(
+                existing_model_path=existing_model_path,
+                model_name=existing_model_name,
+                league=league,
+            )
+            if existing_model is not None:
                 if hasattr(existing_model, "booster_"):
                     fit_kwargs["init_model"] = existing_model.booster_
+                    logger.info("Warm-start enabled for %s using %s", name, existing_model_path)
                 else:
-                    fit_kwargs["init_model"] = str(existing_model_path)
-                logger.info("Warm-start enabled for %s using %s", name, existing_model_path)
-            except Exception as exc:
-                logger.warning(
-                    "Warm-start checkpoint ignored for %s (%s): %s",
-                    name,
-                    existing_model_path,
-                    exc,
-                )
+                    logger.warning(
+                        "Verified warm-start artifact for %s has no booster_; training from scratch",
+                        name,
+                    )
         model.fit(X_train, y_train, **fit_kwargs)
 
         preds = np.maximum(0.05, model.predict(X_test))
@@ -368,6 +404,8 @@ class ProbabilityModelTrainer:
         *,
         objective: str,
         existing_model_path: Optional[Path] = None,
+        existing_model_name: str,
+        league: str,
         full_retrain: bool = False,
     ) -> Tuple[Any, Dict[str, Any]]:
         logger.info("Training %s Model (XGBRegressor %s)...", name, objective)
@@ -392,22 +430,15 @@ class ProbabilityModelTrainer:
 
         model = XGBRegressor(**params)
         fit_kwargs: Dict[str, Any] = {}
-        if (
-            not full_retrain
-            and existing_model_path is not None
-            and existing_model_path.exists()
-        ):
-            try:
-                existing_model = joblib.load(existing_model_path)
+        if not full_retrain:
+            existing_model = self._load_verified_warm_start(
+                existing_model_path=existing_model_path,
+                model_name=existing_model_name,
+                league=league,
+            )
+            if existing_model is not None:
                 fit_kwargs["xgb_model"] = existing_model
                 logger.info("Warm-start enabled for %s using %s", name, existing_model_path)
-            except Exception as exc:
-                logger.warning(
-                    "Warm-start checkpoint ignored for %s (%s): %s",
-                    name,
-                    existing_model_path,
-                    exc,
-                )
         model.fit(X_train, y_train, **fit_kwargs)
 
         preds = np.maximum(0.05, model.predict(X_test))
@@ -574,6 +605,8 @@ class ProbabilityModelTrainer:
             X_test.loc[home_test_idx],
             df_scope.loc[home_test_idx, "home_goals"],
             existing_model_path=home_goals_path,
+            existing_model_name="home_goals",
+            league=league,
             full_retrain=full_retrain,
         )
         joblib.dump(home_goals_model, home_goals_path)
@@ -601,6 +634,8 @@ class ProbabilityModelTrainer:
             df_scope.loc[home_test_idx, "home_goals"],
             objective="count:poisson",
             existing_model_path=home_goals_xgb_path,
+            existing_model_name="home_goals_xgb",
+            league=league,
             full_retrain=full_retrain,
         )
         joblib.dump(home_goals_xgb_model, home_goals_xgb_path)
@@ -630,6 +665,8 @@ class ProbabilityModelTrainer:
             X_test.loc[away_test_idx],
             df_scope.loc[away_test_idx, "away_goals"],
             existing_model_path=away_goals_path,
+            existing_model_name="away_goals",
+            league=league,
             full_retrain=full_retrain,
         )
         joblib.dump(away_goals_model, away_goals_path)
@@ -657,6 +694,8 @@ class ProbabilityModelTrainer:
             df_scope.loc[away_test_idx, "away_goals"],
             objective="count:poisson",
             existing_model_path=away_goals_xgb_path,
+            existing_model_name="away_goals_xgb",
+            league=league,
             full_retrain=full_retrain,
         )
         joblib.dump(away_goals_xgb_model, away_goals_xgb_path)
@@ -686,6 +725,8 @@ class ProbabilityModelTrainer:
             X_test.loc[hcorn_test_idx],
             df_scope.loc[hcorn_test_idx, "home_corners"],
             existing_model_path=hcorn_path,
+            existing_model_name="mh_corn",
+            league=league,
             full_retrain=full_retrain,
         )
         joblib.dump(hcorn_model, hcorn_path)
@@ -704,6 +745,8 @@ class ProbabilityModelTrainer:
             X_test.loc[acorn_test_idx],
             df_scope.loc[acorn_test_idx, "away_corners"],
             existing_model_path=acorn_path,
+            existing_model_name="ma_corn",
+            league=league,
             full_retrain=full_retrain,
         )
         joblib.dump(acorn_model, acorn_path)
@@ -762,6 +805,8 @@ class ProbabilityModelTrainer:
             X_test.loc[corners_test_idx],
             df_scope.loc[corners_test_idx, "total_corners"],
             existing_model_path=corners_path,
+            existing_model_name="corners",
+            league=league,
             full_retrain=full_retrain,
         )
         joblib.dump(corners_model, corners_path)
@@ -800,6 +845,8 @@ class ProbabilityModelTrainer:
             df_scope.loc[corners_test_idx, "total_corners"],
             objective="reg:tweedie",
             existing_model_path=corners_xgb_path,
+            existing_model_name="corners_xgb",
+            league=league,
             full_retrain=full_retrain,
         )
         joblib.dump(corners_xgb_model, corners_xgb_path)
@@ -840,6 +887,8 @@ class ProbabilityModelTrainer:
             X_test.loc[cards_test_idx],
             df_scope.loc[cards_test_idx, "total_cards"],
             existing_model_path=cards_path,
+            existing_model_name="cards",
+            league=league,
             full_retrain=full_retrain,
         )
         joblib.dump(cards_model, cards_path)
@@ -867,6 +916,8 @@ class ProbabilityModelTrainer:
             df_scope.loc[cards_test_idx, "total_cards"],
             objective="reg:tweedie",
             existing_model_path=cards_xgb_path,
+            existing_model_name="cards_xgb",
+            league=league,
             full_retrain=full_retrain,
         )
         joblib.dump(cards_xgb_model, cards_xgb_path)
@@ -932,6 +983,7 @@ class ProbabilityModelTrainer:
         tracked_leagues: Optional[List[str]] = None,
         full_retrain: bool = False,
     ) -> None:
+        require_unlocked("Probability-model training")
         df = self.load_and_engineer_data()
 
         if "league" not in df.columns:

@@ -22,11 +22,6 @@ Advanced Usage Patterns:
                 # Log issues without stopping the pipeline
                 logger.warning(f"Quality Alert: {e}")
 
-    3. Strategy Validation:
-        guard = MPIG()
-        result = guard.verify_strategy(candidates, 'accumulator')
-        if result['verified']:
-            # Candidates meet structural requirements
 """
 
 import json
@@ -99,10 +94,9 @@ class MPIG:
         - Phase 2: Model Health - Check freshness, calibration, sample size
         - Phase 6: Drift Detection - Ensure no active drift alerts
         
-        Per-Prediction/Strategy Phases (called separately):
+        Per-Prediction Phases (called separately):
         - Phase 3: Provenance - Use verify_prediction() for traceability
         - Phase 4: Sanity Checks - Use verify_prediction() for bounds checking
-        - Phase 5: Strategy Compatibility - Use verify_strategy() for requirements
         
         Args:
             matches: List of match dictionaries to verify models for
@@ -323,85 +317,6 @@ class MPIG:
         
         return True
 
-    def verify_strategy(
-        self, 
-        candidates: List[Dict[str, Any]], 
-        strategy_name: str
-    ) -> Dict[str, Any]:
-        """
-        Phase 5: Strategy Compatibility Check.
-        
-        Verifies that chosen candidates meet the structural and content 
-        requirements of the specific betting strategy.
-        
-        Returns:
-            Verification result dict with status and details.
-        """
-        result = {
-            "strategy": strategy_name,
-            "candidate_count": len(candidates),
-            "verified": False,
-            "checks_performed": []
-        }
-        
-        if not candidates:
-            logger.warning(f"MPIG Phase 5: No candidates provided for {strategy_name}")
-            result["verified"] = True
-            result["note"] = "No candidates to verify"
-            return result
-        
-        try:
-            if strategy_name == "forbidden-fruit":
-                self._verify_forbidden_fruit_requirements(candidates)
-                result["checks_performed"].append("tier_presence")
-                
-            elif strategy_name == "accumulator":
-                self._verify_accumulator_requirements(candidates)
-                result["checks_performed"].append("min_count")
-                result["checks_performed"].append("field_integrity")
-                
-            elif strategy_name == "value-hunter":
-                # Add verification for value hunter if needed in future
-                logger.debug(f"MPIG Phase 5: No specific checks for {strategy_name}")
-            else:
-                logger.debug(f"MPIG Phase 5: No specific checks for {strategy_name}")
-            
-            result["verified"] = True
-            logger.info(f"MPIG Phase 5: Strategy compatibility verified for {strategy_name}")
-            return result
-            
-        except IntegrityError as e:
-            result["error"] = str(e)
-            raise e
-
-    def _verify_forbidden_fruit_requirements(self, candidates: List[Dict[str, Any]]):
-        """Verify Forbidden Fruit strategy requirements."""
-        missing_tier = [c for c in candidates if "tier" not in c]
-        if missing_tier:
-            raise IntegrityError(
-                f"Forbidden Fruit requires tiered candidates. "
-                f"{len(missing_tier)}/{len(candidates)} candidates missing 'tier' field. "
-                f"Examples: {missing_tier[:3]}"
-            )
-
-    def _verify_accumulator_requirements(self, candidates: List[Dict[str, Any]]):
-        """Verify Accumulator strategy requirements."""
-        # Check minimum candidate count
-        if len(candidates) < 2:
-            raise IntegrityError(
-                f"Accumulator requires at least 2 candidates, got {len(candidates)}"
-            )
-        
-        # Check required fields
-        required_fields = ["confidence", "market"]
-        for candidate in candidates:
-            missing = [f for f in required_fields if f not in candidate]
-            if missing:
-                raise IntegrityError(
-                    f"Accumulator candidate missing required fields: {missing} for "
-                    f"match {candidate.get('match', 'unknown')}"
-                )
-
 def verify_system(
     matches: List[Dict[str, Any]], 
     markets: List[str], 
@@ -427,12 +342,3 @@ def verify_prediction(
     """
     guard = MPIG(dry_run=dry_run)
     return guard.verify_prediction(prediction)
-
-def verify_strategy(
-    candidates: List[Dict[str, Any]], 
-    strategy_name: str, 
-    dry_run: bool = False
-) -> Dict[str, Any]:
-    """Convenience wrapper for Phase 5 strategy verification."""
-    guard = MPIG(dry_run=dry_run)
-    return guard.verify_strategy(candidates, strategy_name)

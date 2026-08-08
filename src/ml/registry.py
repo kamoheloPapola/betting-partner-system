@@ -10,35 +10,121 @@ Features:
 - Smart routing for League vs Global model selection
 """
 import hashlib
+import io
 import joblib
 import json
 import logging
 import os
 import pickle
 import shutil
+import time
+import uuid
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Callable, Dict, List, Optional, cast
 
 import s3fs
 import sklearn
+from fsspec.asyn import sync as fsspec_sync
 from sklearn.exceptions import InconsistentVersionWarning
 
 from src.config import MODELS_DIR
+from src.config.model_state import require_unlocked
 from src.config.thresholds import Thresholds
 from src.core.exceptions import (
+    APIError,
     ConfigurationError,
     DataValidationError,
     ModelNotFoundError,
 )
-from src.db.connection import database_is_configured, get_engine
+from src.ml.artifact_signing import (
+    ARTIFACT_INTEGRITY_FIELD,
+    ArtifactVerificationError,
+    sign_artifact,
+    verify_artifact,
+)
 from src.ml.model_db import ModelHistoryDB
 
 # Define public API
-__all__ = ["ModelRegistry", "SemVer"]
+__all__ = ["ArtifactTransferTimeoutError", "ModelRegistry", "SemVer"]
 
 logger = logging.getLogger(__name__)
+
+ARTIFACT_CONNECT_TIMEOUT_ENV = "ARTIFACT_CONNECT_TIMEOUT_SECONDS"
+ARTIFACT_TRANSFER_TIMEOUT_ENV = "ARTIFACT_TRANSFER_TIMEOUT_SECONDS"
+DEFAULT_ARTIFACT_CONNECT_TIMEOUT_SECONDS = 10.0
+DEFAULT_ARTIFACT_TRANSFER_TIMEOUT_SECONDS = 120.0
+
+
+class ArtifactTransferTimeoutError(APIError):
+    """Raised when remote artifact acquisition exceeds a configured timeout."""
+
+
+def _positive_timeout_seconds(name: str, default: float) -> float:
+    raw_value = str(os.getenv(name, str(int(default)))).strip()
+    if not raw_value.isdigit():
+        raise ConfigurationError(
+            f"{name} must be a positive integer number of seconds",
+            context={"environment_variable": name, "value": raw_value},
+        )
+    timeout = float(int(raw_value))
+    if timeout <= 0:
+        raise ConfigurationError(
+            f"{name} must be a positive integer number of seconds",
+            context={"environment_variable": name, "value": raw_value},
+        )
+    return timeout
+
+
+def _is_timeout_exception(exc: BaseException) -> bool:
+    current: Optional[BaseException] = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, TimeoutError) or "timeout" in type(current).__name__.lower():
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _run_s3_operation(
+    operation: Callable[[], Any],
+    *,
+    operation_name: str,
+    remote_path: str,
+    connect_timeout: float,
+    read_timeout: float,
+) -> Any:
+    started_at = time.monotonic()
+    try:
+        return operation()
+    except Exception as exc:
+        if not _is_timeout_exception(exc):
+            raise
+        elapsed = time.monotonic() - started_at
+        logger.error(
+            "artifact_download_timeout path=%s operation=%s elapsed_seconds=%.3f "
+            "connect_timeout_seconds=%s read_timeout_seconds=%s "
+            "total_timeout_seconds=%s",
+            remote_path,
+            operation_name,
+            elapsed,
+            connect_timeout,
+            read_timeout,
+            read_timeout,
+        )
+        raise ArtifactTransferTimeoutError(
+            "Artifact acquisition timed out",
+            context={
+                "path": remote_path,
+                "operation": operation_name,
+                "elapsed_seconds": round(elapsed, 3),
+                "connect_timeout_seconds": connect_timeout,
+                "read_timeout_seconds": read_timeout,
+                "total_timeout_seconds": read_timeout,
+            },
+        ) from exc
 
 # --- LEAGUE PROMOTION CRITERIA (Rule 2025-12-21) ---
 PROMOTION_THRESHOLDS = {
@@ -130,93 +216,15 @@ class ModelRegistry:
             return
 
         file_manifest = self._load_manifest_from_file()
-        db_manifest: Optional[Dict[str, Any]] = None
-        if database_is_configured():
-            db_manifest = self._load_manifest_from_db()
-
-        selected_manifest, source = self._select_manifest_source(
-            file_manifest=file_manifest,
-            db_manifest=db_manifest,
-        )
-        if selected_manifest is not None:
-            self.manifest = selected_manifest
-            if source == "db":
-                self._save_manifest_file()
-            elif source == "file" and db_manifest is not None and db_manifest != file_manifest:
-                self._save_manifest_to_db()
+        if file_manifest is not None:
+            self.manifest = file_manifest
             return
 
         logger.warning("No valid manifest found or recovery failed. Initializing empty Registry.")
         self.manifest = {}
 
-    @staticmethod
-    def _manifest_active_file_coverage(manifest: Optional[Dict[str, Any]]) -> tuple[int, int]:
-        if not isinstance(manifest, dict):
-            return 0, 0
-
-        active_models = manifest.get("active_models")
-        if not isinstance(active_models, dict):
-            return 0, 0
-
-        found = 0
-        total = 0
-        for manifest_key in active_models.values():
-            meta = manifest.get(manifest_key)
-            if not isinstance(meta, dict):
-                continue
-
-            candidate = meta.get("filename") or meta.get("path")
-            if not candidate:
-                continue
-
-            total += 1
-            path = Path(str(candidate))
-            if not path.is_absolute():
-                path = MODELS_DIR / path
-
-            if path.exists():
-                found += 1
-
-        return found, total
-
-    def _select_manifest_source(
-        self,
-        *,
-        file_manifest: Optional[Dict[str, Any]],
-        db_manifest: Optional[Dict[str, Any]],
-    ) -> tuple[Optional[Dict[str, Any]], str]:
-        if file_manifest is None and db_manifest is None:
-            return None, "none"
-        if file_manifest is None:
-            return db_manifest, "db"
-        if db_manifest is None:
-            return file_manifest, "file"
-
-        file_found, file_total = self._manifest_active_file_coverage(file_manifest)
-        db_found, db_total = self._manifest_active_file_coverage(db_manifest)
-
-        logger.info(
-            "Manifest coverage comparison: file=%s/%s, db=%s/%s",
-            file_found,
-            file_total,
-            db_found,
-            db_total,
-        )
-
-        if file_found != db_found:
-            return (file_manifest, "file") if file_found > db_found else (db_manifest, "db")
-
-        if file_total != db_total:
-            return (file_manifest, "file") if file_total < db_total else (db_manifest, "db")
-        # When coverage is equal, prefer DB manifest if database is configured —
-        # DB is the source of truth when explicitly configured.
-        if database_is_configured() and db_manifest is not None:
-            return db_manifest, "db"
-        return file_manifest, "file"
-
     def _save_manifest(self) -> None:
         self._save_manifest_file()
-        self._save_manifest_to_db()
 
     def _load_manifest_from_file(self) -> Optional[Dict[str, Any]]:
         if self.MANIFEST_FILE.exists():
@@ -256,105 +264,6 @@ class ModelRegistry:
             shutil.copy2(self.MANIFEST_FILE, self.BACKUP_FILE)
         except Exception as e:
             logger.error(f"Failed to create manifest backup: {e}")
-
-    @staticmethod
-    def _parse_optional_datetime(value: Any) -> Optional[datetime]:
-        if value in {None, ""}:
-            return None
-        if isinstance(value, datetime):
-            return value
-        try:
-            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        except Exception:
-            return None
-
-    @staticmethod
-    def _json_blob(value: Any) -> Optional[str]:
-        if value is None:
-            return None
-        try:
-            return json.dumps(value, default=str, sort_keys=True)
-        except TypeError:
-            return json.dumps(str(value))
-
-    def _save_manifest_to_db(self) -> None:
-        if not database_is_configured():
-            return
-
-        try:
-            from sqlalchemy import delete
-            from sqlalchemy.orm import Session
-
-            from src.db.models import ModelManifestEntry
-
-            with Session(get_engine()) as session:
-                session.execute(delete(ModelManifestEntry))
-                for manifest_key, meta in self.manifest.items():
-                    payload: Any = meta if isinstance(meta, dict) else {"__manifest_value__": meta}
-                    session.add(
-                        ModelManifestEntry(
-                            manifest_key=str(manifest_key),
-                            model_name=payload.get("name") if isinstance(payload, dict) else None,
-                            version=payload.get("version") if isinstance(payload, dict) else None,
-                            league=payload.get("league") if isinstance(payload, dict) else None,
-                            model_type=payload.get("type") if isinstance(payload, dict) else None,
-                            target=payload.get("target") if isinstance(payload, dict) else None,
-                            filename=payload.get("filename") if isinstance(payload, dict) else None,
-                            mode=payload.get("mode") if isinstance(payload, dict) else None,
-                            status=payload.get("status") if isinstance(payload, dict) else None,
-                            sklearn_version=payload.get("sklearn_version") if isinstance(payload, dict) else None,
-                            train_size=payload.get("train_size") if isinstance(payload, dict) else None,
-                            test_size=payload.get("test_size") if isinstance(payload, dict) else None,
-                            registered_at=self._parse_optional_datetime(
-                                payload.get("registered_at") if isinstance(payload, dict) else None
-                            ),
-                            features_json=self._json_blob(
-                                payload.get("features") if isinstance(payload, dict) else None
-                            ),
-                            params_json=self._json_blob(
-                                payload.get("params") if isinstance(payload, dict) else None
-                            ),
-                            metrics_json=self._json_blob(
-                                payload.get("metrics") if isinstance(payload, dict) else None
-                            ),
-                            metadata_json=self._json_blob(payload) or "{}",
-                        )
-                    )
-                session.commit()
-        except Exception as exc:
-            logger.warning("Failed to persist manifest to database: %s", exc)
-
-    def _load_manifest_from_db(self) -> Optional[Dict[str, Any]]:
-        try:
-            from sqlalchemy import select
-            from sqlalchemy.orm import Session
-
-            from src.db.models import ModelManifestEntry
-
-            with Session(get_engine()) as session:
-                rows = session.execute(
-                    select(ModelManifestEntry).order_by(ModelManifestEntry.manifest_key.asc())
-                ).scalars().all()
-        except Exception as exc:
-            logger.warning("Failed to load manifest from database: %s", exc)
-            return None
-
-        if not rows:
-            return None
-
-        manifest: Dict[str, Any] = {}
-        for row in rows:
-            payload: Any
-            try:
-                payload = json.loads(row.metadata_json) if row.metadata_json else {}
-            except Exception:
-                payload = {}
-
-            if isinstance(payload, dict) and "__manifest_value__" in payload:
-                manifest[row.manifest_key] = payload["__manifest_value__"]
-            else:
-                manifest[row.manifest_key] = payload if isinstance(payload, dict) else {}
-        return manifest
 
     @staticmethod
     def _require_aws_s3_env() -> Dict[str, str]:
@@ -402,10 +311,22 @@ class ModelRegistry:
 
     def _build_s3_filesystem(self) -> s3fs.S3FileSystem:
         env = self._require_aws_s3_env()
+        connect_timeout = _positive_timeout_seconds(
+            ARTIFACT_CONNECT_TIMEOUT_ENV,
+            DEFAULT_ARTIFACT_CONNECT_TIMEOUT_SECONDS,
+        )
+        read_timeout = _positive_timeout_seconds(
+            ARTIFACT_TRANSFER_TIMEOUT_ENV,
+            DEFAULT_ARTIFACT_TRANSFER_TIMEOUT_SECONDS,
+        )
         return s3fs.S3FileSystem(
             key=env["AWS_ACCESS_KEY_ID"],
             secret=env["AWS_SECRET_ACCESS_KEY"],
             client_kwargs={"region_name": env["AWS_REGION"]},
+            config_kwargs={
+                "connect_timeout": connect_timeout,
+                "read_timeout": read_timeout,
+            },
         )
 
     def push_to_s3(self, bucket: str, prefix: str) -> int:
@@ -433,6 +354,14 @@ class ModelRegistry:
             raise ValueError("bucket must be non-empty")
 
         fs = self._build_s3_filesystem()
+        connect_timeout = _positive_timeout_seconds(
+            ARTIFACT_CONNECT_TIMEOUT_ENV,
+            DEFAULT_ARTIFACT_CONNECT_TIMEOUT_SECONDS,
+        )
+        read_timeout = _positive_timeout_seconds(
+            ARTIFACT_TRANSFER_TIMEOUT_ENV,
+            DEFAULT_ARTIFACT_TRANSFER_TIMEOUT_SECONDS,
+        )
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
         downloaded = 0
         for filename in self._manifest_model_filenames():
@@ -441,13 +370,53 @@ class ModelRegistry:
                 continue
 
             remote_path = self._s3_object_path(bucket, prefix, filename)
-            if not fs.exists(remote_path):
+            remote_uri = self._s3_object_uri(bucket, prefix, filename)
+            remote_exists = _run_s3_operation(
+                lambda: fsspec_sync(
+                    fs.loop,
+                    fs._exists,
+                    remote_path,
+                    timeout=read_timeout,
+                ),
+                operation_name="exists",
+                remote_path=remote_uri,
+                connect_timeout=connect_timeout,
+                read_timeout=read_timeout,
+            )
+            if not remote_exists:
                 raise FileNotFoundError(
-                    f"Model artifact listed in manifest is missing in S3: {self._s3_object_uri(bucket, prefix, filename)}"
+                    f"Model artifact listed in manifest is missing in S3: {remote_uri}"
                 )
 
             local_path.parent.mkdir(parents=True, exist_ok=True)
-            fs.get(remote_path, str(local_path))
+            partial_path = local_path.with_name(
+                f".{local_path.name}.{uuid.uuid4().hex}.part"
+            )
+            try:
+                _run_s3_operation(
+                    lambda: fsspec_sync(
+                        fs.loop,
+                        fs._get_file,
+                        remote_path,
+                        str(partial_path),
+                        timeout=read_timeout,
+                    ),
+                    operation_name="download",
+                    remote_path=remote_uri,
+                    connect_timeout=connect_timeout,
+                    read_timeout=read_timeout,
+                )
+                os.replace(partial_path, local_path)
+            finally:
+                if partial_path.exists():
+                    try:
+                        partial_path.unlink()
+                    except OSError as exc:
+                        logger.warning(
+                            "Failed to remove partial artifact download %s: %s",
+                            partial_path,
+                            exc,
+                        )
             downloaded += 1
 
         logger.info(
@@ -468,14 +437,27 @@ class ModelRegistry:
 
     def register_model(self, name: str, version: str, metadata: Dict[str, Any]) -> None:
         """Helper to register a new model version."""
-        league_suffix = f"_{metadata['league']}" if 'league' in metadata else ""
+        require_unlocked("Model registration")
+        published_metadata = dict(metadata)
+        league_suffix = f"_{published_metadata['league']}" if 'league' in published_metadata else ""
         key = f"{name}_v{version}{league_suffix}"
-        metadata["registered_at"] = datetime.now().isoformat()
-        metadata["name"] = name
-        metadata["version"] = version
-        metadata.setdefault("sklearn_version", sklearn.__version__)
-        
-        self.manifest[key] = metadata
+        published_metadata["registered_at"] = datetime.now().isoformat()
+        published_metadata["name"] = name
+        published_metadata["version"] = version
+        published_metadata.setdefault("sklearn_version", sklearn.__version__)
+
+        filename = str(published_metadata.get("filename") or "")
+        artifact_path = MODELS_DIR / filename
+        published_metadata[ARTIFACT_INTEGRITY_FIELD] = sign_artifact(
+            artifact_path,
+            filename=filename,
+            model_name=name,
+            version=version,
+            league=published_metadata.get("league"),
+        )
+        metadata.update(published_metadata)
+
+        self.manifest[key] = published_metadata
         
         # Initialize active_models and shadow_models dicts if not present
         if "active_models" not in self.manifest:
@@ -484,11 +466,12 @@ class ModelRegistry:
             self.manifest["shadow_models"] = {}
              
         self._save_manifest()
-        self._write_lifecycle_event("train", metadata)
+        self._write_lifecycle_event("train", published_metadata)
         logger.info(f"Registered model: {key}")
 
     def set_active_model(self, model_type: str, exact_manifest_key: str, league: Optional[str] = None) -> None:
         """Explicitly pin an active model pointer to prevent auto-upgrades."""
+        require_unlocked("Active-model promotion")
         if "active_models" not in self.manifest:
             self.manifest["active_models"] = {}
             
@@ -510,6 +493,7 @@ class ModelRegistry:
         Returns:
             Manifest key selected as rollback target, or None if unavailable.
         """
+        require_unlocked("Active-model rollback")
         if "active_models" not in self.manifest:
             self.manifest["active_models"] = {}
 
@@ -549,6 +533,7 @@ class ModelRegistry:
 
     def set_shadow_model(self, model_type: str, exact_manifest_key: str, league: Optional[str] = None) -> None:
         """Register a shadow model for parallel evaluation (no betting)."""
+        require_unlocked("Shadow-model registration")
         if "shadow_models" not in self.manifest:
             self.manifest["shadow_models"] = {}
 
@@ -583,6 +568,7 @@ class ModelRegistry:
 
     def update_model_metrics(self, name: str, version: str, metrics: Dict[str, float]) -> None:
         """Updates metrics (e.g., calibration_score) for an existing model."""
+        require_unlocked("Model-metrics update")
         key = f"{name}_v{version}"
         if key in self.manifest:
             if 'metrics' not in self.manifest[key]:
@@ -973,7 +959,13 @@ class ModelRegistry:
 
         return loaded
 
-    def load_model(self, name: str, league: Optional[str] = None) -> Any:
+    def load_model(
+        self,
+        name: str,
+        league: Optional[str] = None,
+        *,
+        deserializer: Optional[str] = None,
+    ) -> Any:
         """
         Loads the actual model object from disk.
         If 'league' is provided, tries to find league-specific version first.
@@ -982,7 +974,16 @@ class ModelRegistry:
         1. Attempt League Specific (if league provided)
         2. Fallback to Global (if allowed) w/ "LEAGUE_FALLBACK" warning
         3. Hard Fail (Raise ModelNotFoundError) if no model found
+
+        ``deserializer`` overrides suffix-based selection only after signature
+        verification. It exists for legacy joblib artifacts named ``*.pkl``.
         """
+        if deserializer not in {None, "pickle", "joblib"}:
+            raise ConfigurationError(
+                "Unsupported model artifact deserializer",
+                context={"model_name": name, "deserializer": deserializer},
+            )
+
         meta = None
         
         # 1. League Specific Attempt
@@ -1018,6 +1019,12 @@ class ModelRegistry:
             )
             
         try:
+            verified_bytes = verify_artifact(
+                path,
+                meta,
+                requested_version=str(meta.get("version") or ""),
+            )
+
             expected_sklearn = meta.get("sklearn_version")
             if expected_sklearn and expected_sklearn != sklearn.__version__:
                 raise ConfigurationError(
@@ -1032,11 +1039,13 @@ class ModelRegistry:
 
             with warnings.catch_warnings(record=True) as captured_warnings:
                 warnings.simplefilter("always")
-                if path.suffix.lower() == ".joblib":
-                    model = joblib.load(path)
+                use_joblib = deserializer == "joblib" or (
+                    deserializer is None and path.suffix.lower() == ".joblib"
+                )
+                if use_joblib:
+                    model = joblib.load(io.BytesIO(verified_bytes))
                 else:
-                    with open(path, 'rb') as f:
-                        model = pickle.load(f)
+                    model = pickle.load(io.BytesIO(verified_bytes))
 
             for warning in captured_warnings:
                 if issubclass(warning.category, InconsistentVersionWarning):
@@ -1064,7 +1073,7 @@ class ModelRegistry:
                 f"Corrupted model file at {path}: {e}",
                 context={"filename": str(path)}
             )
-        except ConfigurationError:
+        except (ArtifactVerificationError, ConfigurationError):
             raise
         except Exception as e:
              raise DataValidationError(

@@ -22,7 +22,7 @@ import requests
 # Add project root if needed (legacy pattern, kept for safety but cleaned)
 sys.path.append(os.getcwd())
 
-from src.config import DATA_DIR, FOOTBALL_DATA_ORG_KEY
+from src.config import DATA_DIR, FOOTBALL_DATA_API_KEY
 from src.monitoring.performance_engine import PerformanceTracker
 from src.utils.naming import generate_match_fingerprint, normalize_team_name
 
@@ -122,8 +122,8 @@ class Reconciler:
         Retry policy: 3 attempts with exponential backoff (1s, 2s, 4s).
         Fail-safe: fetch/reconcile/report errors are captured and returned.
         """
-        if not FOOTBALL_DATA_ORG_KEY:
-            logger.warning("auto_settle skipped: FOOTBALL_DATA_ORG_KEY is not configured.")
+        if not FOOTBALL_DATA_API_KEY:
+            logger.warning("auto_settle skipped: FOOTBALL_DATA_API_KEY is not configured.")
             return {"status": "skipped", "reason": "missing_api_key"}
 
         target_leagues = leagues or list(self.DEFAULT_LEAGUES)
@@ -267,7 +267,7 @@ class Reconciler:
     ) -> Optional[List[Dict[str, Any]]]:
         """Fetch finished fixtures from football-data.org with retries."""
         url = f"{self.FOOTBALL_DATA_BASE_URL}/competitions/{league}/matches"
-        headers = {"X-Auth-Token": FOOTBALL_DATA_ORG_KEY or ""}
+        headers = {"X-Auth-Token": FOOTBALL_DATA_API_KEY or ""}
         params = {"status": "FINISHED", "dateFrom": date_from, "dateTo": date_to}
 
         for attempt in range(1, self.RETRY_ATTEMPTS + 1):

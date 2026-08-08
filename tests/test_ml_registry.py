@@ -1,13 +1,12 @@
 import json
+import logging
 import pytest
 import pandas as pd
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 import src.ml.registry as registry_module
-from src.db import connection as connection_module
-from src.db.models import Base
-from src.ml.registry import ModelRegistry, PROMOTION_THRESHOLDS
-from src.core.exceptions import ModelNotFoundError
+from src.ml.registry import ArtifactTransferTimeoutError, ModelRegistry, PROMOTION_THRESHOLDS
+from src.core.exceptions import ConfigurationError, ModelNotFoundError
 
 def test_model_registry_production_loading(tmp_path, monkeypatch):
     """
@@ -342,9 +341,17 @@ class _FakeS3FileSystem:
     storage: dict[str, bytes] = {}
     created_with: list[dict[str, object]] = []
 
-    def __init__(self, key=None, secret=None, client_kwargs=None):
+    def __init__(self, key=None, secret=None, client_kwargs=None, config_kwargs=None):
+        from fsspec.asyn import get_loop
+
+        self.loop = get_loop()
         self.__class__.created_with.append(
-            {"key": key, "secret": secret, "client_kwargs": client_kwargs}
+            {
+                "key": key,
+                "secret": secret,
+                "client_kwargs": client_kwargs,
+                "config_kwargs": config_kwargs,
+            }
         )
 
     def put(self, local_path: str, remote_path: str) -> None:
@@ -353,10 +360,16 @@ class _FakeS3FileSystem:
     def exists(self, remote_path: str) -> bool:
         return remote_path in self.__class__.storage
 
+    async def _exists(self, remote_path: str) -> bool:
+        return self.exists(remote_path)
+
     def get(self, remote_path: str, local_path: str) -> None:
         target = Path(local_path)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(self.__class__.storage[remote_path])
+
+    async def _get_file(self, remote_path: str, local_path: str) -> None:
+        self.get(remote_path, local_path)
 
 
 def test_push_to_s3_uploads_manifest_listed_pkl_files_only(tmp_path, monkeypatch):
@@ -380,6 +393,8 @@ def test_push_to_s3_uploads_manifest_listed_pkl_files_only(tmp_path, monkeypatch
         monkeypatch.setenv("AWS_ACCESS_KEY_ID", "key")
         monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
         monkeypatch.setenv("AWS_REGION", "af-south-1")
+        monkeypatch.setenv("ARTIFACT_CONNECT_TIMEOUT_SECONDS", "7")
+        monkeypatch.setenv("ARTIFACT_TRANSFER_TIMEOUT_SECONDS", "19")
 
         uploaded = registry.push_to_s3(bucket="test-bucket", prefix="models/prod")
 
@@ -388,6 +403,10 @@ def test_push_to_s3_uploads_manifest_listed_pkl_files_only(tmp_path, monkeypatch
             "test-bucket/models/prod/alpha.pkl": b"alpha"
         }
         assert _FakeS3FileSystem.created_with[0]["client_kwargs"] == {"region_name": "af-south-1"}
+        assert _FakeS3FileSystem.created_with[0]["config_kwargs"] == {
+            "connect_timeout": 7.0,
+            "read_timeout": 19.0,
+        }
     finally:
         registry.manifest = original_manifest
 
@@ -428,6 +447,72 @@ def test_pull_from_s3_downloads_missing_manifest_files(tmp_path, monkeypatch):
         registry.manifest = original_manifest
 
 
+def test_pull_from_s3_timeout_is_distinct_and_removes_partial_file(
+    tmp_path,
+    monkeypatch,
+    caplog,
+):
+    registry = ModelRegistry()
+    original_manifest = dict(registry.manifest)
+    model_dir = tmp_path / "models"
+    model_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        registry.manifest = {"alpha_model": {"filename": "alpha.pkl"}}
+        monkeypatch.setattr(registry_module, "MODELS_DIR", model_dir)
+        monkeypatch.setattr(registry_module.s3fs, "S3FileSystem", _FakeS3FileSystem)
+        _FakeS3FileSystem.storage = {
+            "test-bucket/models/prod/alpha.pkl": b"complete-remote-artifact"
+        }
+        _FakeS3FileSystem.created_with = []
+        deadline_calls = []
+
+        def fake_fsspec_sync(loop, func, *args, timeout=None):
+            deadline_calls.append((func.__name__, timeout))
+            if func.__name__ == "_exists":
+                return True
+            Path(args[1]).write_bytes(b"partial-download")
+            raise TimeoutError("simulated total S3 transfer deadline")
+
+        monkeypatch.setattr(registry_module, "fsspec_sync", fake_fsspec_sync)
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "key")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
+        monkeypatch.setenv("AWS_REGION", "af-south-1")
+        monkeypatch.setenv("ARTIFACT_CONNECT_TIMEOUT_SECONDS", "3")
+        monkeypatch.setenv("ARTIFACT_TRANSFER_TIMEOUT_SECONDS", "11")
+
+        with caplog.at_level(logging.ERROR, logger="src.ml.registry"):
+            with pytest.raises(ArtifactTransferTimeoutError) as exc_info:
+                registry.pull_from_s3(bucket="test-bucket", prefix="models/prod")
+
+        assert exc_info.value.context["operation"] == "download"
+        assert exc_info.value.context["connect_timeout_seconds"] == 3.0
+        assert exc_info.value.context["read_timeout_seconds"] == 11.0
+        assert exc_info.value.context["total_timeout_seconds"] == 11.0
+        assert deadline_calls == [("_exists", 11.0), ("_get_file", 11.0)]
+        assert not (model_dir / "alpha.pkl").exists()
+        assert list(model_dir.rglob("*.part")) == []
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "path=s3://test-bucket/models/prod/alpha.pkl" in messages
+        assert "operation=download" in messages
+        assert "connect_timeout_seconds=3.0" in messages
+        assert "read_timeout_seconds=11.0" in messages
+        assert "total_timeout_seconds=11.0" in messages
+    finally:
+        registry.manifest = original_manifest
+
+
+def test_s3_timeout_configuration_rejects_non_positive_values(monkeypatch):
+    registry = ModelRegistry()
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "key")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.setenv("AWS_REGION", "af-south-1")
+    monkeypatch.setenv("ARTIFACT_CONNECT_TIMEOUT_SECONDS", "0")
+
+    with pytest.raises(ConfigurationError, match="positive integer number of seconds"):
+        registry._build_s3_filesystem()
+
+
 def test_push_to_s3_requires_aws_env(monkeypatch):
     registry = ModelRegistry()
     monkeypatch.delenv("AWS_ACCESS_KEY_ID", raising=False)
@@ -438,16 +523,10 @@ def test_push_to_s3_requires_aws_env(monkeypatch):
         registry.push_to_s3(bucket="test-bucket", prefix="models/prod")
 
 
-def test_manifest_load_prefers_database_when_database_url_is_set(tmp_path, monkeypatch):
-    db_path = tmp_path / "manifest.db"
+def test_manifest_load_uses_filesystem_authority(tmp_path, monkeypatch):
     models_dir = tmp_path / "models"
     manifest_file = models_dir / "manifest.json"
     backup_file = models_dir / "manifest.json.bak"
-    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
-    import src.db.connection as connection_module
-    connection_module.get_engine.cache_clear()
-    engine = connection_module.get_engine()
-    Base.metadata.create_all(engine)
     monkeypatch.setattr(registry_module, "MODELS_DIR", models_dir)
     monkeypatch.setattr(ModelRegistry, "MANIFEST_FILE", manifest_file)
     monkeypatch.setattr(ModelRegistry, "BACKUP_FILE", backup_file)
@@ -467,40 +546,17 @@ def test_manifest_load_prefers_database_when_database_url_is_set(tmp_path, monke
                 "metrics": {"brier_score": 0.19},
             },
         }
-        # Force DB save using the engine we know has tables
-        from src.db.models import ModelManifestEntry
-        from sqlalchemy.orm import Session as _Session
-        from sqlalchemy import delete as _delete
-        import json as _json
-        with _Session(engine) as _sess:
-            _sess.execute(_delete(ModelManifestEntry))
-            for manifest_key, meta in manifest.items():
-                payload = meta if isinstance(meta, dict) else {"__manifest_value__": meta}
-                _sess.add(ModelManifestEntry(
-                    manifest_key=str(manifest_key),
-                    model_name=payload.get("name") if isinstance(payload, dict) else None,
-                    version=payload.get("version") if isinstance(payload, dict) else None,
-                    league=payload.get("league") if isinstance(payload, dict) else None,
-                    metadata_json=_json.dumps(payload),
-                ))
-            _sess.commit()
-            row_count = _sess.execute(__import__('sqlalchemy').text("SELECT COUNT(*) FROM model_manifest_entries")).scalar()
         manifest_file.parent.mkdir(parents=True, exist_ok=True)
-        manifest_file.write_text(
-            json.dumps({"from_file": {"name": "wrong", "version": "9.9.9"}}, indent=2),
-            encoding="utf-8",
-        )
-        # Bypass singleton: create a bare instance and call _load_manifest directly
+        manifest_file.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
         ModelRegistry._instance = None
         ModelRegistry._manifest_cache = None
         reloaded = object.__new__(ModelRegistry)
         reloaded._logged_smart_routing = set()
         reloaded._load_manifest()
-        assert "from_file" not in reloaded.manifest
+
         assert reloaded.manifest["alpha_model"]["version"] == "1.0.0"
         assert reloaded.manifest["beta_model"]["version"] == "2.0.0"
     finally:
-        engine.dispose()
-        connection_module.get_engine.cache_clear()
         ModelRegistry._instance = None
         ModelRegistry._manifest_cache = None

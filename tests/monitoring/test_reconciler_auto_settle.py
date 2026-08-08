@@ -24,7 +24,7 @@ def test_auto_settle_retries_with_backoff_and_updates_tracker(monkeypatch, tmp_p
     reconciler.EVALS_DIR = tmp_path / "evaluations"
     reconciler.EVALS_DIR.mkdir(parents=True, exist_ok=True)
 
-    monkeypatch.setattr(reconciler_module, "FOOTBALL_DATA_ORG_KEY", "test-token")
+    monkeypatch.setattr(reconciler_module, "FOOTBALL_DATA_API_KEY", "test-token")
 
     attempt_counter = {"count": 0}
     sleep_calls = []
@@ -77,7 +77,7 @@ def test_auto_settle_retries_with_backoff_and_updates_tracker(monkeypatch, tmp_p
 
 
 def test_auto_settle_is_fail_safe_when_api_key_missing(monkeypatch):
-    monkeypatch.setattr(reconciler_module, "FOOTBALL_DATA_ORG_KEY", None)
+    monkeypatch.setattr(reconciler_module, "FOOTBALL_DATA_API_KEY", None)
     summary = Reconciler().auto_settle(leagues=["PL"], days_back=1)
     assert summary["status"] == "skipped"
     assert summary["reason"] == "missing_api_key"

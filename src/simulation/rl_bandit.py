@@ -6,23 +6,20 @@ from datetime import datetime, timedelta, timezone
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
 
 from src.config import DATA_DIR
 from src.core.constants import RESOLVER_LOOKBACK_DAYS
-from src.core.container import ServiceContainer  # re-exported for tests and monkeypatching
 from src.ml.calibration import calculate_ece
-
-if TYPE_CHECKING:
-    from src.core.container import ServiceContainer
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_ALPHA = 0.1
 DEFAULT_STATE_PATH = DATA_DIR / "rl_bandit_state.json"
+DEFAULT_OUTCOMES_PATH = DATA_DIR / "eval" / "prediction_outcomes.csv"
 DEFAULT_WEIGHTS: Dict[str, float] = {
     "tempo_sigma_scale": 1.0,
     "lambda_scale_home": 1.0,
@@ -47,7 +44,7 @@ __all__ = [
     "ContextualBandit",
     "DEFAULT_STATE_PATH",
     "compute_bucket_ece_by_context",
-    "load_resolved_predictions_from_db",
+    "load_resolved_predictions",
 ]
 
 
@@ -78,51 +75,44 @@ def normalize_market_bucket(market: str) -> Optional[str]:
     return MARKET_TO_BUCKET.get(market_token)
 
 
-def load_resolved_predictions_from_db(
-    container: Optional[ServiceContainer] = None,
+def load_resolved_predictions(
+    outcomes_path: Optional[Path] = None,
 ) -> pd.DataFrame:
-    """Load resolved predictions from the operational database."""
-    from sqlalchemy import select
-    from sqlalchemy.orm import Session
+    """Load recent WON/LOST outcomes from the authoritative resolver CSV."""
+    columns = ["league", "market", "probability", "actual_outcome", "resolved_at"]
+    source = Path(outcomes_path) if outcomes_path else DEFAULT_OUTCOMES_PATH
+    if not source.exists():
+        return pd.DataFrame(columns=columns)
 
-    from src.core.container import ServiceContainer
-    from src.db.models import ResolvedPrediction
-
-    active_container = container or ServiceContainer.get_instance()
-    cutoff = datetime.now(timezone.utc) - timedelta(days=RESOLVER_LOOKBACK_DAYS)
     try:
-        with Session(active_container.engine) as session:
-            rows = session.execute(
-                select(ResolvedPrediction).where(
-                    ResolvedPrediction.outcome.in_(("WON", "LOST")),
-                    ResolvedPrediction.kickoff_date.isnot(None),
-                    ResolvedPrediction.kickoff_date >= cutoff,
-                )
-            ).scalars().all()
-    except Exception as exc:
+        frame = pd.read_csv(source)
+    except (OSError, pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
         logger.warning("RL bandit could not load resolved predictions: %s", exc)
-        return pd.DataFrame(
-            columns=["league", "market", "probability", "actual_outcome", "resolved_at"]
-        )
+        return pd.DataFrame(columns=columns)
 
-    if not rows:
-        return pd.DataFrame(
-            columns=["league", "market", "probability", "actual_outcome", "resolved_at"]
+    required = {"league", "market", "probability", "outcome", "kickoff_date"}
+    if not required.issubset(frame.columns):
+        logger.warning(
+            "RL bandit outcomes file is missing columns: %s",
+            sorted(required - set(frame.columns)),
         )
+        return pd.DataFrame(columns=columns)
 
-    frame = pd.DataFrame(
-        [
-            {
-                "league": row.league,
-                "market": row.market,
-                "probability": row.probability,
-                "actual_outcome": 1 if row.outcome == "WON" else 0,
-                "resolved_at": row.resolved_at.isoformat() if row.resolved_at else None,
-            }
-            for row in rows
-        ]
-    )
-    return frame
+    cutoff = datetime.now(timezone.utc) - timedelta(days=RESOLVER_LOOKBACK_DAYS)
+    frame["kickoff_date"] = pd.to_datetime(frame["kickoff_date"], utc=True, errors="coerce")
+    frame["outcome"] = frame["outcome"].astype(str).str.upper()
+    frame = frame[
+        frame["outcome"].isin(("WON", "LOST"))
+        & frame["kickoff_date"].notna()
+        & (frame["kickoff_date"] >= pd.Timestamp(cutoff))
+    ].copy()
+    if frame.empty:
+        return pd.DataFrame(columns=columns)
+
+    frame["actual_outcome"] = frame["outcome"].map({"WON": 1, "LOST": 0})
+    if "resolved_at" not in frame:
+        frame["resolved_at"] = None
+    return frame[columns].reset_index(drop=True)
 
 
 def compute_bucket_ece_by_context(resolved_predictions: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
@@ -270,9 +260,7 @@ class ContextualBandit:
 
     def refresh_from_resolved_predictions(self) -> Dict[str, Dict[str, Any]]:
         """Load history, compute ECE per bucket, and update state."""
-        from src.core.container import ServiceContainer
-
-        resolved = load_resolved_predictions_from_db(ServiceContainer.get_instance())
+        resolved = load_resolved_predictions()
         ece_by_context = compute_bucket_ece_by_context(resolved)
         if not ece_by_context:
             logger.info("RL bandit cold start found no resolved prediction buckets to train.")

@@ -21,10 +21,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
-from src.api.cache import MODEL_HEALTH_CACHE_KEY, prediction_cache, prediction_cache_key, slip_cache_key
+from src.api.cache import MODEL_HEALTH_CACHE_KEY, prediction_cache, prediction_cache_key
 from src.api.schemas import (
-    ForbiddenFruitSlipLeg,
-    ForbiddenFruitSlipResponse,
     HealthCheck,
     MatchPrediction,
     PredictionTriggerRequest,
@@ -34,15 +32,17 @@ from src.api.schemas import (
 from src.api.routes.cli import router as cli_router
 from src.api.routes.frontend import router as frontend_router
 from src.config import DATA_DIR, MODELS_DIR
+from src.config.env_contract import API_PROCESS
 from src.config.model_state import get_model_state, is_locked
+from src.config.startup import main as startup_preflight_main
 from src.core.exceptions import ConfigurationError, DataValidationError
 from src.ml.model_db import ModelHistoryDB
 from src.ml.registry import ModelRegistry
 from src.monitoring.drift_orchestrator import DriftOrchestrator
+from src.monitoring.nightly_heartbeat import check_nightly_heartbeat
 from src.monitoring.telemetry import capture_alert, capture_exception, init_sentry
 from src.predictions.predictor import Predictor
 from src.strategies.drift_guard import DriftGuardrail
-from src.strategies.slip_builder import ForbiddenFruitSlipBuilder
 
 logger = logging.getLogger(__name__)
 _LAST_GLOBAL_DRIFT_STATUS: Optional[str] = None
@@ -55,6 +55,12 @@ MODEL_CONFIGS = [
     {"name": "nb_home_corners_base"},
     {"name": "nb_away_corners_base"},
 ]
+
+# Direct Uvicorn invocation must enforce the same process contract as Docker.
+# The Docker preflight still runs earlier so shell-level downloads cannot precede it.
+_startup_preflight_exit = startup_preflight_main([API_PROCESS])
+if _startup_preflight_exit:
+    raise SystemExit(_startup_preflight_exit)
 
 try:
     from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -100,25 +106,6 @@ PROBABILITY_KEYS = (
     "mc_n_simulations",
 )
 BOOL_PROBABILITY_KEYS = {"ensemble_divergence"}
-
-
-def _enforce_locked_state() -> None:
-    """Verify model is locked at startup."""
-    skip_lock_check = os.getenv("SKIP_MODEL_LOCK_CHECK", "").strip().lower() == "true"
-    state = get_model_state()
-    if skip_lock_check:
-        logger.warning(
-            "Skipping model lock check because SKIP_MODEL_LOCK_CHECK=true; current model state is %s",
-            state,
-        )
-        return
-    if not state.startswith("LOCKED"):
-        raise RuntimeError(
-            f"API STARTUP BLOCKED: Model is UNLOCKED ({state}). "
-            "API must only run on locked models to prevent inference/training divergence. "
-            "Run 'freeze-models --confirm' first."
-        )
-    logger.info("API starting with locked model: %s", state)
 
 
 def _coerce_float(value: Any) -> Optional[float]:
@@ -273,16 +260,6 @@ def _empty_predictions_message(*, league: str, drift_status: str, total_predicti
     return f"No predictions available for {league} right now."
 
 
-def _empty_slip_message(*, league: str, drift_status: str, total_legs: int) -> Optional[str]:
-    if total_legs > 0:
-        if drift_status == DriftOrchestrator.WATCH:
-            return f"Slip built under WATCH drift status for {league}. Review carefully."
-        return None
-    if drift_status == DriftOrchestrator.STOP:
-        return f"Slip generation is currently blocked by the drift guardrail for {league}."
-    return f"No qualifying slip is available for {league} right now."
-
-
 def _serialize_trigger_prediction(prediction: Dict[str, Any]) -> TriggerPrediction:
     home_prob = _first_valid_float(prediction.get("home"), prediction.get("home_win")) or 0.0
     draw_prob = _first_valid_float(prediction.get("draw")) or 0.0
@@ -331,26 +308,6 @@ def _serialize_prediction(prediction: Dict[str, Any]) -> MatchPrediction:
     )
 
 
-def _serialize_slip_leg(leg: Dict[str, Any]) -> ForbiddenFruitSlipLeg:
-    return ForbiddenFruitSlipLeg(
-        match_id=leg.get("id"),
-        match=leg.get("match", ""),
-        market=leg.get("market") or leg.get("market_name", ""),
-        probability=float(leg.get("probability", leg.get("confidence", 0.0))),
-        confidence=float(leg.get("confidence", 0.0)),
-        league=str(leg.get("league", "")),
-        date=leg.get("date"),
-        action_tier=leg.get("action_tier"),
-        tier=leg.get("tier"),
-        odds=_coerce_float(leg.get("odds")),
-        implied_probability=_coerce_float(leg.get("implied_probability")),
-        edge=_coerce_float(leg.get("edge")),
-        ev=_coerce_float(leg.get("ev")),
-        passes_value_threshold=leg.get("passes_value_threshold"),
-        value_reason=leg.get("value_reason"),
-    )
-
-
 def _raise_environment_mismatch(exc: ConfigurationError) -> None:
     raise HTTPException(
         status_code=503,
@@ -391,67 +348,6 @@ def _load_or_compute_predictions(league: Optional[str]) -> List[Dict[str, Any]]:
     if raw_predictions:
         prediction_cache.set(cache_key, raw_predictions)
     return raw_predictions
-
-
-def _generate_forbidden_fruit_slip(
-    *,
-    league: Optional[str],
-    min_prob: float,
-    max_selections: int,
-) -> ForbiddenFruitSlipResponse:
-    drift_status = _read_prediction_guard_status()
-    league_stop = _read_league_drift_status_from_state_dir(league) == DriftOrchestrator.STOP
-    cache_league_stop = league_stop
-    cache_key = slip_cache_key(league, min_prob, max_selections)
-    cached_slip = prediction_cache.get(cache_key)
-    if cached_slip is not None and (drift_status == DriftOrchestrator.STOP or cache_league_stop):
-        logger.warning(
-            "Slip cache invalidated for league=%s: drift status is STOP.",
-            league or "ALL",
-        )
-        prediction_cache.delete(cache_key)
-    elif isinstance(cached_slip, ForbiddenFruitSlipResponse):
-        return cached_slip
-
-    league_label = str(league or "ALL").upper()
-    if drift_status == DriftOrchestrator.STOP or league_stop:
-        prediction_cache.delete(prediction_cache_key(league))
-        prediction_cache.delete(cache_key)
-        response = ForbiddenFruitSlipResponse(
-            generated_at=datetime.now(),
-            model_state=get_model_state(),
-            slip=[],
-            drift_status=DriftOrchestrator.STOP,
-            blocked=True,
-            message=_empty_slip_message(
-                league=league_label,
-                drift_status=DriftOrchestrator.STOP,
-                total_legs=0,
-            ),
-        )
-        return response
-
-    raw_predictions = _load_or_compute_predictions(league)
-    builder = ForbiddenFruitSlipBuilder()
-    slip = builder.generate(
-        raw_predictions,
-        min_probability=min_prob,
-        max_selections=max_selections,
-    )
-    response = ForbiddenFruitSlipResponse(
-        generated_at=datetime.now(),
-        model_state=get_model_state(),
-        slip=[_serialize_slip_leg(leg) for leg in slip],
-        drift_status=drift_status,
-        blocked=False,
-        message=_empty_slip_message(
-            league=league_label,
-            drift_status=drift_status,
-            total_legs=len(slip),
-        ),
-    )
-    prediction_cache.set(cache_key, response)
-    return response
 
 
 def _load_latest_reliability_for_league(league: str) -> List[Dict[str, Any]]:
@@ -516,8 +412,6 @@ def _report_drift_stop_transition(global_drift: Dict[str, Any]) -> None:
         },
     )
 
-
-_enforce_locked_state()
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
@@ -595,7 +489,8 @@ def health_check() -> HealthCheck:
 @app.get("/api/v1/health")
 def api_health_check() -> Dict[str, str]:
     """Lightweight uptime endpoint for orchestrator health checks."""
-    return {"status": "ok"}
+    heartbeat = check_nightly_heartbeat()
+    return {"status": "ok", "nightly_heartbeat": heartbeat.state}
 
 
 @app.get("/drift-status")
@@ -860,68 +755,6 @@ def trigger_predictions(request: Request, payload: PredictionTriggerRequest) -> 
             exc,
             context={"endpoint": "/api/v1/predictions/trigger", "league": payload.league},
         )
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.get(
-    "/api/v1/slips/forbidden-fruit",
-    response_model=ForbiddenFruitSlipResponse,
-)
-def get_forbidden_fruit_slip(
-    min_prob: float = 0.65,
-    max_selections: int = 4,
-) -> ForbiddenFruitSlipResponse:
-    if not 0.0 <= min_prob <= 1.0:
-        raise HTTPException(status_code=400, detail="min_prob must be between 0 and 1")
-    if max_selections < 2:
-        raise HTTPException(status_code=400, detail="max_selections must be >= 2")
-
-    try:
-        return _generate_forbidden_fruit_slip(
-            league=None,
-            min_prob=min_prob,
-            max_selections=max_selections,
-        )
-    except ConfigurationError as exc:
-        logger.error("Forbidden Fruit environment mismatch: %s", exc)
-        _raise_environment_mismatch(exc)
-    except DataValidationError as exc:
-        logger.warning("Forbidden Fruit request rejected: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        logger.error("Forbidden Fruit error: %s", exc)
-        capture_exception(exc, context={"endpoint": "/api/v1/slips/forbidden-fruit"})
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-@app.get("/api/v1/slips/{league}", response_model=ForbiddenFruitSlipResponse)
-@limiter.limit("30/minute")
-def get_latest_slips(
-    request: Request,
-    league: str,
-    min_prob: float = 0.65,
-    max_selections: int = 4,
-) -> ForbiddenFruitSlipResponse:
-    if not 0.0 <= min_prob <= 1.0:
-        raise HTTPException(status_code=400, detail="min_prob must be between 0 and 1")
-    if max_selections < 2:
-        raise HTTPException(status_code=400, detail="max_selections must be >= 2")
-
-    try:
-        return _generate_forbidden_fruit_slip(
-            league=league,
-            min_prob=min_prob,
-            max_selections=max_selections,
-        )
-    except ConfigurationError as exc:
-        logger.error("League slip environment mismatch for %s: %s", league, exc)
-        _raise_environment_mismatch(exc)
-    except DataValidationError as exc:
-        logger.warning("League slip request rejected for %s: %s", league, exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        logger.error("League slip error for %s: %s", league, exc)
-        capture_exception(exc, context={"endpoint": "/api/v1/slips/{league}", "league": league})
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

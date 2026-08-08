@@ -139,6 +139,11 @@ def test_run_nightly_executes_expected_sequence(monkeypatch):
         lambda keep_versions=3: calls.append(("cleanup", keep_versions))
         or {"deleted_files": 4, "freed_bytes": 2048},
     )
+    monkeypatch.setattr(
+        nightly,
+        "record_nightly_success",
+        lambda summary: calls.append(("heartbeat", summary)),
+    )
 
     summary = nightly.run_nightly(season="2526", force_fetch=True, stale_days=7)
 
@@ -154,7 +159,9 @@ def test_run_nightly_executes_expected_sequence(monkeypatch):
         "auto-find",
         "auto-retrain",
         "cleanup",
+        "heartbeat",
     ]
+    assert calls[-1][1] == {"status": "ok", "season": "2526"}
     assert summary["retrained"] == 1
     assert summary["promoted"] == 1
     assert summary["auto_retrain_triggered"] == 1

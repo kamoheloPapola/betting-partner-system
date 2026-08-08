@@ -7,7 +7,6 @@ Includes health checks, accuracy metrics, and Wilson confidence intervals.
 import typer
 import pandas as pd
 import logging
-import json
 import os
 import numpy as np
 from scipy import stats
@@ -20,7 +19,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from src.ml.registry import ModelRegistry
 from src.cli.base import app
-from src.cli.utils import LeagueCode, resolve_league_code, MATCH_SEPARATOR
+from src.cli.utils import LeagueCode, resolve_league_code
 from src.core.container import ServiceContainer
 from src.core.validators import validate_match_dataframe
 from src.core.exceptions import PredictionSystemError, DataValidationError, InsufficientDataError
@@ -267,70 +266,6 @@ def reconcile(
         logger.error("Reconciliation failed", extra={"error": e.message, "context": e.context})
         raise typer.Exit(code=1)
 
-@app.command("show-accumulators", hidden=True)
-def show_accumulators(
-    date: str = typer.Option(None, help="Date in YYYYMMDD format. Defaults to today.")
-) -> None:
-    """Display details of saved accumulator slips."""
-    target_date = _validate_date_format(date)
-    acc_path = DATA_DIR / "slips" / f"accumulators_{target_date}.json"
-    
-    if not acc_path.exists():
-        logger.warning("No accumulators found for date", extra={"date": target_date})
-        return
-
-    try:
-        with open(acc_path, 'r', encoding='utf-8') as f:
-            acc_slips = json.load(f)
-    except json.JSONDecodeError as e:
-        raise DataValidationError(
-            "Accumulator file is corrupted (invalid JSON)",
-            context={
-                "path": str(acc_path),
-                "error": str(e),
-                "line": e.lineno,
-                "column": e.colno
-            }
-        )
-    except IOError as e:
-        raise PredictionSystemError(
-            f"Cannot read accumulator file: {e}",
-            context={"path": str(acc_path)}
-        )
-    except Exception as e:
-        raise DataValidationError(
-            f"Failed to load accumulators: {e}", 
-            context={"path": str(acc_path)}
-        )
-    
-    console = Console()
-    
-    for name, acc_slip in acc_slips.items():
-        # Create table for this accumulator
-        table = Table(
-            title=f"[bold magenta]{name}[/bold magenta] | "
-                  f"Joint P: [green]{acc_slip['final_joint_p']:.2%}[/green] | "
-                  f"Penalty: [yellow]{acc_slip['correlation_penalty']:.2f}[/yellow]",
-            show_header=True,
-            header_style="bold cyan"
-        )
-        
-        table.add_column("Leg", justify="center", style="dim")
-        table.add_column("Match", style="white")
-        table.add_column("Market", style="cyan")
-        table.add_column("Probability", justify="right", style="green")
-        
-        for i, leg in enumerate(acc_slip['legs'], 1):
-            table.add_row(
-                str(i),
-                f"{leg['home_team']}{MATCH_SEPARATOR}{leg['away_team']}",
-                leg['market'],
-                f"{leg['probability']:.1%}"
-            )
-        
-        console.print(table)
-        console.print()  # Blank line between accumulators
- 
 @app.command(hidden=True)
 def backtest(
     test_season: int = typer.Option(..., help="Season to test (e.g. 2023)"),
