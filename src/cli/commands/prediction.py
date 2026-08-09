@@ -1,9 +1,8 @@
 """
 Prediction CLI Commands.
 
-Commands for generating predictions, displaying forecasts, and running the
-Forbidden Fruit strategy engine. Orchestrates the prediction pipeline from
-data loading through market selection and slip generation.
+Commands for generating and displaying football probability forecasts.
+Orchestrates the prediction pipeline from data loading through presentation.
 """
 import typer
 import pandas as pd
@@ -16,7 +15,6 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, TypedDict, Tuple, cast, Protocol, runtime_checkable
 
 from rich.console import Console
-from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich import box
@@ -41,8 +39,6 @@ from src.core.exceptions import PredictionSystemError, ModelNotFoundError, DataV
 from src.ml.distributions import PoissonEngine, NegativeBinomialEngine, ZeroInflatedEngine
 from src.monitoring.events import log_event, PredictionEvent
 from src.strategies.selection_gate import SelectionGate
-from src.strategies.forbidden_fruit import ForbiddenFruitEngine
-from src.strategies.slip_builder import ForbiddenFruitSlipBuilder
 from src.ml.guards import PredictionGuard
 from src.strategies.derived import DoubleChanceEngine
 from src.ml.models.corners.team_offsets import TeamOffsetManager
@@ -1763,7 +1759,6 @@ def _render_output(
     Side Effects:
         - Prints league-specific prediction tables to the console.
         - Prints gated selections table to the console if candidates exist.
-        - Prints suggested slip panel to the console if Forbidden Fruit analysis yields a slip.
     """
     # 1. Prediction Tables
     term_width = _get_terminal_width()
@@ -1896,7 +1891,7 @@ def _render_output(
             elif pu35 > 0.60:
                 s_goals += f" U3.5:{pu35:.0%}"
             
-            # BTTS String - Show both Yes and No for slip selection visibility
+            # BTTS String - Show both Yes and No for forecast visibility
             pbtts_yes = _safe_prob(p, 'btts')
             pbtts_no = _safe_prob(p, 'btts_no')
             s_btts = f"Y:{_c(pbtts_yes, TH_BTTS)}"
@@ -1938,8 +1933,6 @@ def _render_output(
         console.rule(style="dim")
         # Market breakdown from gated selections for this league
         market_counts: Dict[str, int] = {}
-        best_pick = None
-        best_prob = 0.0
         for b in gated_lg:
             sel = str(b.get('selection', ''))
             # Normalise to market type: "H U1.5" -> "U1.5", "Cards O2.5" -> "Cards",
@@ -1960,19 +1953,15 @@ def _render_output(
             else:
                 mkt = sel.split()[0] if sel else 'Other'
             market_counts[mkt] = market_counts.get(mkt, 0) + 1
-            if float(b.get('probability', 0)) > best_prob:
-                best_prob = float(b['probability'])
-                best_pick = f"{b['match']} → {sel} {best_prob:.0%}"
         market_str = " | ".join(f"{k}:{v}" for k, v in sorted(market_counts.items()))
         console.print(
             f"[bold]Summary:[/bold] {len(p_lg)} matches | "
             f"[green]High Conf: {high_conf_count}[/green] | "
             f"[{edge_color}]Avg Edge: {avg_edge:+.1%}[/{edge_color}]"
             + (f" | Markets: {market_str}" if market_str else "")
-            + (f"\n[dim]Best pick: {best_pick}[/dim]" if best_pick else "")
         )
         console.print(f"[dim italic]Legend: [bold green]Green[/bold green]=High(>70%) [yellow]Yellow[/yellow]=Medium(55-70%) [dim]Gray[/dim]=Low(<55%)[/dim italic]")
-        console.print("[dim]Note: Double Chance shown for context only - not used in Suggested Slip.[/dim]\n")
+        console.print("[dim]Note: Double Chance is shown for forecast context only.[/dim]\n")
     
     # 2. Gated Selections
     if gated:
@@ -1999,79 +1988,6 @@ def _render_output(
             )
         console.print(gt)
         
-    # 3. Forbidden Fruit
-    _render_ff(preds, console)
-
-def _render_ff(preds: List[Dict[str, Any]], console: Console) -> None:
-    """
-    Analyze results using Forbidden Fruit engine and render suggested slip.
-    
-    Side Effects:
-        - Prints suggested slip panel to console.
-    """
-    slip = ForbiddenFruitSlipBuilder().generate(preds)
-    if slip:
-        # Build enhanced slip display
-        lines = []
-        
-        # Market Policy Header
-        lines.append("[dim]Market Policy: Team Goals U1.5 | Corners | Cards | Max 4 Legs[/dim]")
-        lines.append("")
-        
-        # Legs with reason tags
-        for leg in slip:
-            match_name = leg['match']
-            market = leg['market']
-            prob = leg.get('probability', 0.0)
-            conf = leg['confidence']
-            reason = _generate_reason_tag(market, leg)
-            lines.append(f"â€¢ {match_name} â€” [{market}] [cyan]P:{prob:.0%}[/cyan] [bold magenta]C:{conf:.1%}[/bold magenta]")
-            lines.append(f"  [dim italic]Reason: {reason}[/dim italic]")
-        
-        # Soft cap reminder
-        lines.append("")
-        lines.append("[bold yellow]âš  System Rule: Do not add extra legs manually.[/bold yellow]")
-        
-        console.print(Panel(
-            "\n".join(lines), 
-            title="ðŸ“ SUGGESTED SLIP (FORBIDDEN FRUIT)", 
-            border_style="magenta", 
-            expand=False
-        ))
-
-
-def _generate_reason_tag(market: str, leg: Dict[str, Any]) -> str:
-    """
-    Generate human-readable reason tag for a slip leg.
-    
-    Uses market type and context to provide justification.
-    """
-    # Extract market type indicators
-    market_upper = market.upper()
-    
-    if "TG_U1.5" in market_upper:
-        if "HOME" in market_upper:
-            return "Home suppression + defensive structure"
-        elif "AWAY" in market_upper:
-            return "Away suppression + low tempo profile"
-        return "Goal suppression pattern"
-    
-    if "CORNERS_U11" in market_upper or "CORNERS_U" in market_upper:
-        return "Low corner tempo + controlled possession"
-    
-    if "CORNERS_O7" in market_upper or "CORNERS_O" in market_upper:
-        return "High corner tempo + wing pressure"
-    
-    if "CARDS_U" in market_upper:
-        return "Disciplined sides + low card tempo"
-    
-    if "CARDS_O" in market_upper:
-        return "Card-heavy fixture + high intensity"
-    
-    # Default
-    return "Statistical stability + gate clearance"
-
-
 # --- CLI ENTRY POINTS ---
 
 @app.command(name="predict")

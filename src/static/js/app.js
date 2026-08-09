@@ -1,11 +1,9 @@
 import { fetchApiHealth, fetchDriftStatus, fetchModelHealth } from "./api.js";
 import { renderPredictionsPage, initPredictionsPage } from "./predictions.js";
-import { renderSlipBuilderPage, initSlipBuilderPage } from "./slipBuilder.js";
 import { renderTerminalPage, initTerminalPage } from "./terminal.js";
 
 window.__pitchsenseStore = {
   predictions: [],
-  manualSlip: [],
 };
 
 const routes = {
@@ -14,12 +12,6 @@ const routes = {
     subtitle: "Probability estimates for upcoming fixtures",
     render: renderPredictionsPage,
     init: () => initPredictionsPage(window.__pitchsenseStore),
-  },
-  "slip-builder": {
-    title: "Slip Builder",
-    subtitle: "Build confidence-weighted selections and export them instantly",
-    render: renderSlipBuilderPage,
-    init: () => initSlipBuilderPage(),
   },
   "model-health": {
     title: "Model Health",
