@@ -28,3 +28,11 @@
 
 **Signed**: Kamohelo  
 **Date**: 2025-12-18
+
+---
+
+## 2026-08-08 Phase C Addendum
+
+The prior guarantee **"Enforced Decision Logic: Mandatory safety gates (Forbidden Fruit) for all production slips"** is stale. Phase C removed the Forbidden Fruit and accumulator/slip-building strategy machinery, along with its compatibility adapters. The supported product contract now exposes match probabilities and model-health information only; it does not generate betting recommendations, slips, accumulators, or staking guidance.
+
+The `WITHDRAWN` status recorded above remains unchanged by this addendum. This addendum records the post-Phase C documentation state and does not reinstate production certification.

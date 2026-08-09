@@ -2,7 +2,7 @@
 # System Architecture
 
 ## Overview
-The Betting Partner System is a CLI-driven machine learning application designed to predict football match outcomes using statistical distributions (Poisson, Negative Binomial, Zero-Inflated Poisson). It integrates historical data, trains league-specific models, and provides actionable betting insights through a strict quality gating process.
+The Betting Partner System is a CLI-driven machine learning application designed to predict football match outcomes using statistical distributions (Poisson, Negative Binomial, Zero-Inflated Poisson). It integrates historical data, trains league-specific models, and exposes match probabilities with model-health information.
 
 ## Data Flow Pipeline
 
@@ -15,7 +15,7 @@ The Betting Partner System is a CLI-driven machine learning application designed
   4. **Persistence**: Saves processed features to `data/processed/master_features_{DATE}.csv`.
 
 ### 2. Model Training (`src.cli.commands.training`)
-- **Strategy**: Dual-Layer modeling.
+- **Modeling Approach**: Dual-layer modeling.
   - **Global Models**: Trained on all leagues combined (Fallback).
   - **League Models**: Specialized models for specific leagues (e.g., PL, SA).
 - **Engines**:
@@ -29,8 +29,8 @@ The Betting Partner System is a CLI-driven machine learning application designed
   - Loads Best Available Model (Local > Global if Local Score < Global Score).
   - Computes probability matrices for Goals, Corners, Cards.
 - **Gates**:
-  - **Selection Gate**: Filters high-confidence bets based on value/edge.
-  - **Forbidden Fruit**: Identifies specific high-tier accumulator candidates.
+  - **Selection Gate**: Applies configured probability and drift thresholds to forecast output.
+  - **Model Health**: Reports artifact state, coverage, calibration, and drift status.
   - **Drift Guardrail**: Blocks predictions if market regime shift detected.
 
 ### 4. Presentation
@@ -54,7 +54,7 @@ src/
   data/         # Data fetching and validation logic
   features/     # Feature engineering pipeline
   ml/           # Probabilistic engines and model registry
-  strategies/   # Betting strategies (Forbidden Fruit, Gates)
+  strategies/   # Forecast scoring and selection gates
   monitoring/   # Event logging and metrics
   config/       # Configuration constants
 ```

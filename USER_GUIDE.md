@@ -59,46 +59,46 @@ Update the system with the latest results and upcoming fixtures.
 
 1.  **Fetch Upcoming Fixtures** (for major leagues):
     ```powershell
-    python src/commands/cli.py fetch-upcoming --league PL
-    python src/commands/cli.py fetch-upcoming --league PD
-    python src/commands/cli.py fetch-upcoming --league SA
-    python src/commands/cli.py fetch-upcoming --league BL1
+    python -m src.cli fetch-upcoming --league PL
+    python -m src.cli fetch-upcoming --league PD
+    python -m src.cli fetch-upcoming --league SA
+    python -m src.cli fetch-upcoming --league BL1
     ```
     *Leagues: PL (Premier League), PD (La Liga), SA (Serie A), BL1 (Bundesliga), FL1 (Ligue 1)*
 
 2.  **Ingest Recent Results** (to update team form):
     ```powershell
-    python src/commands/cli.py fetch-latest-season
-    python src/commands/cli.py ingest-results
+    python -m src.cli fetch-latest-season
+    python -m src.cli ingest-results
     ```
     > **Tip**: Regular ingestion keeps the models aligned with the current "state of play".
 
 
 ### Phase 2: Safety Checks 🛡️
-Before generating any advice, verify the system's statistical integrity.
+Before generating forecasts, verify the system's statistical integrity.
 
 1.  **Refresh Drift Status**:
     ```powershell
-    python src/commands/cli.py refresh-drift
+    python -m src.cli refresh-drift
     ```
-    > **Note**: If this fails, the system detects "Drift" (abnormal unpredictability) and may block high-risk slips.
+    > **Note**: If this fails, the system has detected drift and may make forecasts unavailable pending review.
 
-### Phase 3: Generate Predictions 🍎
-Generate the "Forbidden Fruit" certified slip and archetypal accumulators.
+### Phase 3: Generate Match Probabilities
+Generate match-probability forecasts for the requested date range.
 
-1.  **Generate Slip & Accumulators**:
+1.  **Generate Forecasts**:
     ```powershell
     # For today's matches
-    python src/commands/cli.py forbidden-fruit --date today
+    python -m src.cli show-predictions --date today
 
     # For the full weekend
-    python src/commands/cli.py forbidden-fruit --date weekend
+    python -m src.cli show-predictions --date weekend
     ```
-    *Output will display the single-pick slip followed by archetypal accumulators (SAFE, BALANCED, AGGRESSIVE).*
+    *Output displays model probabilities and forecast context for the available fixtures.*
 
-2.  **View Saved Accumulators**:
+2.  **Review Model Health**:
     ```powershell
-    python src/commands/cli.py show-accumulators --date YYYYMMDD
+    python -m src.cli audit-coverage
     ```
 
 ### Phase 4: Exploration 🔭
@@ -106,44 +106,44 @@ View the entire universe of predictions, including those that didn't make the cu
 
 1.  **Show All Predictions**:
     ```powershell
-    python src/commands/cli.py show-predictions --date today --all
+    python -m src.cli show-predictions --all
     ```
 
-### Phase 5: Closing Loop (Post-Match) 🏁
+### Post-Match Evaluation 🏁
 Verify how the system performed.
 
 1.  **Reconcile Results**:
     ```powershell
-    python src/commands/cli.py reconcile-results --date 2023-10-27
+    python -m src.cli resolve-predictions
     ```
-    *(Replace date with the relevant match day)*
+    *Maps pending forecasts to finalized match results.*
 
-2.  **Audit Accumulators**:
+2.  **Check Drift by League**:
     ```powershell
-    python src/commands/cli.py accumulator-audit
+    python -m src.cli check-drift --league PL
     ```
-    *Analyzes historical accumulator outcomes and updates correlation penalties.*
+    *Reports recent calibration and forecast-health signals.*
 
 ---
 
 ## 📚 3. Core Concepts
 
-### 🍎 Forbidden Fruit
-The **Forbidden Fruit** is the system's "Flagship Product". It selects a localized, high-confidence slip (usually 4 legs) based on:
-- **Structural Integrity**: Only teams with stable form.
-- **Value**: High statistical probability independent of public odds.
-- **Safety**: Automatically rejects markets if "Drift" is high.
+### Match-Probability Forecasts
+The system's supported product surface reports statistical probabilities for football match outcomes:
+- **Inputs**: Team form, historical match data, and engineered features.
+- **Outputs**: Model probabilities and supporting forecast context.
+- **Availability**: Drift and model-state checks can make forecasts unavailable.
 
 ### 🛡️ Drift Guard
 The system monitors "concept drift" – when football reality changes (e.g., end-of-season weirdness).
 - **Green**: Forecast generation is permitted by the current drift checks.
-- **Red**: High variance detected. The system minimizes risk or halts.
+- **Red**: High variance detected. Forecast generation is unavailable pending review.
 
-### (@) Accumulator Engine (Meta-Layer)
-A secondary intelligence layer that composes multi-leg slips from Forbidden Fruit candidates.
-- **Strict Isolation**: Does NOT affect base model probabilities.
-- **Diversity Enforcement**: Blocks same-match stacking and limits same-league/same-market concentrations.
-- **Structural Learning**: Learns from joint outcomes to adjust "Correlation Penalties".
+### Model Health
+The monitoring surface reports whether model artifacts and recent forecast behavior are healthy.
+- **Coverage Audit**: Verifies that required models are available for each league.
+- **Drift Status**: Reports calibration and distribution changes from resolved forecasts.
+- **Model State**: Distinguishes development and locked inference states.
 
 ### 🧠 The Models
 The system uses an ensemble of:
@@ -158,18 +158,18 @@ The system uses an ensemble of:
 
 | Command | Argument | Description |
 | :--- | :--- | :--- |
-| `fetch-history` | `--league [CODE] --season [YEAR]` | Download full historical season data. |
-| `train` | `poisson` / `xgb` | Manually Retrain models (Advanced users only). |
+| `fetch-data` | `--league [CODE] --season [YEAR]` | Download historical season data. |
+| `train` | `poisson` / `nb` | Manually retrain models (advanced users only). |
 | `backtest` | `--league [CODE] --test-season [YEAR]` | Run walk-forward validation to test model accuracy. |
-| `enrich-data` | `--league [CODE]` | Add advanced stats (xG, shot maps) from FBref to existing data. |
-| `show-accumulators` | `--date [YYYYMMDD]` | Display generated accumulators for a specific date. |
-| `accumulator-audit` | | Perform structural learning on historical accumulator outcomes. |
+| `show-predictions` | `--league [CODE] --date [FILTER]` | Display match-probability forecasts. |
+| `check-drift` | `--league [CODE]` | Report recent calibration and drift status. |
+| `audit-coverage` | `--save` | Verify model availability and health by league. |
 
 ---
 
 ## ❓ 5. Troubleshooting
 
-**Issue: "Missing Odds" or API Errors**
+**Issue: Missing Fixture Data or API Errors**
 - Check your internet connection.
 - Verify API usage limits in your `.env` keys.
 - **Encoding Check**: Ensure your `.env` is saved as **UTF-8 without BOM**.
@@ -180,9 +180,9 @@ The system uses an ensemble of:
 - The system is protecting you. This happens when recent results have been highly unpredictable.
 - **Action**: Treat forecasts as unavailable until the drift condition has been reviewed. Do not force predictions.
 
-**Issue: System returns empty slip**
-- No matches met the strict >= 60% probability criteria or the "Value" threshold.
-- **Action**: Check `show-predictions --all` to see the "near misses".
+**Issue: No forecasts are displayed**
+- No fixtures were available, or model-state and drift checks made forecasts unavailable.
+- **Action**: Check `show-predictions --all`, then review `check-drift` and `audit-coverage`.
 
 ---
 

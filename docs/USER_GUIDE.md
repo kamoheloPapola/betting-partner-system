@@ -26,7 +26,7 @@ python -m src.cli resolve-predictions
 # 4. Generate today's predictions
 python -m src.cli show-predictions
 
-# 5. Review the suggested Forbidden Fruit slip (rendered with predictions)
+# 5. Review all available future forecasts
 python -m src.cli show-predictions --all
 ```
 
@@ -37,7 +37,7 @@ python -m src.cli show-predictions --all
 | Command | Description |
 |---------|-------------|
 | `show-predictions` | Display predictions for upcoming matches |
-| `show-predictions --all` | Display predictions and render the suggested accumulator |
+| `show-predictions --all` | Display all available future predictions |
 | `fetch-latest-season` | Download latest match results |
 | `ingest-results` | Process and store results |
 | `resolve-predictions` | Mark predictions as WIN/LOSS |
@@ -91,7 +91,7 @@ SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 
 # Email alerts (optional)
 ALERT_EMAIL_TO=alerts@example.com
-ALERT_EMAIL_FROM=betting-system@localhost
+ALERT_EMAIL_FROM=forecasting-system@localhost
 SMTP_HOST=localhost
 SMTP_PORT=25
 
@@ -109,7 +109,7 @@ FOOTBALL_DATA_API_KEY=your-key
 | `/health` | GET | Health check with model state |
 | `/drift-status` | GET | Recent drift alerts |
 | `/api/v1/predictions/{league}` | GET | Match predictions |
-| `/api/v1/slips/forbidden-fruit` | GET | Generate accumulator |
+| `/api/v1/model-health` | GET | Model-health summary |
 | `/api/v1/model/info` | GET | Model state info |
 
 Start API:
@@ -130,10 +130,10 @@ python -m src.cli train poisson --league PL
 # RuntimeError: Training is blocked. Model pipeline is LOCKED.
 ```
 
-### 2. Never Modify Immune Markets
-These markets are protected and must not be tuned:
+### 2. Never Modify Protected Forecast Targets
+These forecast targets are protected and must not be tuned without validation:
 - `dc_1x`, `dc_x2`, `dc_12` (Double Chance)
-- `away_under_1_5`, `home_under_1_5` (High ROI)
+- `away_under_1_5`, `home_under_1_5` (Team-goal thresholds)
 
 ### 3. Never Deploy API on Unlocked Model
 The API enforces this automatically:

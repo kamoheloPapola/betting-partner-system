@@ -6,7 +6,7 @@ An AI-driven football forecasting system that generates statistical match-outcom
 1. **Odds-Independence**: Predictions are based on stats, not market odds.
 2. **Explainability**: Traceable logic.
 3. **Continuous Learning**: Feedback loops.
-4. **Risk Management**: "Forbidden Fruit" slips with controlled risk.
+4. **Forecasting-Only Output**: Match probabilities and model-health information, without recommendations.
 
 ## Setup
 
@@ -30,11 +30,11 @@ An AI-driven football forecasting system that generates statistical match-outcom
 - **Data Layer**: Football-Data.co.uk (historical), Odds API (fixtures).
 - **Feature Engineering**: Rolling stats, form indicators, differentials.
 - **Models**: Poisson (goals), Negative Binomial (corners), Zero-Inflated Poisson (cards).
-- **Strategy**: Forbidden Fruit 3.0 with CSS-based slip construction.
+- **Forecast Surface**: Match probabilities with drift and model-health status.
 
-## 🍎 Forbidden Fruit 3.0: Daily Operational Guide
+## Daily Forecasting Operational Guide
 
-Follow this sequence daily to ensure system integrity and generate certified prediction slips.
+Follow this sequence daily to ensure system integrity and generate match-probability forecasts.
 
 ### 1. Data Refresh (Morning)
 Pull latest fixtures and recent results to keep the feature engine current.
@@ -52,7 +52,7 @@ python -m src.cli ingest-results
 ```
 
 ### 2. Integrity & Drift Guard (Safety First)
-Before generating any slips, verify that the statistical engine is stable.
+Before generating forecasts, verify that the statistical engine is stable.
 ```bash
 # Calculate rolling drift and update safety status
 python -m src.cli refresh-drift
@@ -61,7 +61,7 @@ python -m src.cli refresh-drift
 > If `refresh-drift` returns **[FAIL]**, treat forecasts as unavailable until the degraded model state has been reviewed.
 
 ### 3. Prediction Generation
-Generate predictions with the market-agnostic decision engine.
+Generate predictions with the market-agnostic forecasting engine.
 ```bash
 # Generate today's predictions
 python -m src.cli show-predictions --league PL
@@ -80,8 +80,7 @@ python -m src.cli reconcile --date-str 2026-01-10
 
 ## 🛠️ System Architecture (3.0 Era)
 - **Engine Status**: ❄️ **DEV-FROZEN** (Development baseline; not production-certified)
-- **Primary Strategy**: Market-Agnostic Competitive Selection.
-- **Risk Control**: Cross-Market Dissonance Penalty (10% softening on conflicting signals).
+- **Forecasting Surface**: Market-agnostic match probabilities.
 - **Safety Floor**: Absolute probability gate (0.60 - 0.70 depending on market).
 - **Momentum Divergence Gate**: Dynamic risk adjustments based on league standings and recent form (Trap Detection & Surging Underdog modifiers).
 ---
