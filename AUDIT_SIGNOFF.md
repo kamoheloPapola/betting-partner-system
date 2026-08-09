@@ -36,3 +36,13 @@
 The prior guarantee **"Enforced Decision Logic: Mandatory safety gates (Forbidden Fruit) for all production slips"** is stale. Phase C removed the Forbidden Fruit and accumulator/slip-building strategy machinery, along with its compatibility adapters. The supported product contract now exposes match probabilities and model-health information only; it does not generate betting recommendations, slips, accumulators, or staking guidance.
 
 The `WITHDRAWN` status recorded above remains unchanged by this addendum. This addendum records the post-Phase C documentation state and does not reinstate production certification.
+
+---
+
+## 2026-08-09 Phase C Review Correction
+
+Phase C commit `7df118a` included a deployment/configuration change that replaced the repository-local `MODELS_DIR` fallback with the container-only `/app/data/models` path. That line was outside the strategy-removal review slice presented for approval, even though it was present in the committed tree; the original deployment-hardening commit message described the broader tree more accurately than its later message-only amendments.
+
+The unreviewed fallback change caused local Windows CLI startup to fail before argument parsing because `src/ml/calibration.py` attempted to create `/app/data/models/calibrators` during import. The corrective P0 change restores the repository-local fallback for blank or unset `MODELS_DIR` values, preserves the explicit container path in Docker configuration, and defers calibrator-directory creation to save operations with explicit path-and-cause failures.
+
+Verification covered blank and unset environment values independently, successful `python -m src.cli --help` startup, absence of model-directory writes during CLI import, and save-time directory-creation failure reporting. Future commit approval requires review of the complete parent-to-commit diff rather than only a curated task-specific slice.

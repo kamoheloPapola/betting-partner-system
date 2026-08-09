@@ -23,7 +23,7 @@ An AI-driven football forecasting system that generates statistical match-outcom
 
 3. Setup Environment Variables:
    Copy `.env.example` to `.env` and fill in keys.
-   Models default to the canonical container path `/app/data/models`. Local development may set `MODELS_DIR` explicitly to another absolute path. See `.env.example` for all configurable variables.
+   Local execution stores model artifacts under `src/ml/models` unless `MODELS_DIR` is set to another path. Docker images and Compose services set `MODELS_DIR=/app/data/models` explicitly. See `.env.example` for all configurable variables.
 
 ## Architecture
 

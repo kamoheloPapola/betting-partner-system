@@ -36,7 +36,6 @@ MIN_STD = 0.06              # Minimum probability std for sharpness
 
 # === PATHS ===
 CALIBRATOR_DIR = MODELS_DIR / "calibrators"
-CALIBRATOR_DIR.mkdir(parents=True, exist_ok=True)
 DAMPENING_ALPHA_FILE = DATA_DIR / "calibration" / "dampening_alphas.json"
 DEFAULT_DAMPENING_ALPHA = 0.80
 DAMPENING_ALPHA_STEP = 0.05
@@ -44,6 +43,16 @@ DAMPENING_ALPHA_STEP = 0.05
 _dampening_alphas: Dict[str, float] = {}
 _dampening_alphas_loaded = False
 _raw_probability_mode_logged = False
+
+
+def _ensure_calibrator_directory(path: Path) -> None:
+    """Create a calibrator output directory when a save operation needs it."""
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise OSError(
+            f"Failed to create calibrator directory '{path}': {exc}"
+        ) from exc
 
 
 def log_raw_probability_mode_once() -> None:
@@ -240,7 +249,7 @@ def fit_best_binary_calibrator(
 
 def save_binary_calibrator_artifact(path: Path, payload: Dict[str, Any]) -> None:
     """Persist a calibrated post-hoc artifact to disk."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    _ensure_calibrator_directory(path.parent)
     with open(path, "wb") as handle:
         pickle.dump(payload, handle)
 
@@ -404,6 +413,7 @@ class MarketCalibrator:
     
     def save(self, version: str = "v1"):
         """Save all calibrators to disk."""
+        _ensure_calibrator_directory(CALIBRATOR_DIR)
         for market, cal in self.calibrators.items():
             path = CALIBRATOR_DIR / f"{market}_{version}.pkl"
             with open(path, 'wb') as f:

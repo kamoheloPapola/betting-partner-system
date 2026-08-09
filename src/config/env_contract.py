@@ -37,7 +37,11 @@ def _required(*processes: str) -> frozenset[str]:
 
 
 ENV_SCHEMA: tuple[EnvVarSpec, ...] = (
-    EnvVarSpec("MODELS_DIR", "Storage", "Canonical model artifact directory.", default="/app/data/models"),
+    EnvVarSpec(
+        "MODELS_DIR",
+        "Storage",
+        "Model artifact directory override; local execution defaults to src/ml/models.",
+    ),
     EnvVarSpec(
         "ARTIFACT_SIGNING_KEY",
         "Storage",
