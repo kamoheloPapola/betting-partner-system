@@ -147,7 +147,8 @@ class Alerter:
             force: Bypass de-duplication
             
         Returns:
-            True if alert was sent, False if suppressed
+            True only if at least one external channel delivered the alert.
+            False if the alert was suppressed or no external channel succeeded.
         """
         context = context or {}
         alert_hash = self._get_alert_hash(message, context)
@@ -173,9 +174,12 @@ class Alerter:
             sent = self._send_email(message, formatted) or sent
         
         if not sent:
-            # Fallback: log to file
-            logger.warning(f"[ALERT-{severity}] {formatted}")
-            sent = True
+            logger.warning(
+                "[ALERT-%s] No external alert channel delivered; "
+                "local log fallback only: %s",
+                severity,
+                formatted,
+            )
         
         # Record for de-duplication
         if sent:
