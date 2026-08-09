@@ -33,7 +33,7 @@ from src.api.schemas import (
 )
 from src.api.routes.cli import router as cli_router
 from src.api.routes.frontend import router as frontend_router
-from src.config import DATA_DIR, MODELS_DIR
+from src.config import DATA_DIR, DATA_FRESHNESS_DAYS, MODELS_DIR, PROCESSED_DATA_DIR
 from src.config.model_state import get_model_state, is_locked
 from src.core.exceptions import ConfigurationError, DataValidationError
 from src.ml.model_db import ModelHistoryDB
@@ -54,6 +54,24 @@ MODEL_CONFIGS = [
     {"name": "nb_home_corners_base"},
     {"name": "nb_away_corners_base"},
 ]
+
+
+def _data_is_fresh() -> bool:
+    """Return whether every supported league has recently refreshed fixtures."""
+    matches_dir = PROCESSED_DATA_DIR / "matches"
+    newest_allowed_age = DATA_FRESHNESS_DAYS * 86400
+    checked_at = datetime.now().timestamp()
+
+    for league in DEFAULT_TRAINING_LEAGUES:
+        upcoming_path = matches_dir / f"{league}_upcoming.csv"
+        try:
+            if not upcoming_path.is_file():
+                return False
+            if checked_at - upcoming_path.stat().st_mtime > newest_allowed_age:
+                return False
+        except OSError:
+            return False
+    return True
 
 try:
     from sentry_sdk.integrations.fastapi import FastApiIntegration
@@ -572,9 +590,9 @@ def health_check() -> HealthCheck:
 
 
 @app.get("/api/v1/health")
-def api_health_check() -> Dict[str, str]:
+def api_health_check() -> Dict[str, Any]:
     """Lightweight uptime endpoint for orchestrator health checks."""
-    return {"status": "ok"}
+    return {"status": "ok", "data_fresh": _data_is_fresh()}
 
 
 @app.get("/drift-status")
