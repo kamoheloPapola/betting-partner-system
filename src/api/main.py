@@ -34,6 +34,10 @@ from src.api.routes.frontend import router as frontend_router
 from src.config import DATA_DIR, DATA_FRESHNESS_DAYS, MODELS_DIR, PROCESSED_DATA_DIR
 from src.config.model_state import get_model_state, is_locked
 from src.core.exceptions import ConfigurationError, DataValidationError
+from src.data.release_client import (
+    data_release_fetch_failed,
+    fetch_processed_data_once,
+)
 from src.ml.model_db import ModelHistoryDB
 from src.ml.registry import ModelRegistry
 from src.monitoring.drift_orchestrator import DriftOrchestrator
@@ -55,6 +59,9 @@ MODEL_CONFIGS = [
 
 def _data_is_fresh() -> bool:
     """Return whether every supported league has recently refreshed fixtures."""
+    if data_release_fetch_failed():
+        return False
+
     matches_dir = PROCESSED_DATA_DIR / "matches"
     newest_allowed_age = DATA_FRESHNESS_DAYS * 86400
     checked_at = datetime.now().timestamp()
@@ -418,6 +425,24 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 async def _lifespan(app: FastAPI):
     import asyncio
     import os
+
+    skip_data_fetch = (
+        os.getenv("SKIP_DATA_RELEASE_FETCH", "").strip().lower() == "true"
+    )
+    if skip_data_fetch:
+        logger.warning(
+            "[startup] Skipping processed-data Release fetch because "
+            "SKIP_DATA_RELEASE_FETCH=true"
+        )
+    else:
+        from src.utils.naming import reload_season_maps
+
+        fetch_processed_data_once(
+            data_dir=DATA_DIR,
+            on_installed=lambda data_dir: reload_season_maps(
+                data_dir / "processed" / "season_maps.json"
+            ),
+        )
 
     if os.getenv("WARMUP_CACHE"):
 

@@ -80,6 +80,48 @@ def test_api_health_reports_existing_recent_fixture_data(monkeypatch, tmp_path):
     assert response.json() == {"status": "ok", "data_fresh": True}
 
 
+def test_api_health_reports_unfresh_after_release_fetch_failure(
+    monkeypatch,
+    tmp_path,
+):
+    from src.data import release_client
+
+    matches_dir = tmp_path / "matches"
+    matches_dir.mkdir()
+    for league in api_main.DEFAULT_TRAINING_LEAGUES:
+        (matches_dir / f"{league}_upcoming.csv").write_text(
+            "fixture\n",
+            encoding="utf-8",
+        )
+    monkeypatch.setattr(api_main, "PROCESSED_DATA_DIR", tmp_path)
+    release_client._set_fetch_state(successful=False, error="release unavailable")
+    try:
+        response = TestClient(app).get("/api/v1/health")
+    finally:
+        release_client._reset_fetch_state_for_tests()
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "data_fresh": False}
+
+
+def test_api_startup_release_fetch_failure_does_not_block_health(monkeypatch):
+    calls = []
+    monkeypatch.delenv("SKIP_DATA_RELEASE_FETCH", raising=False)
+    monkeypatch.setattr(
+        api_main,
+        "fetch_processed_data_once",
+        lambda **kwargs: calls.append(kwargs) or False,
+    )
+
+    with TestClient(app) as client:
+        response = client.get("/api/v1/health")
+
+    assert response.status_code == 200
+    assert len(calls) == 1
+    assert calls[0]["data_dir"] == api_main.DATA_DIR
+    assert callable(calls[0]["on_installed"])
+
+
 def test_api_boot_ignores_fetch_failure_and_binds_health(tmp_path):
     dockerfile = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
     command_lines = [line for line in dockerfile.splitlines() if line.startswith("CMD ")]
@@ -94,6 +136,7 @@ def test_api_boot_ignores_fetch_failure_and_binds_health(tmp_path):
     env.pop("DATABASE_URL", None)
     env.pop("FOOTBALL_DATA_API_KEY", None)
     env["SKIP_MODEL_LOCK_CHECK"] = "true"
+    env["SKIP_DATA_RELEASE_FETCH"] = "true"
     env["PREDICTION_SYSTEM_LOG_FILE"] = str(tmp_path / "prediction_system.log")
 
     fetch_failure = subprocess.run(

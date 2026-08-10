@@ -75,6 +75,47 @@ def _print_summary(
     print("=" * 60)
 
 
+def _publish_processed_data_step(*, alerter, publisher=None) -> StepResult:
+    """Publish processed data as a fatal, explicitly-alerted delivery step."""
+    if publisher is None:
+        from src.data.release_client import publish_processed_data_release
+
+        publisher = publish_processed_data_release
+
+    try:
+        uploaded_asset = publisher()
+    except Exception as exc:
+        error_detail = f"{type(exc).__name__}: {exc}"
+        logger.exception("Processed-data Release publication failed: %s", error_detail)
+        alerter.send_alert(
+            f"Nightly processed-data publication failed: {error_detail}",
+            context={
+                "step": "publish_processed_data",
+                "error": error_detail,
+            },
+            severity="CRITICAL",
+        )
+        return StepResult(
+            name="publish_processed_data",
+            command=("github-release", "data-nightly", "processed-data.tar.gz"),
+            returncode=1,
+            successful=False,
+            completed=True,
+        )
+
+    logger.info(
+        "Processed data published to data-nightly (%s)",
+        uploaded_asset.get("name", "processed-data.tar.gz"),
+    )
+    return StepResult(
+        name="publish_processed_data",
+        command=("github-release", "data-nightly", "processed-data.tar.gz"),
+        returncode=0,
+        successful=True,
+        completed=True,
+    )
+
+
 def main() -> int:
     from src.strategies.drift_guard import DriftGuardrail
 
@@ -125,6 +166,8 @@ def main() -> int:
             context={"date": started_at.isoformat()},
             severity="CRITICAL",
         )
+        # No completed run exists to deliver; keep the current Release instead
+        # of republishing potentially stale local CSVs from this aborted run.
         _print_summary(
             started_at=started_at,
             step_results=[],
@@ -255,6 +298,7 @@ def main() -> int:
             success_codes={0},
         )
     )
+    step_results.append(_publish_processed_data_step(alerter=alerter))
     # Data refresh and drift checks are non-fatal; keep them in the summary.
     NON_FATAL_STEPS = {
         "fetch_fresh_data",

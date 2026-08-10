@@ -20,6 +20,7 @@ __all__ = [
     "generate_match_fingerprint",
     "get_latest_season",
     "LEAGUE_TEAMS",
+    "reload_season_maps",
 ]
 
 logger = logging.getLogger(__name__)
@@ -52,9 +53,11 @@ def calculate_season(date: datetime, league: str) -> int:
     return date.year if date.month >= cutoff_month else date.year - 1
 
 
-def _load_season_maps() -> Dict[str, Dict[int, Set[str]]]:
+def _load_season_maps(
+    path: Path = SEASON_MAPS_PATH,
+) -> Dict[str, Dict[int, Set[str]]]:
     """Load generated season membership data from disk."""
-    with SEASON_MAPS_PATH.open(encoding="utf-8") as handle:
+    with path.open(encoding="utf-8") as handle:
         raw_maps = json.load(handle)
 
     return {
@@ -69,6 +72,14 @@ def _load_season_maps() -> Dict[str, Dict[int, Set[str]]]:
 # Season-aware League Membership Hub
 # Key: Season START year (e.g. 2024 for 2024/25)
 LEAGUE_TEAMS: Dict[str, Dict[int, Set[str]]] = _load_season_maps()
+
+
+def reload_season_maps(path: Path = SEASON_MAPS_PATH) -> None:
+    """Refresh the in-process season map after startup data replacement."""
+    refreshed = _load_season_maps(path)
+    LEAGUE_TEAMS.clear()
+    LEAGUE_TEAMS.update(refreshed)
+    logger.info("Reloaded season maps from %s", path)
 
 # Season-aware aliases remain curated in code.
 LEAGUE_ALIASES: Dict[str, Dict[int, Dict[str, str]]] = {
