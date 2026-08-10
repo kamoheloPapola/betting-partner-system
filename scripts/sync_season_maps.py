@@ -24,6 +24,7 @@ ROOT = Path(__file__).resolve().parent.parent
 MATCHES_DIR = ROOT / "data" / "processed" / "matches"
 SEASON_MAPS_PATH = ROOT / "data" / "processed" / "season_maps.json"
 FILE_PATTERN = re.compile(r"^(?P<league>[A-Z0-9]+)_(?P<season>\d{4})\.csv$")
+UPCOMING_FILE_PATTERN = re.compile(r"^[A-Z0-9]+_upcoming\.csv$")
 UNRESOLVED_PREFIX = "Could not normalize team name:"
 SEASON_SEEDING_THRESHOLD = 10
 
@@ -43,9 +44,50 @@ class WarningCaptureHandler(logging.Handler):
 def _iter_match_files() -> list[Path]:
     files: list[Path] = []
     for csv_path in sorted(MATCHES_DIR.glob("*.csv")):
-        if FILE_PATTERN.match(csv_path.name):
+        if FILE_PATTERN.match(csv_path.name) or UPCOMING_FILE_PATTERN.match(csv_path.name):
             files.append(csv_path)
     return files
+
+
+def _upcoming_season(df: pd.DataFrame, csv_path: Path) -> int:
+    if "season" not in df.columns:
+        raise ValueError(f"{csv_path.name} has no season column")
+
+    populated = df["season"].dropna()
+    numeric = pd.to_numeric(populated, errors="coerce")
+    unique_seasons = numeric.dropna().unique()
+    if len(populated) == 0 or len(numeric.dropna()) != len(populated) or len(unique_seasons) != 1:
+        raise ValueError(f"{csv_path.name} must contain exactly one numeric season")
+
+    season = float(unique_seasons[0])
+    if not season.is_integer():
+        raise ValueError(f"{csv_path.name} contains a non-integer season")
+    return int(season)
+
+
+def _group_match_sources() -> dict[tuple[str, int], tuple[Path, pd.DataFrame]]:
+    finished_sources: dict[tuple[str, int], tuple[Path, pd.DataFrame]] = {}
+    upcoming_sources: dict[tuple[str, int], tuple[Path, pd.DataFrame]] = {}
+
+    for csv_path in _iter_match_files():
+        df = pd.read_csv(csv_path)
+        finished_match = FILE_PATTERN.match(csv_path.name)
+        if finished_match:
+            key = (finished_match.group("league"), int(finished_match.group("season")))
+            finished_sources[key] = (csv_path, df)
+            continue
+
+        upcoming_match = UPCOMING_FILE_PATTERN.match(csv_path.name)
+        if upcoming_match:
+            league = csv_path.name.removesuffix("_upcoming.csv")
+            key = (league, _upcoming_season(df, csv_path))
+            upcoming_sources[key] = (csv_path, df)
+
+    selected_sources = dict(upcoming_sources)
+    # Upcoming-derived membership is bootstrap-only. A validated finished file
+    # for the same league/season supersedes it completely; the two are not merged.
+    selected_sources.update(finished_sources)
+    return selected_sources
 
 
 def _load_existing_maps() -> dict[str, dict[str, list[str]]]:
@@ -192,14 +234,7 @@ def main() -> int:
     naming.logger.addHandler(handler)
 
     try:
-        for csv_path in _iter_match_files():
-            match = FILE_PATTERN.match(csv_path.name)
-            if not match:
-                continue
-
-            league = match.group("league")
-            season = int(match.group("season"))
-            df = pd.read_csv(csv_path)
+        for (league, season), (csv_path, df) in sorted(_group_match_sources().items()):
             if "home_team" not in df.columns or "away_team" not in df.columns:
                 continue
 

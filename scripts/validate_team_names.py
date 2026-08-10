@@ -44,9 +44,24 @@ def _infer_league(csv_path: Path) -> str:
     return csv_path.stem.split("_", 1)[0].upper()
 
 
-def _infer_season(csv_path: Path) -> int | None:
+def _infer_season(csv_path: Path, df: pd.DataFrame) -> int | None:
     match = re.search(r"_(\d{4})(?:_|$)", csv_path.stem)
-    return int(match.group(1)) if match else None
+    if match:
+        return int(match.group(1))
+
+    if not re.fullmatch(r"[A-Z0-9]+_upcoming\.csv", csv_path.name):
+        return None
+    if "season" not in df.columns:
+        return None
+
+    populated = df["season"].dropna()
+    numeric = pd.to_numeric(populated, errors="coerce")
+    unique_seasons = numeric.dropna().unique()
+    if len(populated) == 0 or len(numeric.dropna()) != len(populated) or len(unique_seasons) != 1:
+        return None
+
+    season = float(unique_seasons[0])
+    return int(season) if season.is_integer() else None
 
 
 def _unique_team_names(df: pd.DataFrame) -> list[str]:
@@ -82,7 +97,7 @@ def main() -> int:
                 continue
 
             league = _infer_league(csv_path)
-            season = _infer_season(csv_path)
+            season = _infer_season(csv_path, df)
 
             for name in _unique_team_names(df):
                 clean_name = name.strip().upper()

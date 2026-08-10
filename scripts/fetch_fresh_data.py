@@ -135,13 +135,14 @@ def run_post_fetch_script(script_name: str) -> None:
         raise SystemExit(result.returncode)
 
 
-if __name__ == "__main__":
+def main() -> int:
     season = current_season_year()
     fetch_failed = False
+    post_fetch_ready = True
     for league, code in LEAGUES.items():
         print(f"Fetching {league} {season}/{str(season+1)[2:]}...", end=" ")
         success = False
-        last_error = None
+        upcoming_ready = False
         for attempt in range(1, FETCH_RETRIES + 1):
             try:
                 matches = fetch_matches(code, season)
@@ -152,18 +153,25 @@ if __name__ == "__main__":
                 finished_target = DATA_DIR / f"{league}_{season}.csv"
                 upcoming_target = DATA_DIR / f"{league}_upcoming.csv"
 
-                if not validate_df(finished, f"{league} finished"):
-                    raise ValueError("Finished data failed validation")
                 if not validate_df(upcoming, f"{league} upcoming"):
                     raise ValueError("Upcoming data failed validation")
 
-                atomic_write(finished, finished_target)
                 atomic_write(upcoming, upcoming_target)
+                upcoming_ready = True
+
+                if len(finished) == 0:
+                    print(f"OK - 0 finished, {len(upcoming)} upcoming")
+                    success = True
+                    break
+
+                if not validate_df(finished, f"{league} finished"):
+                    raise ValueError("Finished data failed validation")
+
+                atomic_write(finished, finished_target)
                 print(f"OK - {len(finished)} finished, {len(upcoming)} upcoming")
                 success = True
                 break
             except Exception as e:
-                last_error = e
                 if attempt < FETCH_RETRIES:
                     print(f"FAILED (attempt {attempt}/{FETCH_RETRIES}) - {e} - retrying in {FETCH_RETRY_DELAY}s...")
                     time.sleep(FETCH_RETRY_DELAY)
@@ -172,9 +180,15 @@ if __name__ == "__main__":
 
         if not success:
             fetch_failed = True
+            if not upcoming_ready:
+                post_fetch_ready = False
 
-    if fetch_failed:
-        raise SystemExit(1)
+    if post_fetch_ready:
+        run_post_fetch_script("sync_season_maps.py")
+        run_post_fetch_script("validate_team_names.py")
 
-    run_post_fetch_script("sync_season_maps.py")
-    run_post_fetch_script("validate_team_names.py")
+    return 1 if fetch_failed else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
