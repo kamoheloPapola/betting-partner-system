@@ -7,6 +7,8 @@ deterministic match fingerprint generation for deduplication.
 import hashlib
 import json
 import logging
+import re
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional, Set
@@ -117,6 +119,10 @@ LEAGUE_ALIASES: Dict[str, Dict[int, Dict[str, str]]] = {
             "Wigan": "Wigan",
         },
         2025: {
+            "Brighton & Hove Albion FC": "Brighton",
+            "Brighton and Hove Albion FC": "Brighton",
+            "Brighton Hove Albion FC": "Brighton",
+            "Tottenham Hotspur FC": "Tottenham",
             "WOLVERHAMPTON WANDERERS": "Wolverhampton",
         },
     },
@@ -156,6 +162,7 @@ LEAGUE_ALIASES: Dict[str, Dict[int, Dict[str, str]]] = {
             "REAL MADRID CF": "Real Madrid",
             "RCD MALLORCA": "Mallorca",
             "DEPORTIVO ALAVES": "Alaves",
+            "DEPORTIVO ALAVÉS": "Alaves",
             "VALENCIA CF": "Valencia",
             "RC CELTA DE VIGO": "Celta Vigo",
             "ELCHE CF": "Elche",
@@ -251,6 +258,7 @@ LEAGUE_ALIASES: Dict[str, Dict[int, Dict[str, str]]] = {
         },
         2025: {
             "BAYERN MUNCHEN": "Bayern Munich",
+            "BAYERN MUENCHEN": "Bayern Munich",
             "BAYER 04 LEVERKUSEN": "Bayer Leverkusen",
             "1. UNION BERLIN": "Union Berlin",
             "1. HEIDENHEIM 1846": "FC Heidenheim",
@@ -259,6 +267,7 @@ LEAGUE_ALIASES: Dict[str, Dict[int, Dict[str, str]]] = {
             "SV WERDER BREMEN": "Werder Bremen",
             "TSG 1899 HOFFENHEIM": "TSG Hoffenheim",
             "1. KOLN": "FC Koln",
+            "1. FC KÖLN": "FC Koln",
         },
     },
     "FL1": {
@@ -304,6 +313,25 @@ def get_latest_season(league: str) -> Optional[int]:
     return max(seasons.keys())
 
 
+def _normalization_candidates(clean: str) -> list[str]:
+    """Return deterministic lookup variants without crossing league boundaries."""
+    candidates: list[str] = []
+
+    def add(value: str) -> None:
+        value = re.sub(r"\s+", " ", value).strip()
+        if value and value not in candidates:
+            candidates.append(value)
+
+    add(clean)
+    add(clean.replace("&", "AND"))
+
+    for candidate in list(candidates):
+        add(re.sub(r"^(A\.?F\.?C\.?|F\.?C\.?)\s+", "", candidate).strip())
+        add(re.sub(r"\s+(A\.?F\.?C\.?|F\.?C\.?)(?:\s+\d+)?$", "", candidate).strip())
+
+    return candidates
+
+
 def normalize_team_name(name: str, league: Optional[str] = None, season: Optional[int] = None) -> str:
     """
     Normalizes team name using league and season specific context.
@@ -324,7 +352,8 @@ def normalize_team_name(name: str, league: Optional[str] = None, season: Optiona
     if not name:
         return ""
 
-    clean = name.strip().upper()
+    clean = unicodedata.normalize("NFKD", name.strip()).encode("ascii", "ignore").decode("ascii").upper()
+    candidates = _normalization_candidates(clean)
 
     # CASE 1: League Context Available (High Precision)
     if league:
@@ -343,10 +372,11 @@ def normalize_team_name(name: str, league: Optional[str] = None, season: Optiona
             canonical_set = {c.upper() for c in canonical_names}
             aliases = {k.upper(): v.upper() for k, v in aliases_raw.items()}
 
-            if clean in canonical_set:
-                return clean
-            if clean in aliases:
-                return aliases[clean]
+            for candidate in candidates:
+                if candidate in canonical_set:
+                    return candidate
+                if candidate in aliases:
+                    return aliases[candidate]
 
             for other_season, other_canonical_names in LEAGUE_TEAMS[league].items():
                 if other_season == target_season:
@@ -355,16 +385,24 @@ def normalize_team_name(name: str, league: Optional[str] = None, season: Optiona
                 other_aliases_raw = LEAGUE_ALIASES.get(league, {}).get(other_season, {})
                 other_aliases = {k.upper(): v.upper() for k, v in other_aliases_raw.items()}
 
-                if clean in other_canonical_set:
-                    return clean
-                if clean in other_aliases:
-                    return other_aliases[clean]
+                for candidate in candidates:
+                    if candidate in other_canonical_set:
+                        return candidate
+                    if candidate in other_aliases:
+                        return other_aliases[candidate]
 
-            result = process.extractOne(clean, list(canonical_set), score_cutoff=FUZZY_SCORE_CUTOFF)
-            if result:
-                canonical, score, index = result
-                logger.info(f"Fuzzy matched '{clean}' -> '{canonical}' (Score: {score}, League: {league})")
-                return canonical.upper()
+            for candidate in candidates:
+                result = process.extractOne(candidate, list(canonical_set), score_cutoff=FUZZY_SCORE_CUTOFF)
+                if result:
+                    canonical, score, index = result
+                    logger.info(f"Fuzzy matched '{candidate}' -> '{canonical}' (Score: {score}, League: {league})")
+                    return canonical.upper()
+
+            warn_key = (league or "", clean)
+            if warn_key not in _normalize_warned:
+                logger.warning(f"Could not normalize team name: '{clean}' (League: {league}).")
+                _normalize_warned.add(warn_key)
+            return clean.upper()
 
     # CASE 2: No League OR No Match in League (Global Fallback)
     # Search all leagues exactly/alias first (Case-Blind)
@@ -374,10 +412,11 @@ def normalize_team_name(name: str, league: Optional[str] = None, season: Optiona
         aliases_raw = LEAGUE_ALIASES.get(l_code, {}).get(s_target, LEAGUE_ALIASES.get(l_code, {}).get(max(s_map.keys()), {}))
         c_set = {c.upper() for c in canonical_names}
         a_map = {k.upper(): v.upper() for k, v in aliases_raw.items()}
-        if clean in c_set:
-            return clean
-        if clean in a_map:
-            return a_map[clean]
+        for candidate in candidates:
+            if candidate in c_set:
+                return candidate
+            if candidate in a_map:
+                return a_map[candidate]
 
         # Cross-season search (mirrors league-specific path)
         for other_season, other_canonical_names in s_map.items():
@@ -386,10 +425,11 @@ def normalize_team_name(name: str, league: Optional[str] = None, season: Optiona
             other_c_set = {c.upper() for c in other_canonical_names}
             other_aliases_raw = LEAGUE_ALIASES.get(l_code, {}).get(other_season, {})
             other_a_map = {k.upper(): v.upper() for k, v in other_aliases_raw.items()}
-            if clean in other_c_set:
-                return clean
-            if clean in other_a_map:
-                return other_a_map[clean]
+            for candidate in candidates:
+                if candidate in other_c_set:
+                    return candidate
+                if candidate in other_a_map:
+                    return other_a_map[candidate]
 
     # Fuzzy match across target season across ALL leagues as last ditch
     all_canonicals = []
@@ -398,11 +438,12 @@ def normalize_team_name(name: str, league: Optional[str] = None, season: Optiona
         canonical_names = s_map.get(s_target, s_map[max(s_map.keys())])
         all_canonicals.extend([c.upper() for c in canonical_names])
 
-    result = process.extractOne(clean, list(set(all_canonicals)), score_cutoff=FUZZY_SCORE_CUTOFF)
-    if result:
-        canonical, score, index = result
-        logger.info(f"Global fuzzy match '{clean}' -> '{canonical}' (Score: {score})")
-        return canonical.upper()
+    for candidate in candidates:
+        result = process.extractOne(candidate, list(set(all_canonicals)), score_cutoff=FUZZY_SCORE_CUTOFF)
+        if result:
+            canonical, score, index = result
+            logger.info(f"Global fuzzy match '{candidate}' -> '{canonical}' (Score: {score})")
+            return canonical.upper()
 
     # 4. Fallback
     warn_key = (league or "", clean)

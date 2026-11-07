@@ -13,8 +13,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -32,7 +30,6 @@ from src.api.schemas import (
     TriggerPrediction,
 )
 from src.api.routes.cli import router as cli_router
-from src.api.routes.frontend import router as frontend_router
 from src.config import DATA_DIR, MODELS_DIR
 from src.config.model_state import get_model_state, is_locked
 from src.core.exceptions import ConfigurationError, DataValidationError
@@ -46,7 +43,6 @@ from src.strategies.slip_builder import ForbiddenFruitSlipBuilder
 
 logger = logging.getLogger(__name__)
 _LAST_GLOBAL_DRIFT_STATUS: Optional[str] = None
-STATIC_DIR = Path(__file__).resolve().parents[1] / "static"
 DRIFT_STATE_DIR = DATA_DIR / "drift"
 DEFAULT_TRAINING_LEAGUES = ["PL", "BL1", "FL1", "SA", "PD"]
 MODEL_CONFIGS = [
@@ -559,28 +555,23 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
+import os as _os
+_cors_origins_raw = _os.environ.get("PITCHSENSE_CORS_ORIGINS", "").strip()
+_cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-Api-Key"],
 )
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-app.mount("/assets", StaticFiles(directory="assets"), name="assets")
-app.include_router(frontend_router)
 app.include_router(cli_router)
 
 
 @app.get("/")
-def get_root() -> RedirectResponse:
-    return RedirectResponse(url="/dashboard")
-
-
-@app.get("/dashboard")
-def get_dashboard() -> FileResponse:
-    """Serve the terminal dashboard UI."""
-    return FileResponse(STATIC_DIR / "index.html")
+def get_root() -> Dict[str, str]:
+    return {"status": "ok", "api": "/api/v1/health"}
 
 
 @app.get("/health", response_model=HealthCheck)

@@ -8,11 +8,17 @@ from src.cli.commands.prediction import (
     ModelSuite,
     _calculate_probabilities_v2,
 )
+import src.cli.commands.prediction as prediction_module
 from src.features.pipeline import FeaturePipeline
 from src.simulation.match_simulator import DEFAULT_N_SIMULATIONS, MatchSimulator
 
 
 FIXTURE_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "sample_matches.csv"
+
+
+@pytest.fixture(autouse=True)
+def isolate_prediction_feature_exports(tmp_path, monkeypatch):
+    monkeypatch.setattr('src.features.pipeline.DATA_DIR', tmp_path)
 
 
 class ConstantRegressor:
@@ -85,7 +91,9 @@ def test_full_prediction_workflow_from_fixture_dataframe() -> None:
         assert len(probabilities["mc_top_scorelines"]) > 0
 
 
-def test_simulation_shifts_probabilities_vs_analytical() -> None:
+def test_simulation_shifts_probabilities_vs_analytical(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(prediction_module, "_load_goals_calibrators", lambda league: {})
+
     sample_matches = pd.read_csv(FIXTURE_PATH)
     sample_matches["date"] = pd.to_datetime(sample_matches["date"])
     match = FeaturePipeline().transform(sample_matches).iloc[0]

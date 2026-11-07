@@ -227,7 +227,6 @@ def main() -> int:
         except Exception as exc:
             logger.warning("Could not reload drift baselines: %s", exc)
 
-    step_results.append(_run_step("update_bandit", update_command, success_codes={0}))
     shadow_result = _run_step("shadow_comparison", shadow_command, success_codes={0, 1, 2})
     step_results.append(shadow_result)
 
@@ -271,6 +270,7 @@ def main() -> int:
     step_results.append(
         _run_step("resolve_predictions", resolve_command, success_codes={0})
     )
+    step_results.append(_run_step("update_bandit", update_command, success_codes={0}))
     for league in pipeline_leagues:
         drift_check_command = (
             sys.executable,

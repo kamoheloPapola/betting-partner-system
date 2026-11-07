@@ -187,6 +187,10 @@ class NegativeBinomialEngine:
         Converts Mean/Variance notation to n/p for scipy.stats.nbinom.
         Constraint: Variance must be > Mean.
         """
+        if not np.isfinite(mu) or mu <= 0:
+            raise ValueError(f"Negative-binomial mean must be finite and positive, got {mu}")
+        if not np.isfinite(variance) or variance <= 0:
+            raise ValueError(f"Negative-binomial variance must be finite and positive, got {variance}")
         if variance <= mu:
             # Fallback to Poisson-like behavior (low dispersion)
             # We enforce a minimal over-dispersion gap for stability
@@ -194,6 +198,8 @@ class NegativeBinomialEngine:
             
         p = mu / variance
         n = (mu * p) / (1 - p)
+        if not np.isfinite(n) or not np.isfinite(p) or n <= 0 or not 0 < p < 1:
+            raise ValueError(f"Invalid negative-binomial parameters derived from mu={mu}, variance={variance}")
         return n, p
 
     def calculate_probabilities(self, mu_home: float, var_home: float, mu_away: float, var_away: float) -> Dict[str, float]:
@@ -226,7 +232,10 @@ class NegativeBinomialEngine:
         matrix = np.outer(pmf_home, pmf_away)
         
         # 3b. Structural Normalization (No cosmetic inflation)
-        matrix /= matrix.sum()
+        matrix_mass = float(matrix.sum())
+        if not np.isfinite(matrix_mass) or matrix_mass <= 0:
+            raise ValueError("Negative-binomial probability matrix has invalid mass")
+        matrix /= matrix_mass
         
         # 4. Markets
         # Home/Away Corners (1X2 Analytical)
@@ -362,6 +371,13 @@ class ZeroInflatedEngine:
             pi_zero: Zero-inflation parameter.
             var_mult: Variance multiplier for intensity damping (1.0 = no effect).
         """
+        if not np.isfinite(mu_total) or mu_total < 0:
+            raise ValueError(f"ZIP mean must be finite and non-negative, got {mu_total}")
+        if not np.isfinite(pi_zero) or not 0 <= pi_zero < 1:
+            raise ValueError(f"ZIP zero-inflation must be in [0, 1), got {pi_zero}")
+        if not np.isfinite(var_mult) or var_mult <= 0:
+            raise ValueError(f"ZIP intensity multiplier must be finite and positive, got {var_mult}")
+
         x = np.arange(self.max_count + 1)
         
         # Action 2: Apply intensity variance scaling
@@ -370,6 +386,8 @@ class ZeroInflatedEngine:
         adjusted_mu = mu_total * var_mult
         
         probs = self.pmf(x, adjusted_mu, pi_zero)
+        if not np.all(np.isfinite(probs)) or float(np.sum(probs)) <= 0:
+            raise ValueError("ZIP probability vector is invalid")
         
         # Markets
         # Under 4.5 Cards - Default Dynamic Policy
@@ -383,12 +401,28 @@ class ZeroInflatedEngine:
         # Under 5.5 Cards - Rare Event Policy (with ceiling)
         # Uses default dynamic damping but with strict ceiling
         prob_under_5_5 = self._apply_policy(np.sum(probs[:6]), "CARDS_U55")
+
+        # Market-specific damping and ceilings can otherwise violate event
+        # containment. Project the returned bands back onto the coherent set
+        # while preserving the existing O2.5 and U5.5 upper ceilings.
+        cards_over_2_5 = max(
+            self._clamp(prob_over_2_5),
+            1.0 - self.CLAMP_CEILING_U55,
+        )
+        cards_under_5_5 = self._clamp(prob_under_5_5, max_p=self.CLAMP_CEILING_U55)
+        cards_under_5_5 = max(cards_under_5_5, 1.0 - cards_over_2_5)
+        cards_under_4_5 = self._clamp(prob_under_4_5)
+        cards_under_4_5 = min(
+            max(cards_under_4_5, 1.0 - cards_over_2_5),
+            cards_under_5_5,
+        )
+        cards_over_4_5 = 1.0 - cards_under_4_5
         
         return {
-            "cards_under_4_5": self._clamp(prob_under_4_5),
-            "cards_over_4_5": self._clamp(prob_over_4_5),
-            "cards_over_2_5": self._clamp(prob_over_2_5),
-            "cards_under_5_5": self._clamp(prob_under_5_5, max_p=self.CLAMP_CEILING_U55)
+            "cards_under_4_5": cards_under_4_5,
+            "cards_over_4_5": cards_over_4_5,
+            "cards_over_2_5": cards_over_2_5,
+            "cards_under_5_5": cards_under_5_5
         }
 
     def _apply_policy(self, p: float, market_type: str) -> float:

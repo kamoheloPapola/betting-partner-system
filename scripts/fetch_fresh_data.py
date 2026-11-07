@@ -1,17 +1,16 @@
 import os
-import re
 import subprocess
 import sys
-import unicodedata
 import requests
 import pandas as pd
 from datetime import datetime
 import time
 from pathlib import Path
-from src.utils.naming import generate_match_fingerprint
 from dotenv import load_dotenv
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from src.utils.naming import generate_match_fingerprint, normalize_team_name
+
 load_dotenv()
 
 API_KEY = os.getenv("FOOTBALL_DATA_API_KEY")
@@ -47,18 +46,6 @@ MIN_FINISHED_ROWS = 5
 FETCH_RETRIES = 2
 FETCH_RETRY_DELAY = 60  # seconds
 
-
-def clean_team_name(name: str) -> str:
-    """Normalize team name to match pipeline sanitizer rules."""
-    name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
-    name = name.upper()
-    name = name.replace("&", "AND")
-    name = re.sub(r"\bF\.?C\.?\b", "", name)
-    name = re.sub(r"\bA\.?F\.?C\.?\b", "", name)
-    name = re.sub(r"[^A-Z0-9 \-_\.]", "", name)
-    name = re.sub(r" +", " ", name).strip()
-    return name
-
 def fetch_matches(competition_code: str, season: int) -> list:
     url = f"{BASE}/competitions/{competition_code}/matches"
     r = requests.get(url, headers=HEADERS, params={"season": season}, timeout=30)
@@ -78,8 +65,8 @@ def matches_to_df(matches: list, league: str, season: int) -> pd.DataFrame:
             result = "H" if home_goals > away_goals else "A" if away_goals > home_goals else "D"
         rows.append({
             "date":        m.get("utcDate", "")[:10],
-            "home_team":   clean_team_name(m["homeTeam"]["name"]),
-            "away_team":   clean_team_name(m["awayTeam"]["name"]),
+            "home_team":   normalize_team_name(m["homeTeam"]["name"], league=league),
+            "away_team":   normalize_team_name(m["awayTeam"]["name"], league=league),
             "home_score":  home_goals,
             "away_score":  away_goals,
             "result":      result,

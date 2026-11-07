@@ -144,20 +144,15 @@
     ],
     "2025": [
       "Bayer Leverkusen",
-      "Bayern Munich",
       "Borussia Dortmund",
       "Borussia Monchengladbach",
       "Eintracht Frankfurt",
       "FC Augsburg",
-      "FC Heidenheim",
-      "FC Koln",
-      "FC St. Pauli",
       "Hamburger SV",
       "Mainz 05",
       "RB Leipzig",
       "SC Freiburg",
       "TSG Hoffenheim",
-      "Union Berlin",
       "VfB Stuttgart",
       "VfL Wolfsburg",
       "Werder Bremen"
@@ -424,8 +419,6 @@
       "Nantes",
       "Nice",
       "Paris FC",
-      "Paris Saint Germain",
-      "Rennes",
       "Strasbourg",
       "Toulouse"
     ]
@@ -641,9 +634,19 @@
     "2025": [
       "Athletic Club",
       "Barcelona",
+      "Celta Vigo",
+      "Elche",
+      "Getafe",
       "Girona",
+      "Levante",
+      "Mallorca",
+      "Osasuna",
+      "Rayo Vallecano",
+      "Real Madrid",
       "Real Oviedo",
-      "Sevilla"
+      "Sevilla",
+      "Valencia",
+      "Villarreal"
     ]
   },
   "PL": {
@@ -1126,13 +1129,11 @@
       "AC Milan",
       "AS Roma",
       "Atalanta",
-      "Bologna",
       "Cagliari",
       "Como",
       "Cremonese",
       "Fiorentina",
       "Genoa",
-      "Inter",
       "Juventus",
       "Lazio",
       "Lecce",
@@ -1140,8 +1141,7 @@
       "Parma",
       "Sassuolo",
       "Torino",
-      "Udinese",
-      "Verona"
+      "Udinese"
     ]
   }
 }

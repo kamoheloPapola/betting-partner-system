@@ -114,8 +114,8 @@ class TestParsingAndNormalisation:
     def test_drops_future_matches(self, source_dirs: list[Path], output_dir: Path):
         # One valid past match, one future match
         rows = [
-            _make_raw_row(home="A", date="01/01/2020"),
-            _make_raw_row(home="B", date="01/01/2099"),
+            _make_raw_row(home="Arsenal", date="01/01/2020"),
+            _make_raw_row(home="Chelsea", date="01/01/2099"),
         ]
         _write_csv(source_dirs[0] / "PL" / "E0_2425.csv", rows)
 
@@ -124,7 +124,7 @@ class TestParsingAndNormalisation:
 
         assert result["total_matches"] == 1
         df = pd.read_csv(output_dir / "matches.csv")
-        assert df["home_team"].iloc[0] == "A"
+        assert df["home_team"].iloc[0] == "ARSENAL"
 
 
 class TestDeduplication:

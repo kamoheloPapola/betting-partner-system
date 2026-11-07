@@ -22,6 +22,12 @@ from src.config import DATA_DIR, MODELS_DIR
 from src.ml.calibration import fit_best_binary_calibrator, save_binary_calibrator_artifact
 from src.ml.distributions import NegativeBinomialEngine
 from src.ml.registry import ModelRegistry
+from src.ml.training_lineage import (
+    build_future_training_record,
+    checkpoint_identity,
+    persist_verified_record,
+    registry_lineage_metadata,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -320,19 +326,29 @@ class ProbabilityModelTrainer:
             verbose=-1,
         )
         fit_kwargs: Dict[str, Any] = {}
+        fit_lineage: Dict[str, Any] = {
+            "fit_mode": "full_retrain" if full_retrain else "new_fit_without_checkpoint",
+            "warm_start_predecessor": None,
+            "checkpoint_load_error": None,
+        }
         if (
             not full_retrain
             and existing_model_path is not None
             and existing_model_path.exists()
         ):
+            predecessor = checkpoint_identity(existing_model_path)
             try:
                 existing_model = joblib.load(existing_model_path)
                 if hasattr(existing_model, "booster_"):
                     fit_kwargs["init_model"] = existing_model.booster_
                 else:
                     fit_kwargs["init_model"] = str(existing_model_path)
+                fit_lineage["fit_mode"] = "warm_start"
+                fit_lineage["warm_start_predecessor"] = predecessor
                 logger.info("Warm-start enabled for %s using %s", name, existing_model_path)
             except Exception as exc:
+                fit_lineage["fit_mode"] = "new_fit_after_checkpoint_load_failure"
+                fit_lineage["checkpoint_load_error"] = type(exc).__name__
                 logger.warning(
                     "Warm-start checkpoint ignored for %s (%s): %s",
                     name,
@@ -340,6 +356,7 @@ class ProbabilityModelTrainer:
                     exc,
                 )
         model.fit(X_train, y_train, **fit_kwargs)
+        model._ffps_training_fit_context = fit_lineage
 
         preds = np.maximum(0.05, model.predict(X_test))
         mae = mean_absolute_error(y_test, preds)
@@ -392,16 +409,26 @@ class ProbabilityModelTrainer:
 
         model = XGBRegressor(**params)
         fit_kwargs: Dict[str, Any] = {}
+        fit_lineage: Dict[str, Any] = {
+            "fit_mode": "full_retrain" if full_retrain else "new_fit_without_checkpoint",
+            "warm_start_predecessor": None,
+            "checkpoint_load_error": None,
+        }
         if (
             not full_retrain
             and existing_model_path is not None
             and existing_model_path.exists()
         ):
+            predecessor = checkpoint_identity(existing_model_path)
             try:
                 existing_model = joblib.load(existing_model_path)
                 fit_kwargs["xgb_model"] = existing_model
+                fit_lineage["fit_mode"] = "warm_start"
+                fit_lineage["warm_start_predecessor"] = predecessor
                 logger.info("Warm-start enabled for %s using %s", name, existing_model_path)
             except Exception as exc:
+                fit_lineage["fit_mode"] = "new_fit_after_checkpoint_load_failure"
+                fit_lineage["checkpoint_load_error"] = type(exc).__name__
                 logger.warning(
                     "Warm-start checkpoint ignored for %s (%s): %s",
                     name,
@@ -409,6 +436,7 @@ class ProbabilityModelTrainer:
                     exc,
                 )
         model.fit(X_train, y_train, **fit_kwargs)
+        model._ffps_training_fit_context = fit_lineage
 
         preds = np.maximum(0.05, model.predict(X_test))
         mae = mean_absolute_error(y_test, preds)
@@ -477,6 +505,78 @@ class ProbabilityModelTrainer:
             logger.warning("Corners calibrator fitting failed for %s: %s", league, exc)
         return result
 
+    def _fit_and_save_goals_calibrators(
+        self,
+        model_h,
+        model_a,
+        X_test: pd.DataFrame,
+        y_test_h: pd.Series,
+        y_test_a: pd.Series,
+        league: str,
+    ) -> None:
+        """
+        Fit isotonic/Platt calibrators for goals_u25, goals_u35, goals_btts_yes markets.
+        Uses LightGBM lambda predictions on the test set to generate raw probabilities,
+        then fits against actual outcomes derived from home/away scores.
+        Artifacts saved to calibrators/goals_{market}_{league}_v1.pkl.
+        """
+        from scipy.stats import poisson as _poisson
+
+        MIN_SAMPLES = 100
+
+        try:
+            mu_h = np.maximum(0.05, model_h.predict(X_test))
+            mu_a = np.maximum(0.05, model_a.predict(X_test))
+
+            probs_u25, probs_u35, probs_btts = [], [], []
+            for lh, la in zip(mu_h, mu_a):
+                u25 = sum(
+                    _poisson.pmf(h, lh) * _poisson.pmf(a, la)
+                    for h in range(6) for a in range(6) if h + a <= 2
+                )
+                u35 = sum(
+                    _poisson.pmf(h, lh) * _poisson.pmf(a, la)
+                    for h in range(6) for a in range(6) if h + a <= 3
+                )
+                btts = (1 - _poisson.pmf(0, lh)) * (1 - _poisson.pmf(0, la))
+                probs_u25.append(u25)
+                probs_u35.append(u35)
+                probs_btts.append(btts)
+
+            total_h = np.asarray(y_test_h, dtype=float)
+            total_a = np.asarray(y_test_a, dtype=float)
+            total = total_h + total_a
+            btts_scored = ((total_h > 0) & (total_a > 0)).astype(float)
+
+            y_u25 = (total <= 2).astype(float)
+            y_u35 = (total <= 3).astype(float)
+            y_btts = btts_scored
+
+            for market, probs_raw, y_bin in [
+                ("goals_u25",     np.array(probs_u25), y_u25),
+                ("goals_u35",     np.array(probs_u35), y_u35),
+                ("goals_btts_yes", np.array(probs_btts), y_btts),
+            ]:
+                if len(probs_raw) < MIN_SAMPLES:
+                    logger.warning(
+                        "Goals calibrator skipped for %s [%s]: only %d samples (min %d)",
+                        market, league, len(probs_raw), MIN_SAMPLES,
+                    )
+                    continue
+                cal = fit_best_binary_calibrator(probs_raw, y_bin)
+                if cal is None:
+                    logger.warning("Goals calibrator fit failed for %s [%s] — skipping", market, league)
+                    continue
+                cal_filename = f"{market}_{league}_v1.pkl"
+                cal_path = MODELS_DIR / "calibrators" / cal_filename
+                save_binary_calibrator_artifact(cal_path, cal)
+                logger.info(
+                    "Saved goals calibrator: %s [%s] ECE-winner=%s n=%d",
+                    market, league, cal.get("type"), cal.get("n_samples"),
+                )
+        except Exception as exc:
+            logger.warning("Goals calibrator fitting failed for %s: %s", league, exc, exc_info=True)
+
     def _register_model(
         self,
         name: str,
@@ -489,6 +589,7 @@ class ProbabilityModelTrainer:
         train_size: int,
         test_size: int,
         corn_cal_filenames: Optional[Dict[str, Optional[str]]] = None,
+        training_lineage: Optional[Dict[str, Any]] = None,
     ) -> str:
         metadata: Dict[str, Any] = {
             "filename": filename,
@@ -507,11 +608,105 @@ class ProbabilityModelTrainer:
             for market, cal_file in corn_cal_filenames.items():
                 if cal_file:
                     metadata[f"calibrator_{market}_filename"] = cal_file
+        if training_lineage:
+            metadata.update(training_lineage)
         self.registry.register_model(name, MODEL_VERSION, metadata)
 
         manifest_key = f"{name}_v{MODEL_VERSION}_{league if league is not None else 'None'}"
         self.registry.set_active_model(name, manifest_key, league=league)
         return manifest_key
+
+    @staticmethod
+    def _lineage_row_fields(df_scope: pd.DataFrame, index: pd.Index) -> Tuple[pd.Series, pd.Series]:
+        if "match_hash" in df_scope.columns:
+            row_ids = df_scope.loc[index, "match_hash"].astype(str)
+        else:
+            row_ids = pd.Series([str(value) for value in index], index=index)
+        date_column = "date" if "date" in df_scope.columns else "match_date"
+        event_times = df_scope.loc[index, date_column]
+        return row_ids, event_times
+
+    def _persist_goal_model_and_lineage(
+        self,
+        *,
+        model: Any,
+        model_path: Path,
+        name: str,
+        model_type: str,
+        target: str,
+        metrics: Dict[str, Any],
+        features: List[str],
+        league: str,
+        X_fit: pd.DataFrame,
+        y_fit: pd.Series,
+        fit_row_ids: pd.Series,
+        fit_event_times: pd.Series,
+        X_evaluation: pd.DataFrame,
+        y_evaluation: pd.Series,
+        evaluation_row_ids: pd.Series,
+        evaluation_event_times: pd.Series,
+        full_retrain: bool,
+    ) -> str:
+        """Persist a goal model and its lineage before registry activation.
+
+        Lineage persistence and verification are deliberately completed before
+        `_register_model`.  A lineage write/verification failure therefore
+        cannot mark the new artifact lineage-eligible or active in the registry.
+        """
+        joblib.dump(model, model_path)
+        manifest_key = f"{name}_v{MODEL_VERSION}_{league}"
+        params = model.get_params(deep=True) if hasattr(model, "get_params") else {}
+        randomness = {
+            key: params.get(key)
+            for key in ("random_state", "seed", "n_jobs", "num_threads", "deterministic")
+            if key in params
+        }
+        fit_context = getattr(model, "_ffps_training_fit_context", {})
+        if not isinstance(fit_context, dict):
+            fit_context = {}
+        record = build_future_training_record(
+            artifact_path=model_path,
+            model_role=f"{name}_{league}",
+            manifest_key=manifest_key,
+            registry_slot=f"{name}_{league}",
+            model_family=model_type,
+            target_name=target,
+            fit_features=X_fit,
+            fit_targets=y_fit,
+            fit_row_ids=fit_row_ids,
+            fit_event_times=fit_event_times,
+            evaluation_features=X_evaluation,
+            evaluation_targets=y_evaluation,
+            evaluation_row_ids=evaluation_row_ids,
+            evaluation_event_times=evaluation_event_times,
+            effective_config={
+                "estimator_params": params,
+                "checkpoint_load_error": fit_context.get("checkpoint_load_error"),
+            },
+            randomness=randomness,
+            fit_mode=str(
+                fit_context.get("fit_mode")
+                or ("full_retrain" if full_retrain else "new_fit_without_recorded_checkpoint")
+            ),
+            warm_start_predecessor=fit_context.get("warm_start_predecessor"),
+            source_dataset_path=self.features_path,
+            source_files=[Path(__file__).resolve()],
+        )
+        lineage_path = self.models_dir / "training_lineage" / f"{model_path.stem}.lineage.json"
+        persist_verified_record(record, lineage_path)
+        lineage_metadata = registry_lineage_metadata(record, lineage_path, models_dir=self.models_dir)
+        return self._register_model(
+            name=name,
+            filename=model_path.name,
+            model_type=model_type,
+            target=target,
+            metrics=metrics,
+            features=features,
+            league=league,
+            train_size=len(X_fit),
+            test_size=len(X_evaluation),
+            training_lineage=lineage_metadata,
+        )
 
     def _train_league(
         self,
@@ -576,19 +771,28 @@ class ProbabilityModelTrainer:
             existing_model_path=home_goals_path,
             full_retrain=full_retrain,
         )
-        joblib.dump(home_goals_model, home_goals_path)
         report["home_goals"] = home_goals_metrics
         models_trained.append("home_goals")
-        self._register_model(
+        home_fit_ids, home_fit_dates = self._lineage_row_fields(df_scope, home_train_idx)
+        home_eval_ids, home_eval_dates = self._lineage_row_fields(df_scope, home_test_idx)
+        self._persist_goal_model_and_lineage(
+            model=home_goals_model,
+            model_path=home_goals_path,
             name="home_goals",
-            filename=home_goals_file,
             model_type="lgbm_regressor_poisson",
             target="home_goals",
             metrics=home_goals_metrics,
             features=features,
             league=league,
-            train_size=len(home_train_idx),
-            test_size=len(home_test_idx),
+            X_fit=X_train_full.loc[home_train_idx],
+            y_fit=df_scope.loc[home_train_idx, "home_goals"],
+            fit_row_ids=home_fit_ids,
+            fit_event_times=home_fit_dates,
+            X_evaluation=X_test.loc[home_test_idx],
+            y_evaluation=df_scope.loc[home_test_idx, "home_goals"],
+            evaluation_row_ids=home_eval_ids,
+            evaluation_event_times=home_eval_dates,
+            full_retrain=full_retrain,
         )
 
         home_goals_xgb_file = self._append_league_suffix("home_goals_xgb_v1.joblib", league)
@@ -603,19 +807,26 @@ class ProbabilityModelTrainer:
             existing_model_path=home_goals_xgb_path,
             full_retrain=full_retrain,
         )
-        joblib.dump(home_goals_xgb_model, home_goals_xgb_path)
         report["home_goals_xgb"] = home_goals_xgb_metrics
         models_trained.append("home_goals_xgb")
-        self._register_model(
+        self._persist_goal_model_and_lineage(
+            model=home_goals_xgb_model,
+            model_path=home_goals_xgb_path,
             name="home_goals_xgb",
-            filename=home_goals_xgb_file,
             model_type="xgb_regressor_count_poisson",
             target="home_goals",
             metrics=home_goals_xgb_metrics,
             features=features,
             league=league,
-            train_size=len(home_train_idx),
-            test_size=len(home_test_idx),
+            X_fit=X_train_full.loc[home_train_idx],
+            y_fit=df_scope.loc[home_train_idx, "home_goals"],
+            fit_row_ids=home_fit_ids,
+            fit_event_times=home_fit_dates,
+            X_evaluation=X_test.loc[home_test_idx],
+            y_evaluation=df_scope.loc[home_test_idx, "home_goals"],
+            evaluation_row_ids=home_eval_ids,
+            evaluation_event_times=home_eval_dates,
+            full_retrain=full_retrain,
         )
 
         # 3) Away goals
@@ -632,19 +843,28 @@ class ProbabilityModelTrainer:
             existing_model_path=away_goals_path,
             full_retrain=full_retrain,
         )
-        joblib.dump(away_goals_model, away_goals_path)
         report["away_goals"] = away_goals_metrics
         models_trained.append("away_goals")
-        self._register_model(
+        away_fit_ids, away_fit_dates = self._lineage_row_fields(df_scope, away_train_idx)
+        away_eval_ids, away_eval_dates = self._lineage_row_fields(df_scope, away_test_idx)
+        self._persist_goal_model_and_lineage(
+            model=away_goals_model,
+            model_path=away_goals_path,
             name="away_goals",
-            filename=away_goals_file,
             model_type="lgbm_regressor_poisson",
             target="away_goals",
             metrics=away_goals_metrics,
             features=features,
             league=league,
-            train_size=len(away_train_idx),
-            test_size=len(away_test_idx),
+            X_fit=X_train_full.loc[away_train_idx],
+            y_fit=df_scope.loc[away_train_idx, "away_goals"],
+            fit_row_ids=away_fit_ids,
+            fit_event_times=away_fit_dates,
+            X_evaluation=X_test.loc[away_test_idx],
+            y_evaluation=df_scope.loc[away_test_idx, "away_goals"],
+            evaluation_row_ids=away_eval_ids,
+            evaluation_event_times=away_eval_dates,
+            full_retrain=full_retrain,
         )
 
         away_goals_xgb_file = self._append_league_suffix("away_goals_xgb_v1.joblib", league)
@@ -659,20 +879,44 @@ class ProbabilityModelTrainer:
             existing_model_path=away_goals_xgb_path,
             full_retrain=full_retrain,
         )
-        joblib.dump(away_goals_xgb_model, away_goals_xgb_path)
         report["away_goals_xgb"] = away_goals_xgb_metrics
         models_trained.append("away_goals_xgb")
-        self._register_model(
+        self._persist_goal_model_and_lineage(
+            model=away_goals_xgb_model,
+            model_path=away_goals_xgb_path,
             name="away_goals_xgb",
-            filename=away_goals_xgb_file,
             model_type="xgb_regressor_count_poisson",
             target="away_goals",
             metrics=away_goals_xgb_metrics,
             features=features,
             league=league,
-            train_size=len(away_train_idx),
-            test_size=len(away_test_idx),
+            X_fit=X_train_full.loc[away_train_idx],
+            y_fit=df_scope.loc[away_train_idx, "away_goals"],
+            fit_row_ids=away_fit_ids,
+            fit_event_times=away_fit_dates,
+            X_evaluation=X_test.loc[away_test_idx],
+            y_evaluation=df_scope.loc[away_test_idx, "away_goals"],
+            evaluation_row_ids=away_eval_ids,
+            evaluation_event_times=away_eval_dates,
+            full_retrain=full_retrain,
         )
+
+        # Fit goals/BTTS probability calibrators using full goals test set
+        # X_test.index is used directly — all test rows have home/away scores.
+        if len(X_test) >= 100:
+            self._fit_and_save_goals_calibrators(
+                model_h=home_goals_model,
+                model_a=away_goals_model,
+                X_test=X_test,
+                y_test_h=df_scope.loc[X_test.index, "home_score"],
+                y_test_a=df_scope.loc[X_test.index, "away_score"],
+                league=league,
+            )
+        else:
+            logger.warning(
+                "Goals calibration skipped for %s: test set too small (%d rows)",
+                league, len(X_test),
+            )
 
         # 4a) Home corners
         hcorn_train_idx, hcorn_test_idx = self._target_masks(X_train_full, X_test, df_scope, "home_corners")
@@ -932,6 +1176,9 @@ class ProbabilityModelTrainer:
         tracked_leagues: Optional[List[str]] = None,
         full_retrain: bool = False,
     ) -> None:
+        from src.config.model_state import require_unlocked
+        require_unlocked("ProbabilityModelTrainer.run")
+
         df = self.load_and_engineer_data()
 
         if "league" not in df.columns:

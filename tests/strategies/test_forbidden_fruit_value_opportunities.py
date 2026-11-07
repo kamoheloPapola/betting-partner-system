@@ -37,6 +37,8 @@ def test_value_opportunities_return_edge_without_stake(
     monkeypatch,
 ):
     import src.strategies.forbidden_fruit as forbidden_fruit_module
+    # A strategy unit test must not append its synthetic fixture to production.
+    monkeypatch.setattr(forbidden_fruit_module, "log_prediction", lambda prediction: None)
 
     engine = ForbiddenFruitEngine()
 

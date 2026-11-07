@@ -1,0 +1,6 @@
+-r requirements.txt
+-r requirements-train.txt
+
+# Property tests import Hypothesis directly. Keep the Phase 0 test dependency
+# explicit and pinned so full collection works in a clean engineering runtime.
+hypothesis==6.165.2

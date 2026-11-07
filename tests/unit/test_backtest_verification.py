@@ -3,11 +3,18 @@ import unittest
 import pandas as pd
 import numpy as np
 import logging
+import pytest
 from src.ml.trainer import ModelTrainer
 from src.ml.registry import ModelRegistry
 from src.backtest.engine import Backtester
 from src.features.pipeline import FeaturePipeline
 from unittest.mock import MagicMock, patch
+
+
+@pytest.fixture(autouse=True)
+def isolate_backtest_feature_exports(tmp_path, monkeypatch):
+    # The synthetic backtest exercises the real pipeline export/rotation path.
+    monkeypatch.setattr('src.features.pipeline.DATA_DIR', tmp_path)
 
 class TestBacktestVerification(unittest.TestCase):
     def setUp(self):

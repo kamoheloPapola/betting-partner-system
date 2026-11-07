@@ -1,11 +1,17 @@
 
 import cProfile
+import pytest
 import pstats
 from io import StringIO
 from unittest.mock import patch
 
 from src.cli.commands import prediction as prediction_module
 from src.cli.utils import LeagueCode
+
+
+@pytest.fixture(autouse=True)
+def isolate_benchmark_feature_exports(tmp_path, monkeypatch):
+    monkeypatch.setattr('src.features.pipeline.DATA_DIR', tmp_path)
 
 
 class DummyProgress:

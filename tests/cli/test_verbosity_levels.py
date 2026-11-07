@@ -4,6 +4,7 @@ CLI output verbosity tests.
 
 import os
 import subprocess
+import sys
 
 import pytest
 
@@ -12,14 +13,22 @@ class TestCLIVerbosityLevels:
     """Tests for CLI verbosity control."""
 
     @pytest.fixture
-    def run_cli(self):
+    def run_cli(self, tmp_path):
         """Helper to run CLI commands with UTF-8-safe capture."""
 
         def _run(args: list[str], cwd: str = ".") -> tuple[str, str, int]:
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "utf-8"
+            # Exercise the real CLI and input data, while containing its feature
+            # exports/quarantine/rotation in this test's child-process directory.
+            bootstrap = (
+                "import runpy,sys; from pathlib import Path; "
+                "import src.features.pipeline as pipeline; "
+                "pipeline.DATA_DIR=Path(sys.argv.pop(1)); "
+                "runpy.run_module('src.cli',run_name='__main__')"
+            )
             result = subprocess.run(
-                ["python", "-m", "src.cli"] + args,
+                [sys.executable, "-c", bootstrap, str(tmp_path)] + args,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",

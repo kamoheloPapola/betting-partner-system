@@ -1,5 +1,4 @@
 import argparse
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -54,12 +53,6 @@ def run_training(*, leagues: List[str], full_retrain: bool) -> None:
     features_csv = DATA_DIR / "features" / "feature_matrix.csv"
     trainer = ProbabilityModelTrainer(features_path=features_csv, models_dir=MODELS_DIR)
     trainer.run(tracked_leagues=leagues, full_retrain=full_retrain)
-    print("Updating RL bandit state...")
-    try:
-        subprocess.run(["python", "scripts/update_bandit.py"], check=True)
-        print("Bandit update complete.")
-    except Exception as exc:
-        print(f"BANDIT UPDATE FAILED (non-fatal): {exc}")
 
     try:
         requests.post("http://127.0.0.1:8000/cli/invalidate-cache", timeout=3)

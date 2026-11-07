@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import subprocess
-
 import pandas as pd
 import pytest
 
 from scripts import shadow_comparison
-from scripts import train_batch
 
 
 def test_ece_computation_correctness_with_synthetic_data():
@@ -60,28 +57,3 @@ def test_exit_code_logic():
     assert shadow_comparison.determine_exit_code(promote_rows) == 0
     assert shadow_comparison.determine_exit_code(hold_rows) == 1
     assert shadow_comparison.determine_exit_code(revert_rows) == 2
-
-
-def test_train_batch_bandit_failure_is_non_fatal(monkeypatch, capsys):
-    calls: list[tuple[list[str], bool]] = []
-
-    class _FakeTrainer:
-        def __init__(self, *args, **kwargs) -> None:
-            pass
-
-        def run(self, tracked_leagues, full_retrain) -> None:
-            calls.append((list(tracked_leagues), bool(full_retrain)))
-
-    def _raise_called_process_error(command, check):
-        raise subprocess.CalledProcessError(returncode=1, cmd=command)
-
-    monkeypatch.setattr(train_batch, "ProbabilityModelTrainer", _FakeTrainer)
-    monkeypatch.setattr(train_batch.subprocess, "run", _raise_called_process_error)
-
-    train_batch.run_training(leagues=["PL"], full_retrain=False)
-
-    output = capsys.readouterr().out
-    assert calls == [(["PL"], False)]
-    assert "Updating RL bandit state..." in output
-    assert "BANDIT UPDATE FAILED (non-fatal):" in output
-    assert "Status: SUCCESS" in output

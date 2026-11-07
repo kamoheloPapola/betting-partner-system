@@ -37,6 +37,7 @@ from src.ml.training.model_configs import MODEL_CONFIGS, ModelType
 from src.monitoring.alerter import Alerter
 from src.monitoring.performance_engine import PerformanceTracker
 from src.monitoring.telemetry import capture_alert, capture_exception, init_sentry
+from src.simulation.rl_bandit import ContextualBandit, DEFAULT_STATE_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -467,6 +468,9 @@ def auto_retrain_underperforming_models(
     alerter: Optional[Alerter] = None,
 ) -> List[AutoRetrainOutcome]:
     """Retrain and conditionally promote models that breach rolling-Brier thresholds."""
+    from src.config.model_state import require_unlocked
+    require_unlocked("auto_retrain_underperforming_models")
+
     targets = find_auto_retrain_targets(registry=registry, evals_df=evals_df)
     if not targets:
         logger.info("No auto-retrain targets found from rolling-Brier checks.")
@@ -714,6 +718,9 @@ def retrain_stale_models(
     stale_targets: List[StaleModelTarget],
     feature_df: pd.DataFrame,
 ) -> List[RetrainOutcome]:
+    from src.config.model_state import require_unlocked
+    require_unlocked("retrain_stale_models")
+
     logger.info("Step 3/7: retraining %d stale model scopes", len(stale_targets))
     config_by_name = _config_map()
     outcomes: List[RetrainOutcome] = []
@@ -823,6 +830,15 @@ def run_model_cleanup(*, keep_versions: int = 3) -> Dict[str, int]:
     }
 
 
+def _refresh_rl_bandit_state() -> Dict[str, Any]:
+    """Refresh contextual bandit weights from resolved predictions."""
+    bandit = ContextualBandit(state_path=DEFAULT_STATE_PATH, auto_load=True, auto_bootstrap=False)
+    applied = bandit.refresh_from_resolved_predictions()
+    if applied:
+        bandit.save(DEFAULT_STATE_PATH)
+    return {"contexts_updated": len(applied)}
+
+
 def run_nightly(
     *,
     season: Optional[str] = None,
@@ -903,6 +919,10 @@ def run_nightly(
         "run_model_cleanup",
         run_model_cleanup,
         keep_versions=3,
+    )
+    _run_pipeline_step(
+        "refresh_rl_bandit",
+        _refresh_rl_bandit_state,
     )
 
     summary = {

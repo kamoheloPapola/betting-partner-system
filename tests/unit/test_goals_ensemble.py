@@ -102,21 +102,37 @@ def test_calc_goals_applies_bl1_specific_btts_cap(monkeypatch):
     assert pl_result["btts"] == pytest.approx(0.64, abs=1e-8)
 
 
-def test_btts_no_is_complement_of_btts_yes(monkeypatch):
-    def fake_cap(prob: float, market: str, ctx: str = "") -> float:
-        if market == "btts_no":
-            raise AssertionError("btts_no should be derived from btts_yes, not capped independently")
+def test_btts_no_cap_applied_and_sum_to_one(monkeypatch):
+    """btts_no cap is applied independently; btts_yes is re-derived when cap fires."""
+
+    # Case 1: btts_no cap does not fire (btts_yes=0.63 -> btts_no=0.37, under 0.55 cap)
+    def fake_cap_no_fire(prob: float, market: str, ctx: str = "") -> float:
         if market == "btts_yes":
             return 0.63
+        if market == "btts_no":
+            return prob  # cap does not fire
         return prob
 
-    monkeypatch.setattr(prediction_module, "apply_calibration_cap", fake_cap)
-
+    monkeypatch.setattr(prediction_module, "apply_calibration_cap", fake_cap_no_fire)
     result = _calc_goals(_match(), _suite(), "Home vs Away", simulator=_simulator(), use_simulator=False, league="PL")
-
     assert result["btts"] == pytest.approx(0.63, abs=1e-8)
     assert result["btts_no"] == pytest.approx(0.37, abs=1e-8)
     assert result["btts"] + result["btts_no"] == pytest.approx(1.0, abs=1e-9)
+
+    # Case 2: btts_no cap fires (btts_yes=0.40 -> btts_no=0.60 exceeds 0.55 cap)
+    # btts_yes must be re-derived as 1.0 - 0.55 = 0.45
+    def fake_cap_fires(prob: float, market: str, ctx: str = "") -> float:
+        if market == "btts_yes":
+            return 0.40
+        if market == "btts_no":
+            return min(prob, 0.55)  # cap fires: 0.60 -> 0.55
+        return prob
+
+    monkeypatch.setattr(prediction_module, "apply_calibration_cap", fake_cap_fires)
+    result2 = _calc_goals(_match(), _suite(), "Home vs Away", simulator=_simulator(), use_simulator=False, league="PL")
+    assert result2["btts_no"] == pytest.approx(0.55, abs=1e-8)
+    assert result2["btts"] == pytest.approx(0.45, abs=1e-8)
+    assert result2["btts"] + result2["btts_no"] == pytest.approx(1.0, abs=1e-9)
 
 
 def test_o15_reanchored_when_u25_cap_fires(monkeypatch, caplog):

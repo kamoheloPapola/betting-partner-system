@@ -10,6 +10,7 @@ Features:
 - Smart routing for League vs Global model selection
 """
 import hashlib
+import io
 import joblib
 import json
 import logging
@@ -34,6 +35,7 @@ from src.core.exceptions import (
 )
 from src.db.connection import database_is_configured, get_engine
 from src.ml.model_db import ModelHistoryDB
+from src.predictions.provenance import artifact_identity, sha256_json
 
 # Define public API
 __all__ = ["ModelRegistry", "SemVer"]
@@ -185,6 +187,13 @@ class ModelRegistry:
         file_manifest: Optional[Dict[str, Any]],
         db_manifest: Optional[Dict[str, Any]],
     ) -> tuple[Optional[Dict[str, Any]], str]:
+        # Phase 8: the on-disk bootstrap and atomic PL pointer own production
+        # model selection. A database mirror cannot replace that authority.
+        from src.ml.bundle_activation import ROOT
+        if self.MANIFEST_FILE.resolve() == ROOT / "src/ml/models/manifest.json" and MODELS_DIR.resolve() == ROOT / "src/ml/models":
+            if file_manifest is None:
+                raise ConfigurationError("Authoritative production manifest is unavailable")
+            return file_manifest, "file"
         if file_manifest is None and db_manifest is None:
             return None, "none"
         if file_manifest is None:
@@ -238,6 +247,29 @@ class ModelRegistry:
         return None
 
     def _save_manifest_file(self) -> None:
+        from src.ml.bundle_activation import BundleController, ROOT, state_lock, require
+        if self.MANIFEST_FILE.resolve() == ROOT / "src/ml/models/manifest.json" and MODELS_DIR.resolve() == ROOT / "src/ml/models":
+            controller = BundleController()
+            with state_lock(controller.lock):
+                require(not controller.pending.exists(), "unfinished PL transition blocks registry mutation")
+                before = self._load_manifest_from_file()
+                require(before is not None, "authoritative manifest is unavailable")
+                # Legacy four-model metadata is the verified rollback target.
+                # Generic register/promote/update APIs cannot rewrite it.
+                from src.config.leagues import ACTIVE_LEAGUES
+                for league in ACTIVE_LEAGUES:
+                    require(not (MODELS_DIR / f'{league.lower()}_bundle_pending.json').exists(), 'unfinished league transition blocks registry mutation')
+                    for name in ("home_goals", "away_goals", "home_goals_xgb", "away_goals_xgb"):
+                        slot = name + '_' + league
+                        key = before['active_models'].get(slot)
+                        if key is not None:
+                            require(self.manifest.get('active_models', {}).get(slot) == key and self.manifest.get(key) == before[key],
+                                    league + ' goal bundle changes require the Phase 8 activation workflow')
+                self._save_manifest_file_unlocked()
+            return
+        self._save_manifest_file_unlocked()
+
+    def _save_manifest_file_unlocked(self) -> None:
         import os as _os
         # ensure dir exists
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
@@ -712,6 +744,23 @@ class ModelRegistry:
         Balances Local Specificity vs Global Robustness.
         Respects 'active_models' pointers to prevent silent auto-upgrades.
         """
+        from src.ml.bundle_activation import BundleController, ROOT, NAMES
+        aliases = {"poisson_home_base": "home_goals_xgb", "poisson_away_base": "away_goals_xgb"}
+        resolved_name = aliases.get(model_type, model_type)
+        from src.ml.league_bundle_activation import production_controller
+        if (resolved_name in NAMES.values()
+                and self.MANIFEST_FILE.resolve() == ROOT / "src/ml/models/manifest.json"
+                and MODELS_DIR.resolve() == ROOT / "src/ml/models"):
+            controller = production_controller(league)
+            from src.ml.bundle_activation import state_lock
+            if controller is not None:
+                with state_lock(controller.lock):
+                    state = controller.current()
+                    bundle = controller.bundle(state["bundle_id"])
+                    role = next(role for role, name in NAMES.items() if name == resolved_name)
+                    member = bundle["members"][role]
+                    return {**member["meta"], "league": league, "status": "productive",
+                            "filename": str(ROOT / member["path"]), "active_bundle_id": bundle["bundle_id"]}
         active_pointers = self.manifest.get("active_models", {})
         
         # 1. Try explicitly pinned League dict pointer
@@ -919,7 +968,7 @@ class ModelRegistry:
             
             if l_score >= g_score:
                 return f"Sub-optimal (League Score {l_score:.4f} >= Global {g_score:.4f})"
-                
+
         return None
 
     def get_coverage_status(self, league: str) -> str:
@@ -983,6 +1032,13 @@ class ModelRegistry:
         2. Fallback to Global (if allowed) w/ "LEAGUE_FALLBACK" warning
         3. Hard Fail (Raise ModelNotFoundError) if no model found
         """
+        controlled = self._controlled_league_suite(league) if name in {
+            "home_goals", "away_goals", "home_goals_xgb", "away_goals_xgb",
+            "poisson_home_base", "poisson_away_base",
+        } else None
+        if controlled is not None:
+            aliases = {"poisson_home_base": "home_goals_xgb", "poisson_away_base": "away_goals_xgb"}
+            return controlled[aliases.get(name, name)]
         meta = None
         
         # 1. League Specific Attempt
@@ -1030,13 +1086,16 @@ class ModelRegistry:
                     },
                 )
 
+            # Read once, hash those exact bytes, and deserialize from the same
+            # immutable in-memory payload.  A path hash taken before or after a
+            # separate load could describe bytes that were never executed.
+            artifact_bytes = path.read_bytes()
             with warnings.catch_warnings(record=True) as captured_warnings:
                 warnings.simplefilter("always")
                 if path.suffix.lower() == ".joblib":
-                    model = joblib.load(path)
+                    model = joblib.load(io.BytesIO(artifact_bytes))
                 else:
-                    with open(path, 'rb') as f:
-                        model = pickle.load(f)
+                    model = pickle.load(io.BytesIO(artifact_bytes))
 
             for warning in captured_warnings:
                 if issubclass(warning.category, InconsistentVersionWarning):
@@ -1056,7 +1115,75 @@ class ModelRegistry:
             else:
                 # Dynamically attach if not present
                 setattr(model, 'meta', meta)
-                
+
+            manifest_key = next(
+                (
+                    str(key)
+                    for key, candidate in self.manifest.items()
+                    if key != "active_models" and candidate is meta
+                ),
+                None,
+            )
+            if manifest_key is None:
+                manifest_key = next(
+                    (
+                        str(key)
+                        for key, candidate in self.manifest.items()
+                        if key != "active_models" and isinstance(candidate, dict) and candidate == meta
+                    ),
+                    None,
+                )
+            active_models = self.manifest.get("active_models", {})
+            registry_slot = next(
+                (
+                    str(slot)
+                    for slot, pointer in active_models.items()
+                    if manifest_key is not None and str(pointer) == manifest_key
+                ),
+                None,
+            ) if isinstance(active_models, dict) else None
+
+            training_reference_keys = (
+                "training_data_sha256",
+                "training_row_ids_sha256",
+                "training_code_sha256",
+                "training_manifest_sha256",
+                "training_date",
+                "train_size",
+                "test_size",
+                "temporal_validated",
+            )
+            training_reference = {
+                key: meta[key] for key in training_reference_keys if key in meta
+            }
+            lineage_proven = bool(
+                meta.get("training_data_sha256")
+                and meta.get("training_row_ids_sha256")
+                and meta.get("training_code_sha256")
+            )
+            setattr(
+                model,
+                "_ffps_provenance",
+                {
+                    **artifact_identity(path, artifact_bytes),
+                    "logical_name": str(meta.get("name") or name),
+                    "requested_name": name,
+                    "model_type": meta.get("type"),
+                    "model_version": meta.get("version"),
+                    "configured_filename": str(meta.get("filename")),
+                    "manifest_key": manifest_key,
+                    "registry_slot": registry_slot,
+                    "manifest_sha256": sha256_json(self.manifest),
+                    "metadata_sha256": sha256_json(meta),
+                    "training_lineage": {
+                        "classification": "proven" if lineage_proven else "unproven",
+                        "reference": training_reference or None,
+                        "reason": None if lineage_proven else "legacy artifact lacks immutable fitting-data and training-code identities",
+                    },
+                    "execution_traceable": True,
+                },
+            )
+
             return model
             
         except (pickle.UnpicklingError, EOFError) as e:
@@ -1071,6 +1198,23 @@ class ModelRegistry:
                 f"Failed to load model at {path}: {e}",
                 context={"filename": str(path)}
              )
+
+    def _controlled_league_suite(self, league: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Read the explicit league bundle owner afresh, bypassing the manifest cache.
+
+        An injected registry with a different manifest retains its own behavior.
+        The production manifest's four-model references are frozen bootstrap
+        input; Phase 8 changes only the dedicated atomic bundle pointer.
+        """
+        from src.ml.bundle_activation import BundleController, ROOT, NAMES, SLOTS
+        if self.MANIFEST_FILE.resolve() != ROOT / "src/ml/models/manifest.json" or MODELS_DIR.resolve() != ROOT / "src/ml/models":
+            return None
+        from src.ml.league_bundle_activation import production_controller
+        controller = production_controller(league)
+        if controller is None:
+            return None
+        suite = controller.production_suite()
+        return {NAMES[role]: suite[slot] for role, slot in SLOTS.items()}
 
     def get_model_hash(self, filename: str) -> str:
         """Generates a SHA-256 hash for a model file for provenance tracking."""

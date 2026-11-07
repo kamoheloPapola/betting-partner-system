@@ -5,6 +5,13 @@ from unittest.mock import MagicMock, patch
 from src.features.pipeline import FeaturePipeline
 from src.core.exceptions import DataValidationError
 
+
+@pytest.fixture(autouse=True)
+def isolate_pipeline_exports(tmp_path, monkeypatch):
+    # Export rotation and quarantine are real behavior under test. Keep both
+    # inside the test directory so this suite cannot prune frozen data exports.
+    monkeypatch.setattr('src.features.pipeline.DATA_DIR', tmp_path)
+
 def test_pipeline_invalid_league_validation():
     pipeline = FeaturePipeline()
     # Should allow None

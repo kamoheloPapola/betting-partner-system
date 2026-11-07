@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Set
 import pandas as pd
 
 from src.config import DATA_DIR
+from src.utils.naming import normalize_team_name
 
 logger = logging.getLogger(__name__)
 
@@ -345,9 +346,13 @@ class CanonicalDatasetBuilder:
         # ── League ──
         df["league"] = league
 
-        # ── Normalise team names ──
-        df["home_team"] = df["home_team"].str.strip().str.upper()
-        df["away_team"] = df["away_team"].str.strip().str.upper()
+        # ── Normalise team names via central naming hub ──
+        df["home_team"] = df["home_team"].apply(
+            lambda x: normalize_team_name(str(x), league=league)
+        )
+        df["away_team"] = df["away_team"].apply(
+            lambda x: normalize_team_name(str(x), league=league)
+        )
 
         int_cols = [
             "home_goals", "away_goals",

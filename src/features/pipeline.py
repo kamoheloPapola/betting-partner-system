@@ -8,6 +8,7 @@ Key Classes:
     FeaturePipeline: Main entry point with run(), transform() methods.
 """
 import pandas as pd
+import io
 import logging
 import json
 from pathlib import Path
@@ -22,6 +23,13 @@ from src.config import RAW_DATA_DIR, PROCESSED_DATA_DIR, DATA_DIR
 from src.core.exceptions import DataValidationError
 from src.data.validators import ProcessedMatch
 from src.features.engineering import FeatureEngineer
+from src.predictions.provenance import (
+    build_file_snapshot,
+    logical_path,
+    sha256_bytes,
+    sha256_json,
+    source_event_index,
+)
 # from src.data.merger import TeamMerger # To be integrated later if needed
 
 logger = logging.getLogger(__name__)
@@ -181,10 +189,29 @@ class FeaturePipeline:
             return pd.DataFrame()
 
         dfs = []
-        for p in all_files:
+        source_artifacts: List[Dict[str, Any]] = []
+        for load_order, p in enumerate(all_files):
             try:
-                # Read CSV
-                df = pd.read_csv(p)
+                # Read and parse the same immutable bytes that are identified
+                # in prediction provenance.
+                payload = p.read_bytes()
+                if isinstance(payload, bytes):
+                    df = pd.read_csv(io.BytesIO(payload))
+                    payload_sha256 = sha256_bytes(payload)
+                    payload_size = len(payload)
+                else:
+                    # Test/double compatibility. Real filesystem Paths always
+                    # take the byte-identical branch above.
+                    df = pd.read_csv(p)
+                    payload_sha256 = sha256_json(df.to_dict(orient="records"))
+                    payload_size = 0
+                source_artifacts.append({
+                    "path": logical_path(p) if isinstance(p, Path) else str(p.name),
+                    "sha256": payload_sha256,
+                    "size_bytes": payload_size,
+                    "row_count": len(df),
+                    "load_order": load_order,
+                })
                 
                 # 0.7. SCHEMA DEFENSE: Extract season/competition from filename if missing or misaligned
                 # Expected format: LEAGUE_SEASON.csv (e.g. PL_2024.csv)
@@ -277,6 +304,11 @@ class FeaturePipeline:
         # Include league in summary if available
         league_tag = f"[{league}]" if league else ""
         logger.info(f"[Pipeline]{league_tag} Loaded {len(dfs)} files | {len(combined_df):,} matches | {season_range}")
+        combined_df.attrs["ffps_data_snapshot"] = build_file_snapshot(
+            frame=combined_df,
+            artifacts=source_artifacts,
+            source_type="processed_match_csv_bundle",
+        )
         return combined_df
 
     def process_matches(
@@ -465,12 +497,26 @@ class FeaturePipeline:
         if match_data is not None:
             logger.info(f"[Pipeline] Processing in-memory data")
             df = self.process_matches(match_data)
+            data_snapshot = build_file_snapshot(
+                frame=df,
+                artifacts=[],
+                source_type="in_memory_match_records",
+            )
+            source_events = source_event_index(df)
         else:
             logger.info(f"[Pipeline] Loading data from storage (Processed CSVs)... League: {league or 'All'}")
             df = self.load_stored_matches(league=league)
             if df.empty:
                 logger.warning("No data found. Returning empty DataFrame.")
                 return pd.DataFrame()
+            data_snapshot = dict(df.attrs.get("ffps_data_snapshot", {}))
+            source_events = source_event_index(df)
+            if not data_snapshot:
+                data_snapshot = build_file_snapshot(
+                    frame=df,
+                    artifacts=[],
+                    source_type="custom_loader_match_records",
+                )
             df = self.process_matches(df)
 
         # 0.5. Load and Merge FBref Enrichment
@@ -481,8 +527,16 @@ class FeaturePipeline:
         if fbref_files:
             try:
                 enrich_dfs = []
-                for f in fbref_files:
-                    enrich_dfs.append(pd.read_csv(f))
+                for load_order, f in enumerate(fbref_files, start=len(data_snapshot.get("artifacts", []))):
+                    payload = f.read_bytes()
+                    enrich_dfs.append(pd.read_csv(io.BytesIO(payload)))
+                    data_snapshot.setdefault("artifacts", []).append({
+                        "path": logical_path(f),
+                        "sha256": sha256_bytes(payload),
+                        "size_bytes": len(payload),
+                        "row_count": len(enrich_dfs[-1]),
+                        "load_order": load_order,
+                    })
                     
                 if enrich_dfs:
                     enrich_df = pd.concat(enrich_dfs, ignore_index=True)
@@ -683,6 +737,9 @@ class FeaturePipeline:
         final_df.to_csv(output_path, index=False)
         self._rotate_master_feature_exports()
         logger.info(f"Saved master features to {output_path}")
+        data_snapshot["artifacts_aggregate_sha256"] = sha256_json(data_snapshot.get("artifacts", []))
+        final_df.attrs["ffps_data_snapshot"] = data_snapshot
+        final_df.attrs["ffps_source_events"] = source_events
         
         return final_df
 

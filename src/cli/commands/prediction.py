@@ -11,7 +11,7 @@ import numpy as np
 import logging
 import os
 import warnings
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List, TypedDict, Tuple, cast, Protocol, runtime_checkable
 
@@ -40,6 +40,7 @@ from src.core.container import ServiceContainer
 from src.core.validators import validate_match_dataframe
 from src.core.exceptions import PredictionSystemError, ModelNotFoundError, DataValidationError
 from src.ml.distributions import PoissonEngine, NegativeBinomialEngine, ZeroInflatedEngine
+from src.ml.count_domains import sanitize_card_count_mean, sanitize_corner_count_mean
 from src.monitoring.events import log_event, PredictionEvent
 from src.strategies.selection_gate import SelectionGate
 from src.strategies.forbidden_fruit import ForbiddenFruitEngine
@@ -56,6 +57,14 @@ from src.ml.calibration import (
 from src.ml.confidence import get_confidence_calculator
 from src.simulation.match_simulator import MatchSimulator, clamp_lambda, DEFAULT_N_SIMULATIONS
 from src.simulation.rl_bandit import ContextualBandit
+from src.predictions.provenance import (
+    PredictionCapture,
+    PredictionProvenanceRecord,
+    ProvenanceError,
+    data_provenance_for_fixture,
+    persist_records,
+    record_model_call,
+)
 from src.core.constants import (
     H2H_HIGH_SAMPLE_THRESHOLD,
     MAX_H2H_LIFT_DEFAULT,
@@ -67,6 +76,7 @@ logger = logging.getLogger(__name__)
 # Backward-compatible alias for older tests/config names.
 GOALS_ENSEMBLE_POISSON_WEIGHT = GOALS_ENSEMBLE_XGB_WEIGHT
 _MODEL_CALIBRATOR_CACHE: Dict[str, Optional[Dict[str, Any]]] = {}
+_GOALS_CALIBRATOR_CACHE: Dict[str, Any] = {}
 RL_SHADOW_MARKET = "1x2"
 RL_BANDIT_LIVE_FLAG = DATA_DIR / "rl_bandit_live.flag"
 
@@ -252,6 +262,48 @@ def _apply_model_calibration(model: PredictionModel, raw_value: float) -> float:
         return raw_value
 
 
+def _load_goals_calibrators(league: str) -> Dict[str, Any]:
+    """Load per-league goals/BTTS calibrator artifacts, cached per league."""
+    if league in _GOALS_CALIBRATOR_CACHE:
+        return _GOALS_CALIBRATOR_CACHE[league]
+    markets = ["goals_u25", "goals_u35", "goals_btts_yes"]
+    result: Dict[str, Any] = {}
+    for market in markets:
+        path = MODELS_DIR / "calibrators" / f"{market}_{league}_v1.pkl"
+        if path.exists():
+            payload = load_binary_calibrator_artifact(path)
+            if payload:
+                result[market] = payload
+            else:
+                logger.debug("Goals calibrator artifact empty: %s", path)
+        else:
+            logger.debug("Goals calibrator not found (expected after first retrain): %s", path)
+    _GOALS_CALIBRATOR_CACHE[league] = result
+    return result
+
+
+def _apply_goals_cal(cals: Dict[str, Any], market_key: str, prob: float) -> float:
+    """Apply a goals/BTTS binary calibrator if present, else return prob unchanged."""
+    payload = cals.get(market_key)
+    if not payload:
+        return prob
+    try:
+        return float(
+            np.clip(
+                apply_binary_calibrator(
+                    payload["calibrator"],
+                    payload["type"],
+                    np.array([prob], dtype=float),
+                )[0],
+                1e-6,
+                1 - 1e-6,
+            )
+        )
+    except Exception as exc:
+        logger.debug("Goals calibration apply failed for %s: %s", market_key, exc)
+        return prob
+
+
 def _predict_scalar(model: PredictionModel, row: pd.Series, feats: List[str], context: str) -> float:
     """Standardized pattern: feature mapping -> numeric cast -> prediction."""
     t_data = _translate_features(row, feats, context)
@@ -264,7 +316,15 @@ def _predict_scalar(model: PredictionModel, row: pd.Series, feats: List[str], co
         PredictionGuard.validate_prediction_integrity(model, df, context)
         
         raw = float(model.predict(df)[0])
-        return float(_apply_model_calibration(model, raw))
+        effective = float(_apply_model_calibration(model, raw))
+        record_model_call(
+            model=model,
+            frame=df,
+            context=context,
+            raw_output=raw,
+            effective_output=effective,
+        )
+        return effective
     except Exception as e:
         raise DataValidationError(f"Prediction failed in {context}: {e}")
 
@@ -580,10 +640,17 @@ def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, simulator: "Match
     underdog = "home" if model_home_lambda < model_away_lambda else "away"
     eh_prob = EuropeanHandicap.win_probability(model_home_lambda, model_away_lambda, 2, underdog)
     
+    # === BINARY CALIBRATION (Layer 3.5 — corrects raw MC bias before lambda adjustment) ===
+    # Artifacts are created by train_probability_models.py. Pass-through until first retrain.
+    _gcals = _load_goals_calibrators(league) if league else {}
+    u25_cal = _apply_goals_cal(_gcals, "goals_u25", 1.0 - o25)
+    u35_cal = _apply_goals_cal(_gcals, "goals_u35", 1.0 - o35)
+    btts_cal = _apply_goals_cal(_gcals, "goals_btts_yes", btts)
+
     # === LAMBDA-AWARE SOFT ADJUSTMENT ===
-    u25_pre_cap = apply_lambda_aware_adjustment(1.0 - o25, 'u25', model_home_lambda, model_away_lambda, ctx)
-    u35_pre_cap = apply_lambda_aware_adjustment(1.0 - o35, 'u35', model_home_lambda, model_away_lambda, ctx)
-    btts_pre_cap = apply_lambda_aware_adjustment(btts, 'btts_yes', model_home_lambda, model_away_lambda, ctx)
+    u25_pre_cap = apply_lambda_aware_adjustment(u25_cal, 'u25', model_home_lambda, model_away_lambda, ctx)
+    u35_pre_cap = apply_lambda_aware_adjustment(u35_cal, 'u35', model_home_lambda, model_away_lambda, ctx)
+    btts_pre_cap = apply_lambda_aware_adjustment(btts_cal, 'btts_yes', model_home_lambda, model_away_lambda, ctx)
     # Layer 4.1b - League-specific BTTS cap (BL1 lambda inflation guard)
     # BL1 models learn historically accurate high-scoring patterns but
     # overestimate BTTS. Cap at 0.58 until sample grows beyond 50 resolved rows.
@@ -603,8 +670,17 @@ def _calc_goals(match: pd.Series, suite: ModelSuite, ctx: str, simulator: "Match
         )
     u35_capped = apply_calibration_cap(u35_pre_cap, 'u35', ctx)
     btts_capped = apply_calibration_cap(btts_pre_cap, 'btts_yes', ctx)
-    # btts_no is derived from btts_yes - btts_yes is the calibrated market
-    btts_no_capped = 1.0 - btts_capped
+    # Apply btts_no cap independently - when btts_yes is low, btts_no can
+    # exceed its 0.55 cap if derived naively. Re-derive btts_yes if cap fires
+    # to maintain sum-to-one. Both caps cannot be violated simultaneously.
+    btts_no_raw = 1.0 - btts_capped
+    btts_no_capped = apply_calibration_cap(btts_no_raw, 'btts_no', ctx)
+    if btts_no_capped != btts_no_raw:
+        logger.debug(
+            "%s: btts_no cap fired (%.3f -> %.3f), re-deriving btts_yes",
+            ctx, btts_no_raw, btts_no_capped,
+        )
+        btts_capped = 1.0 - btts_no_capped
     
     # New: Team Goal Caps
     h_u15_capped = apply_calibration_cap(res['home_under_1_5'], 'home_under_1_5', ctx)
@@ -647,8 +723,14 @@ def _calc_corners(
     if not (suite.get('mh_corn') and suite.get('ma_corn')): return res_none, attr
     
     try:
-        mu_h_raw = _predict_scalar(suite['mh_corn'], match, suite['mh_corn'].meta['features'], f"{ctx}:CornH")
-        mu_a_raw = _predict_scalar(suite['ma_corn'], match, suite['ma_corn'].meta['features'], f"{ctx}:CornA")
+        mu_h_raw = sanitize_corner_count_mean(
+            _predict_scalar(suite['mh_corn'], match, suite['mh_corn'].meta['features'], f"{ctx}:CornH"),
+            context=f"{ctx}:CornH",
+        )
+        mu_a_raw = sanitize_corner_count_mean(
+            _predict_scalar(suite['ma_corn'], match, suite['ma_corn'].meta['features'], f"{ctx}:CornA"),
+            context=f"{ctx}:CornA",
+        )
         corners_divergence = False
         corners_divergence_pct = 0.0
 
@@ -661,14 +743,20 @@ def _calc_corners(
             lgbm_feats = cast(List[str], cast(Dict[str, Any], getattr(corners_lgbm, "meta", {}) or {}).get("features", []))
             if lgbm_feats:
                 try:
-                    total_lgbm = float(clamp_lambda(_predict_scalar(corners_lgbm, match, lgbm_feats, f"{ctx}:CornersTotal:LGBM")))
+                    total_lgbm = sanitize_corner_count_mean(
+                        _predict_scalar(corners_lgbm, match, lgbm_feats, f"{ctx}:CornersTotal:LGBM"),
+                        context=f"{ctx}:CornersTotal:LGBM",
+                    )
                 except Exception as exc:
                     logger.warning("%s: Failed specialist corners LGBM prediction: %s", ctx, exc)
         if corners_xgb is not None:
             xgb_feats = cast(List[str], cast(Dict[str, Any], getattr(corners_xgb, "meta", {}) or {}).get("features", []))
             if xgb_feats:
                 try:
-                    total_xgb = float(clamp_lambda(_predict_scalar(corners_xgb, match, xgb_feats, f"{ctx}:CornersTotal:XGB")))
+                    total_xgb = sanitize_corner_count_mean(
+                        _predict_scalar(corners_xgb, match, xgb_feats, f"{ctx}:CornersTotal:XGB"),
+                        context=f"{ctx}:CornersTotal:XGB",
+                    )
                 except Exception as exc:
                     logger.warning("%s: Failed specialist corners XGB prediction: %s", ctx, exc)
 
@@ -678,7 +766,10 @@ def _calc_corners(
                 total_lgbm = float(mu_h_raw + mu_a_raw)
             if total_xgb is None:
                 total_xgb = float(total_lgbm)
-            specialist_total = float(clamp_lambda((lgbm_w * total_lgbm) + (xgb_w * total_xgb)))
+            specialist_total = sanitize_corner_count_mean(
+                (lgbm_w * total_lgbm) + (xgb_w * total_xgb),
+                context=f"{ctx}:CornersTotal:Ensemble",
+            )
             base_total = max(float(mu_h_raw + mu_a_raw), 1e-9)
             specialist_scale = specialist_total / base_total
             mu_h_raw *= specialist_scale
@@ -761,6 +852,8 @@ def _calc_corners(
                 'mu_total_blended': mu_total_blended
             }
         
+        mu_h = sanitize_corner_count_mean(mu_h, context=f"{ctx}:CornH:Adjusted")
+        mu_a = sanitize_corner_count_mean(mu_a, context=f"{ctx}:CornA:Adjusted")
         v_h = mu_h + (getattr(suite['mh_corn'], 'alpha_', 0) * mu_h**2) if hasattr(suite['mh_corn'], 'alpha_') else mu_h * 1.3
         v_a = mu_a + (getattr(suite['ma_corn'], 'alpha_', 0) * mu_a**2) if hasattr(suite['ma_corn'], 'alpha_') else mu_a * 1.3
         
@@ -889,7 +982,10 @@ def _calc_cards(
                 mu_xgb_raw = float(mu_lgbm_raw)
 
             lgbm_w, xgb_w = _goal_ensemble_weights()
-            mu_raw = float(clamp_lambda((lgbm_w * mu_lgbm_raw) + (xgb_w * mu_xgb_raw)))
+            mu_raw = sanitize_card_count_mean(
+                (lgbm_w * mu_lgbm_raw) + (xgb_w * mu_xgb_raw),
+                context=f"{ctx}:Cards:Ensemble",
+            )
             cards_divergence_pct = _divergence_pct(float(mu_lgbm_raw), float(mu_xgb_raw))
             cards_divergence = cards_divergence_pct > GOALS_ENSEMBLE_DIVERGENCE_THRESHOLD
             if cards_divergence:
@@ -905,7 +1001,10 @@ def _calc_cards(
         else:
             if not m_legacy:
                 return res_none, attr
-            mu_raw = _predict_scalar(m_legacy, match, m_legacy.meta['features'], f"{ctx}:Cards")
+            mu_raw = sanitize_card_count_mean(
+                _predict_scalar(m_legacy, match, m_legacy.meta['features'], f"{ctx}:Cards"),
+                context=f"{ctx}:Cards:Legacy",
+            )
 
         # Action 1/4: Offset Attribution
         offset_manager = TeamOffsetManager()
@@ -977,7 +1076,9 @@ def _calc_cards(
             # Log when H2H is NOT applied
             logger.debug(f"{ctx}: No H2H adjustment (h2h_count={h2h_match_count}, h2h_avg={h2h_avg_cards})")
         
-        # Action 2: Apply Intensity Damping (Variance scaling for Zero-Inflated)
+        mu = sanitize_card_count_mean(mu, context=f"{ctx}:Cards:Adjusted")
+
+        # Action 2: Apply Intensity Damping (legacy ZIP mean scaling; semantics deferred)
         v_mult = Thresholds.INTENSITY_VARIANCE_MULT if intensity_boost else 1.0
         res = ZeroInflatedEngine().calculate_probabilities(mu, pi_zero=0.03, var_mult=v_mult)
         
@@ -1018,6 +1119,13 @@ def _calc_cards(
             card_u55 = apply_soft_cap(card_u55_raw, conf_res.confidence, 'card_u55')
         else:
             card_u55 = None
+
+        # H2H, calibration and soft-cap layers operate independently. Project
+        # the exposed nested events back onto a coherent probability contract.
+        if card_u55 is not None:
+            card_o25 = max(card_o25, 1.0 - ZeroInflatedEngine.CLAMP_CEILING_U55)
+            card_u55 = max(card_u55, 1.0 - card_o25)
+            card_u45 = min(max(card_u45, 1.0 - card_o25), card_u55)
 
         return {
             'card_u45': card_u45, 
@@ -1077,7 +1185,10 @@ def show_predictions(
     use_rl_weights: bool = typer.Option(
         RL_BANDIT_LIVE_FLAG.exists(),
         "--use-rl-weights/--no-use-rl-weights",
-        help="Run contextual bandit simulator weights in shadow mode and log the output only",
+        help=(
+            "Run contextual bandit in shadow mode: logs weighted-vs-baseline diff "
+            "to [RL-DIFF] log entries without affecting displayed or stored probabilities."
+        ),
     ),
 ) -> None:
     """
@@ -1241,7 +1352,14 @@ def _run_predict_loop(
     shadow_registry._logged_smart_routing = logged_smart_routing
     shadow_log: List[Dict[str, Any]] = []
     rl_bandit = ContextualBandit() if use_rl_weights else None
-    
+    if rl_bandit is not None:
+        if logger.getEffectiveLevel() > logging.INFO:
+            logger.setLevel(logging.INFO)
+        logger.info(
+            "[RL-SHADOW] Contextual bandit active in shadow mode. "
+            "Weights are logged only and do not affect output probabilities."
+        )
+
     with Progress(console=console) as progress:
         for lg in df['league'].unique():
             try:
@@ -1304,24 +1422,49 @@ def _run_predict_loop(
                     n_simulations=DEFAULT_N_SIMULATIONS,
                     seed=42,
                     league=lg,
+                    seed_scope="league_batch_shared_rng",
                 )
                 
                 for _, match in matches.iterrows():
                     try:
                         # Action 2: Detect High Intensity Fixtures
                         is_intensity = _is_high_intensity(match, lg)
-                        
+                        prediction_timestamp = datetime.now().astimezone(timezone.utc).isoformat()
+                        provenance_capture: PredictionCapture | None = None
+                        if lg == "PL" and use_simulator:
+                            provenance_capture = PredictionCapture(
+                                prediction_timestamp=prediction_timestamp,
+                                data_provenance=data_provenance_for_fixture(
+                                    df,
+                                    match,
+                                    prediction_timestamp,
+                                ),
+                            )
+
                         # Calculation Logic with consolidated warnings
-                        p, attr = _calculate_probabilities_v2(
-                            match,
-                            suite,
-                            lg,
-                            is_intensity,
-                            warning_collector,
-                            simulator=simulator,
-                            use_simulator=use_simulator,
-                            rl_bandit=rl_bandit,
-                        )
+                        if provenance_capture is None:
+                            p, attr = _calculate_probabilities_v2(
+                                match,
+                                suite,
+                                lg,
+                                is_intensity,
+                                warning_collector,
+                                simulator=simulator,
+                                use_simulator=use_simulator,
+                                rl_bandit=rl_bandit,
+                            )
+                        else:
+                            with provenance_capture:
+                                p, attr = _calculate_probabilities_v2(
+                                    match,
+                                    suite,
+                                    lg,
+                                    is_intensity,
+                                    warning_collector,
+                                    simulator=simulator,
+                                    use_simulator=use_simulator,
+                                    rl_bandit=rl_bandit,
+                                )
                         
                         # Inject drift state into nested attribution dicts only.
                         # Some attribution keys (e.g. ensemble_divergence) are scalars.
@@ -1344,7 +1487,7 @@ def _run_predict_loop(
                         # Replay Capability: enrich snapshot
                         replay_context = {
                             'data_pipeline_version': _get_pipeline_version_hash(),
-                            'prediction_timestamp': datetime.now().isoformat(),
+                            'prediction_timestamp': prediction_timestamp,
                             'external_context': {
                                 'odds_snapshot': {
                                     k: match.get(k) for k in match.index
@@ -1372,6 +1515,14 @@ def _run_predict_loop(
                             'replay_context': replay_context,
                             **p
                         }
+                        if provenance_capture is not None and provenance_capture.model_calls:
+                            provenance_record = provenance_capture.finalize(
+                                fixture=match,
+                                league=lg,
+                                probabilities=p,
+                                simulator=simulator,
+                            )
+                            res['_prediction_provenance'] = provenance_record.to_dict()
                         all_preds.append(res)
                         if rl_bandit is not None:
                             _run_rl_shadow_simulation(match, lg, res, rl_bandit)
@@ -1470,6 +1621,17 @@ def _persist_predictions(
 
     PRED_DIR = DATA_DIR / "predictions"
     PRED_DIR.mkdir(parents=True, exist_ok=True)
+
+    provenance_records = [
+        PredictionProvenanceRecord.from_dict(cast(Dict[str, Any], result['_prediction_provenance']))
+        for result in results
+        if isinstance(result.get('_prediction_provenance'), dict)
+    ]
+    if provenance_records:
+        # Provenance is written before the externally authoritative market CSV.
+        # Any sidecar failure aborts persistence rather than silently orphaning
+        # a prediction from its lineage.
+        persist_records(provenance_records, PRED_DIR / "provenance")
 
     # Markets to persist — must match resolver's MARKET_ALIASES targets
     # Keys are the keys in the res dict from _run_predict_loop
@@ -1628,14 +1790,18 @@ def _calculate_probabilities_v2(
     p = {}
     attr = {}
     ctx = f"{match.get('home_team')}{MATCH_SEPARATOR}{match.get('away_team')}"
-    
+
     # 1. Goals (Mandatory)
-    rl_weights = None
-    if rl_bandit is not None:
-        context = rl_bandit.context_key(league, RL_SHADOW_MARKET)
-        rl_weights = rl_bandit.get_weights(context)
-    p.update(_calc_goals(match, suite, ctx, simulator=simulator, league=league, rl_weights=rl_weights, use_simulator=use_simulator))
-    
+    p.update(_calc_goals(
+        match,
+        suite,
+        ctx,
+        simulator=simulator,
+        league=league,
+        rl_weights=None,
+        use_simulator=use_simulator,
+    ))
+
     # 2. Secondary Markets (Best Effort)
     res_corn, attr_corn = _calc_corners(match, suite, ctx, league, intensity_boost, warning_collector)
     res_card, attr_card = _calc_cards(match, suite, ctx, league, intensity_boost, warning_collector)

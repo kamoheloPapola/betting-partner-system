@@ -25,6 +25,7 @@ class Predictor:
 
     def __init__(self, container: Optional[ServiceContainer] = None) -> None:
         self.container = container or ServiceContainer.get_instance()
+        self._last_data_attrs: Dict[str, Any] = {}
 
     def _resolve_league(self, league: Optional[str]) -> Optional[str]:
         if not league:
@@ -54,6 +55,7 @@ class Predictor:
             return []
 
         upcoming = upcoming.sort_values("date").reset_index(drop=True)
+        self._last_data_attrs = dict(upcoming.attrs)
         return upcoming.to_dict(orient="records")
 
     def predict_all(self, matches: Sequence[Dict[str, Any]] | pd.DataFrame) -> List[Dict[str, Any]]:
@@ -62,6 +64,8 @@ class Predictor:
             df = matches.copy()
         else:
             df = pd.DataFrame(list(matches))
+            if self._last_data_attrs:
+                df.attrs.update(self._last_data_attrs)
 
         if df.empty:
             return []

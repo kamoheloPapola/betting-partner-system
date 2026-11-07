@@ -15,6 +15,7 @@ of home and away goal scoring in real football matches.
 
 from __future__ import annotations
 
+import copy
 import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -58,10 +59,10 @@ DEFAULT_N_SIMULATIONS = 50_000
 
 def clamp_lambda(x: float | np.ndarray) -> float | np.ndarray:
     """
-    Global lambda clamping utility.
+    Goal-lambda clamping utility.
 
-    Enforces λ ∈ [0.05, 4.0] everywhere — training evaluation,
-    prediction pipeline, and simulator input.
+    Enforces expected goals λ ∈ [0.05, 4.0]. This is intentionally a
+    goal-domain contract and must not be reused for corner or card means.
 
     LightGBM Poisson can output slightly negative values.
     Zero or negative λ silently breaks Poisson sampling.
@@ -141,6 +142,7 @@ class MatchSimulator:
         tempo_sigma: float = TEMPO_SIGMA,
         league: str | None = None,
         seed: Optional[int] = None,
+        seed_scope: str = "simulator_instance_stream",
     ) -> None:
         if n_simulations < 100:
             raise ValueError(f"n_simulations must be >= 100, got {n_simulations}")
@@ -149,7 +151,11 @@ class MatchSimulator:
         self.max_goals = max_goals
         self.top_scorelines = top_scorelines
         self.tempo_sigma = LEAGUE_TEMPO_SIGMA.get(league, tempo_sigma) if league else tempo_sigma
+        self.league = league
+        self.seed = seed
+        self.seed_scope = seed_scope
         self.rng = np.random.default_rng(seed)
+        self.last_call_provenance: dict[str, object] | None = None
 
     def simulate(
         self,
@@ -167,6 +173,9 @@ class MatchSimulator:
         Returns:
             SimulationResult with all derived probabilities.
         """
+        rng_state_before = copy.deepcopy(self.rng.bit_generator.state)
+        requested_home_xg = float(home_xg)
+        requested_away_xg = float(away_xg)
         weights = rl_weights or {}
         tempo_sigma = self.tempo_sigma * float(weights.get("tempo_sigma_scale", 1.0))
         home_xg = float(clamp_lambda(home_xg * float(weights.get("lambda_scale_home", 1.0))))
@@ -263,7 +272,7 @@ class MatchSimulator:
             match_entropy, match_type, tail_mass,
         )
 
-        return SimulationResult(
+        result = SimulationResult(
             home_win_prob=home_win_prob,
             draw_prob=draw_prob,
             away_win_prob=away_win_prob,
@@ -289,6 +298,26 @@ class MatchSimulator:
             n_simulations=self.n_simulations,
             rl_weights_applied=bool(rl_weights),
         )
+        self.last_call_provenance = {
+            "implementation": "src.simulation.match_simulator.MatchSimulator.simulate",
+            "numpy_rng": "numpy.random.default_rng",
+            "bit_generator": self.rng.bit_generator.__class__.__name__,
+            "seed": self.seed,
+            "seed_scope": self.seed_scope,
+            "rng_state_before": rng_state_before,
+            "rng_state_after": copy.deepcopy(self.rng.bit_generator.state),
+            "n_simulations": self.n_simulations,
+            "max_goals": self.max_goals,
+            "top_scorelines": self.top_scorelines,
+            "tempo_sigma": self.tempo_sigma,
+            "league": self.league,
+            "requested_home_xg": requested_home_xg,
+            "requested_away_xg": requested_away_xg,
+            "effective_home_xg": home_xg,
+            "effective_away_xg": away_xg,
+            "rl_weights": copy.deepcopy(rl_weights),
+        }
+        return result
 
     def _compute_scoreline_probs(
         self, home_goals: np.ndarray, away_goals: np.ndarray

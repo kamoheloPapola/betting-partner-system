@@ -259,6 +259,7 @@ class ContextualBandit:
             normalized["last_reward"] = bucket.get("last_reward")
             normalized["ece_ema"] = float(bucket.get("ece_ema", 0.0))
             normalized["reward_ema"] = float(bucket.get("reward_ema", 0.0))
+            normalized["signed_ema"] = float(bucket.get("signed_ema", 0.0))
             weights = bucket.get("weights", {})
             if isinstance(weights, dict):
                 normalized["weights"] = {
@@ -296,3 +297,26 @@ class ContextualBandit:
             len(applied_updates),
         )
         return applied_updates
+
+    def reset_for_new_season(self, decay: float = 0.5) -> None:
+        """Blend current weights toward defaults to account for off-season staleness.
+
+        Args:
+            decay: Fraction to move toward default weights (0.5 = halfway).
+                   Higher values reset more aggressively.
+        """
+        decay = float(np.clip(decay, 0.0, 1.0))
+        for bucket in self.state.values():
+            w = bucket.get("weights", {})
+            for key, default_val in DEFAULT_WEIGHTS.items():
+                current = float(w.get(key, default_val))
+                w[key] = _clip_scale(current * (1.0 - decay) + default_val * decay)
+            bucket["ece_ema"] = float(bucket.get("ece_ema", 0.0)) * (1.0 - decay)
+            bucket["reward_ema"] = float(bucket.get("reward_ema", 0.0)) * (1.0 - decay)
+            bucket["signed_ema"] = float(bucket.get("signed_ema", 0.0)) * (1.0 - decay)
+            bucket["weights"] = w
+        logger.info(
+            "RL bandit season reset applied (decay=%.2f) across %d context bucket(s).",
+            decay,
+            len(self.state),
+        )

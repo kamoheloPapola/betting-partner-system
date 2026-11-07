@@ -56,6 +56,7 @@ venv/
 
 # Temporary files
 .tmp/
+/tmp/
 tmp_*.py
 apply_edits.py
 run_b.py

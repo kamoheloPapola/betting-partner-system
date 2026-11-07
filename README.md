@@ -1,6 +1,25 @@
 # AI-Powered Football Betting Assistant
 
-A production-grade, AI-driven football betting system that generates data-driven predictions without relying on bookmaker odds.
+A personal-PC betting-prediction system with recorded, replayable prospective evidence.
+
+## Local prospective operator workflow
+
+Use the dedicated local command to inspect the existing Phase 19 predictions and
+their scientific state:
+
+```powershell
+.\venv\Scripts\python.exe scripts\local_operator.py status
+.\venv\Scripts\python.exe scripts\local_operator.py predictions --league BL1
+.\venv\Scripts\python.exe scripts\local_operator.py audit
+.\venv\Scripts\python.exe scripts\local_operator.py performance
+```
+
+The four recorded prediction cohorts are BL1, SA, FL1, and PD. PL has no admitted
+prospective prediction. The command shows historical blockers separately and
+refuses settlement while Phase 20 protected integrity fails. It does not offer
+a new prediction cycle, scheduling, or model promotion. See
+[`docs/local-operator-workflow.md`](docs/local-operator-workflow.md) for the
+full command guide and current limits.
 
 ## Core Design Principles
 1. **Odds-Independence**: Predictions are based on stats, not market odds.
@@ -32,9 +51,12 @@ A production-grade, AI-driven football betting system that generates data-driven
 - **Models**: Poisson (goals), Negative Binomial (corners), Zero-Inflated Poisson (cards).
 - **Strategy**: Forbidden Fruit 3.0 with CSS-based slip construction.
 
-## 🍎 Forbidden Fruit 3.0: Daily Operational Guide
+## 🍎 Forbidden Fruit 3.0: Legacy CLI Guide
 
-Follow this sequence daily to ensure system integrity and generate certified prediction slips.
+The commands below belong to the general CLI. They do not create Phase 19/20
+prospective evidence or replace the local operator workflow above.
+
+The earlier CLI sequence below remains for its separate slip workflow.
 
 ### 1. Data Refresh (Morning)
 Pull latest fixtures and recent results to keep the feature engine current.

@@ -249,6 +249,7 @@ def test_auto_retrain_underperforming_models_alerts_when_validation_fails(monkey
     trainer = DummyTrainer()
     alerter = DummyAlerter()
 
+    monkeypatch.setattr("src.config.model_state.require_unlocked", lambda *_: None)
     monkeypatch.setattr(nightly, "find_auto_retrain_targets", lambda registry, evals_df: [target])
     monkeypatch.setattr(nightly, "_latest_productive_key", lambda registry, model_name, league: next(key_sequence))
     monkeypatch.setattr(
@@ -332,6 +333,7 @@ def test_auto_retrain_underperforming_models_logs_missing_training_data_event(mo
     trainer = DummyTrainer()
     alerter = DummyAlerter()
 
+    monkeypatch.setattr("src.config.model_state.require_unlocked", lambda *_: None)
     monkeypatch.setattr(nightly, "find_auto_retrain_targets", lambda registry, evals_df: [target])
     monkeypatch.setattr(
         nightly,

@@ -7,8 +7,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Body
+from fastapi import APIRouter, Body, Depends
 
+from src.api.auth import require_api_key
 from src.api.cache import MODEL_HEALTH_CACHE_KEY, prediction_cache, prediction_cache_key
 from src.config.model_state import get_model_state
 from src.ml.registry import ModelRegistry
@@ -122,7 +123,7 @@ def cli_inspect_drift() -> Dict[str, Any]:
     return drift.inspect_global_state()
 
 
-@router.post("/reset-drift")
+@router.post("/reset-drift", dependencies=[Depends(require_api_key)])
 def cli_reset_drift() -> Dict[str, Any]:
     drift = DriftOrchestrator()
     cleared = []
@@ -138,7 +139,7 @@ def cli_reset_drift() -> Dict[str, Any]:
     }
 
 
-@router.post("/invalidate-cache")
+@router.post("/invalidate-cache", dependencies=[Depends(require_api_key)])
 def cli_invalidate_cache(
     body: Dict[str, Any] = Body(default_factory=dict),
     league: str | None = None,
@@ -177,7 +178,7 @@ def cli_cache_stats() -> Dict[str, Any]:
     return prediction_cache.stats()
 
 
-@router.post("/predict")
+@router.post("/predict", dependencies=[Depends(require_api_key)])
 def cli_predict(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
     predictor = Predictor()
     raw_predictions = predictor.predict_for_show_predictions(
@@ -191,7 +192,7 @@ def cli_predict(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, 
     return {"count": len(parsed), "predictions": parsed}
 
 
-@router.post("/train")
+@router.post("/train", dependencies=[Depends(require_api_key)])
 def cli_train(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
     leagues_value = body.get("leagues", "PL BL1 FL1 SA PD")
     if isinstance(leagues_value, list):
