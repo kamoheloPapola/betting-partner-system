@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Betting Partner · Local</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body><main>
+<header><div><p class="eyebrow">YOUR LOCAL FOOTBALL NOTEBOOK</p><h1>Betting Partner</h1><p class="muted">Frozen forecasts. Real results. An honest record.</p></div><button id="refresh">Refresh</button></header>
+<section class="cards" aria-label="System status">
+<article><p class="label">DATA HEALTH</p><h2 id="health">Checking…</h2><p id="health-detail" class="muted"></p></article>
+<article><p class="label">LAST COMPLETE FETCH · UTC</p><h2 id="last-success">—</h2><p class="muted">Freshness is measured from successful runs.</p></article>
+<article><p class="label">OFFICIAL FORECASTS</p><h2 id="forecast-count">—</h2><p class="muted">The first saved forecast stays unchanged.</p></article>
+</section><p id="notice" role="status"></p>
+<section class="forecasts"><div class="section-heading"><div><h2>Forecast record</h2><p class="muted">Probabilities are derived from the two frozen expected-goals values.</p></div>
+<label>Competition <select id="league"><option value="">All five leagues</option><option value="PL">Premier League</option><option value="BL1">Bundesliga</option><option value="FL1">Ligue 1</option><option value="SA">Serie A</option><option value="PD">La Liga</option></select></label></div>
+<div class="table-wrap"><table><thead><tr><th>Kickoff · UTC</th><th>Match</th><th>Expected goals</th><th>Home</th><th>Draw</th><th>Away</th><th>Over 2.5</th><th>BTTS</th><th>Record</th></tr></thead><tbody id="rows"></tbody></table></div>
+<p id="empty" class="muted" hidden>No frozen forecasts in this view yet.</p></section>
+<footer>Local-only · Match data only · Forecasts freeze before confirmed kickoff</footer>
+</main></body></html>
+
