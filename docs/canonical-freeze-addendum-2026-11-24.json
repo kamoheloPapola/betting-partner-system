@@ -50,7 +50,31 @@
     "path": "docs/canonical-loop.md",
     "frozen_sha256": "6f06ae8736bda88e5cb83db21854da4ae5f3ab9042bce1f5cc0217b408a93a89",
     "adoption_commit_sha256": "f7e9d3824626bde287fbc9e0a68aa567ef7a49df99e78e4db5db50ee62400429",
-    "updated_sha256": "3808e34c799ce7dfba5d1e6beea848673f3ed3ba4d388da9e8463c110cfc9edd",
+    "updated_sha256": "a7cec6bf5253bf45f8e63090f567f58edff4c50f49ee1e4a8bc8d88c7e6f0a28",
     "checksum_file": "docs/canonical-loop.md.sha256"
+  },
+  "legacy_backup_log_entries": {
+    "path": "logs/canonical-backup.jsonl",
+    "treatment": "Append-only history. The first two lines are scratch verification records and predate the production and heartbeat fields. Exclude them from production backup counts.",
+    "entries": [
+      {
+        "line": 1,
+        "context": "scratch",
+        "error_type": null,
+        "snapshot": "canonical-db-20261124T073933279359Z.sqlite3",
+        "state": "BACKUP_VERIFIED",
+        "step": "run",
+        "timestamp_utc": "2026-11-24T07:39:33.294035+00:00"
+      },
+      {
+        "line": 2,
+        "context": "scratch",
+        "error_type": "FileExistsError",
+        "snapshot": "canonical-db-20261124T073933279359Z.sqlite3",
+        "state": "FAILED",
+        "step": "restore-check",
+        "timestamp_utc": "2026-11-24T07:39:33.667702+00:00"
+      }
+    ]
   }
 }

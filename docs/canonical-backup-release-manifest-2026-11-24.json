@@ -1,0 +1,52 @@
+{
+  "date": "2026-11-24",
+  "scope": "Canonical SQLite backup log isolation and on-demand Task Scheduler verification",
+  "sha256": {
+    "scripts/run_canonical_backup.py": "32779cc83bed9a98da221a2a6c43c2e7a53b87c3644512600b3a8fe4a93eb2cc",
+    "tests/canonical/test_backup_job.py": "42fd43d59813585812545c9932d9f0f52f43349f594f92be9d94585b3c972f9c",
+    "docs/canonical-loop.md": "a7cec6bf5253bf45f8e63090f567f58edff4c50f49ee1e4a8bc8d88c7e6f0a28",
+    "docs/canonical-loop.md.sha256": "2bc44251669928167066eb6af10cf25c4224facb21ee5989318d7b8e7c1aeb54",
+    "docs/canonical-freeze-addendum-2026-11-24.json": "d1bc7011fdc1e416c033c59e08d1012f8cd5a451914718d0d46809e2adc0dba4"
+  },
+  "laptop_test": {
+    "environment": "Windows laptop outside the sandbox",
+    "pytest_command": ".\\venv\\Scripts\\python.exe -B -m pytest -ra --confcutdir=tests/canonical --basetemp=.tmp/canonical-backup-log-isolation-test-7aef923121014422a4792f03611bbdd2 tests/canonical",
+    "pytest_exit_code": 0,
+    "pytest_summary": "============================ 435 passed in 25.08s =============================",
+    "log_path": "logs/canonical-backup.jsonl",
+    "before_sha256": "e30083de03a2eb92016da83d55e44c5097baae36192d9c8da6e96a1dda213e67",
+    "after_sha256": "e30083de03a2eb92016da83d55e44c5097baae36192d9c8da6e96a1dda213e67",
+    "before_bytes": 366,
+    "after_bytes": 366,
+    "ignore_rule": ".gitignore:46:/logs/\tlogs/canonical-backup.jsonl",
+    "api_tests_passed": 4,
+    "skipped": 0
+  },
+  "scheduled_task_on_demand": {
+    "task": "BettingPartnerCanonicalBackup",
+    "launch": "Windows Task Scheduler on demand",
+    "exit_code": 0,
+    "run_local": "2026-11-24T09:54:01.0000000+02:00",
+    "next_local": "2026-11-24T18:30:00.0000000+02:00",
+    "historical_log_prefix_sha256": "e30083de03a2eb92016da83d55e44c5097baae36192d9c8da6e96a1dda213e67",
+    "production_log": {
+      "error_type": null,
+      "heartbeat": "SENT",
+      "production": true,
+      "snapshot": "canonical-db-20261124T075402582742Z.sqlite3",
+      "state": "BACKUP_VERIFIED",
+      "step": "run",
+      "timestamp_utc": "2026-11-24T07:54:04.134550+00:00"
+    },
+    "sidecar_name": "canonical-db-20261124T075402582742Z.sqlite3.json",
+    "snapshot_logical_sha256": "9beba7ac9282b33c244c11b02865506e721b9f01907c00c7ce27b5a6fe8880d9",
+    "copy_integrity": "ok",
+    "healthchecks": {
+      "check": "Canonical SQLite backup",
+      "date": "2026-11-24",
+      "time": "09:54 SAST",
+      "method": "HTTPS GET",
+      "status": "OK"
+    }
+  }
+}

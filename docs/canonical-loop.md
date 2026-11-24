@@ -563,18 +563,33 @@ checks SQLite integrity, and hashes the logical SQL dump. A busy or timed-out
 snapshot gets one retry with a fresh staging name. The task exclusively
 creates a UTC-timestamped `canonical-db-*.sqlite3` under the project's Drive
 `canonical-snapshots` folder, reopens it, and compares integrity and logical
-hash before writing its `.sqlite3.json` sidecar. It retains the latest 14
-verified pairs. A missing destination, copy collision, or failed verification
-exits nonzero before pruning. Unpaired files and unrelated names are outside
+hash before writing its `.sqlite3.json` sidecar. Retention keeps the current
+verified pair plus the 13 newest earlier pairs, including after a clock
+rollback. A missing destination, copy collision, or failed verification exits
+nonzero before pruning. Unpaired files and unrelated names are outside
 retention.
 
 Use a separate Healthchecks check with a 24-hour period, three hours of
 grace, GET allowed, URL-based outcomes, and email alerts. Enter its URL
 privately and set `CANONICAL_BACKUP_HEARTBEAT_URL` in the scheduled user's
-environment. The backup sends one HTTPS ping with a 10-second deadline. A
-failure ping uses `/fail` and carries only the failed step name. The script
-reports a delivery failure with a nonzero exit. Keep both heartbeat URLs out
-of scratch and restore-drill sessions.
+environment. The backup can ping only with the default database and Drive
+destination. Each HTTPS attempt has a 10-second deadline. A timeout,
+connection error, HTTP 429, or 5xx response gets one retry. A failure ping
+uses `/fail` and carries only the failed step name. The script reports a
+delivery failure with a nonzero exit. Keep both heartbeat URLs out of scratch
+and restore-drill sessions.
+
+The default database is relative to the checkout containing the backup
+script. A second checkout's default run can still ping the production backup
+check if it inherits the URL. Unset the URL and pass a non-default database
+or destination explicitly for scratch work in another checkout.
+
+`logs/canonical-backup.jsonl` records one line for each command invocation,
+including scheduled runs and restore checks. It records the UTC timestamp,
+state, step, exception class on failure, and snapshot name when available.
+The `production` field is true for backup runs using both default paths. The
+`heartbeat` field records delivery state. Restore checks and registration
+record `DISABLED`. The runtime log is append-only and excluded from Git.
 
 Use these commands from a terminal with the appropriate environment. The
 scheduled task uses `run --require-heartbeat`. For a manual copy with the
