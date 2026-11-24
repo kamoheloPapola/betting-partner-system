@@ -464,7 +464,7 @@ outside the sandbox. Windows sandbox loopback can stall API fixtures at
 `socket.accept` while creating an asyncio socket pair. Report API tests
 omitted from sandbox runs and use the laptop result as their verification.
 Record SHA-256 source and test hashes alongside the exact command and result.
-[Runbook checksum](canonical-loop.md.sha256) · [Freeze manifest addendum](canonical-freeze-addendum-2026-11-24.json)
+[Current runbook hash](canonical-backup-retention-manifest-2026-11-24.json) · [Launch runbook checksum](canonical-loop.md.sha256) · [Freeze manifest addendum](canonical-freeze-addendum-2026-11-24.json)
 
 ## Data authority and failure behavior
 
@@ -564,10 +564,14 @@ snapshot gets one retry with a fresh staging name. The task exclusively
 creates a UTC-timestamped `canonical-db-*.sqlite3` under the project's Drive
 `canonical-snapshots` folder, reopens it, and compares integrity and logical
 hash before writing its `.sqlite3.json` sidecar. Retention keeps the current
-verified pair plus the 13 newest earlier pairs, including after a clock
-rollback. A missing destination, copy collision, or failed verification exits
-nonzero before pruning. Unpaired files and unrelated names are outside
-retention.
+pair and the 29 newest other verified pairs, even after a clock rollback.
+It also keeps the newest verified pair in each of the last 12 completed
+UTC calendar months. The filename timestamp determines the month and sort
+order. An empty month contributes no keeper, and a pair covered by both
+rules counts once. A missing destination, copy collision, or failed
+verification exits nonzero before pruning. Retention counts and deletes
+only pairs with matching, valid verification sidecars. Orphans and
+unrelated files are left alone.
 
 Use a separate Healthchecks check with a 24-hour period, three hours of
 grace, GET allowed, URL-based outcomes, and email alerts. Enter its URL
@@ -588,8 +592,9 @@ or destination explicitly for scratch work in another checkout.
 including scheduled runs and restore checks. It records the UTC timestamp,
 state, step, exception class on failure, and snapshot name when available.
 The `production` field is true for backup runs using both default paths. The
-`heartbeat` field records delivery state. Restore checks and registration
-record `DISABLED`. The runtime log is append-only and excluded from Git.
+`heartbeat` field records delivery state. When pruning completes, `pruned`
+records the number of pairs removed. Restore checks and registration record
+`DISABLED`. The runtime log is append-only and excluded from Git.
 
 Use these commands from a terminal with the appropriate environment. The
 scheduled task uses `run --require-heartbeat`. For a manual copy with the

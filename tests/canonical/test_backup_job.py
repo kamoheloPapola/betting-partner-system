@@ -1,6 +1,7 @@
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
+import os
 from pathlib import Path
 import shutil
 import sqlite3
@@ -49,14 +50,24 @@ def job(tmp_path, monkeypatch):
     return database, destination, calls, run
 
 
-def completed(destination, day):
-    old = destination / f"canonical-db-202611{day:02d}T163000000000Z.sqlite3"
+def completed(destination, timestamp):
+    old = destination / f"canonical-db-{timestamp:%Y%m%dT%H%M%S%fZ}.sqlite3"
     old.write_bytes(b"old snapshot")
     (old.with_suffix(".sqlite3.json")).write_text(json.dumps({
         "snapshot": old.name, "logical_sha256": "0" * 64, "copy_logical_sha256": "0" * 64,
         "local_integrity": "ok", "copy_integrity": "ok",
     }), encoding="utf-8")
     return old
+
+
+def november_pairs(destination, count):
+    start = NOW.replace(day=2)
+    return [completed(destination, start + timedelta(hours=hour)) for hour in range(count)]
+
+
+def assert_pair(path, *, kept):
+    assert path.exists() is kept
+    assert path.with_suffix(".sqlite3.json").exists() is kept
 
 
 def test_snapshot_copy_and_restore_use_real_sqlite(job, tmp_path):
@@ -91,37 +102,102 @@ def test_scratch_paths_skip_production_heartbeat(job, tmp_path, monkeypatch, alt
 
 def test_prune_only_completed_pairs_matching_the_job_pattern(job):
     _, destination, calls, run = job
-    old = [completed(destination, day) for day in range(1, 17)]
+    old = november_pairs(destination, 33)
+    invalid = completed(destination, NOW.replace(day=1))
+    invalid_sidecar = invalid.with_suffix(".sqlite3.json")
+    invalid_record = json.loads(invalid_sidecar.read_text(encoding="utf-8"))
+    invalid_record["copy_logical_sha256"] = "1" * 64
+    invalid_sidecar.write_text(json.dumps(invalid_record), encoding="utf-8")
     other_files = [destination / name for name in (
-        "football.sqlite3", "canonical-db-personal.sqlite3", "notes.json",
+        "football.sqlite3", "canonical-db-personal.sqlite3", "canonical-db-personal.sqlite3.json", "notes.json",
         "canonical-db-20261101T163000000001Z.sqlite3", "canonical-db-20261101T163000000002Z.sqlite3.json",
     )]
     for path in other_files:
         path.write_bytes(b"keep this")
     result = run()
-    assert result["pruned"] == 3
-    assert all(not p.exists() and not p.with_suffix(".sqlite3.json").exists() for p in old[:3])
-    assert all(p.exists() and p.with_suffix(".sqlite3.json").exists() for p in old[3:])
+    assert result["pruned"] == 4
+    for path in old[:4]:
+        assert_pair(path, kept=False)
+    for path in old[4:] + [invalid]:
+        assert_pair(path, kept=True)
+    assert json.loads(invalid_sidecar.read_text(encoding="utf-8")) == invalid_record
     assert all(p.read_bytes() == b"keep this" for p in other_files)
     assert calls == [(URL, None, 10)]
 
 
 def test_prune_preserves_current_snapshot_after_backward_clock_jump(job):
     _, destination, _, run = job
-    old = [completed(destination, day) for day in range(1, 17)]
+    old = november_pairs(destination, 33)
     result = run(now=NOW.replace(month=10))
     current = destination / result["snapshot"]
     assert current.name < old[0].name
-    assert current.is_file() and current.with_suffix(".sqlite3.json").is_file()
-    assert result["pruned"] == 3
-    assert [path for path in old if path.exists()] == old[3:]
-    assert len(list(destination.glob("*.sqlite3"))) == 14
+    assert_pair(current, kept=True)
+    assert result["pruned"] == 4
+    assert [path for path in old if path.exists()] == old[4:]
+    assert len(list(destination.glob("*.sqlite3"))) == 30
+
+
+def test_monthly_keepers_use_completed_utc_months_and_filename_timestamps(job):
+    _, destination, _, run = job
+    november_pairs(destination, 29)
+    october_end = NOW.replace(month=11, day=1, hour=0, minute=0) - timedelta(microseconds=1)
+    october_latest = completed(destination, october_end)
+    october_earlier = completed(destination, october_end - timedelta(days=1))
+    november_open = completed(destination, october_end + timedelta(microseconds=1))
+    oldest_month_start = NOW.replace(year=2025, day=1, hour=0, minute=0)
+    oldest_keeper = completed(destination, oldest_month_start)
+    too_old = completed(destination, oldest_month_start - timedelta(microseconds=1))
+    # Drive modification times favor the losing snapshot. The filename must win.
+    os.utime(october_latest, (0, 0))
+    os.utime(october_earlier, (NOW.timestamp(), NOW.timestamp()))
+
+    assert run()["pruned"] == 3
+    for path in (october_latest, oldest_keeper):
+        assert_pair(path, kept=True)
+    for path in (october_earlier, november_open, too_old):
+        assert_pair(path, kept=False)
+
+
+def test_empty_month_does_not_extend_the_monthly_window(job):
+    _, destination, _, run = job
+    november_pairs(destination, 29)
+    months = [NOW.replace(year=2025, month=month) for month in (10, 11, 12)]
+    months.extend(NOW.replace(month=month) for month in range(1, 11) if month != 9)
+    too_old, *monthly_keepers = [completed(destination, timestamp) for timestamp in months]
+
+    assert run()["pruned"] == 1
+    assert_pair(too_old, kept=False)
+    for path in monthly_keepers:
+        assert_pair(path, kept=True)
+    assert len(list(destination.glob("*.sqlite3"))) == 30 + 11
+
+
+def test_latest_pair_in_month_survives_after_aging_out_of_daily_window(job):
+    _, destination, _, run = job
+    october_earlier = completed(destination, NOW.replace(month=10, day=30))
+    october_latest = completed(destination, NOW.replace(month=10, day=31))
+    assert run(now=NOW.replace(day=1))["pruned"] == 0
+    november_pairs(destination, 29)
+
+    assert run()["pruned"] == 2
+    assert_pair(october_earlier, kept=False)
+    assert_pair(october_latest, kept=True)
+
+
+def test_first_run_after_upgrade_keeps_all_fourteen_existing_pairs(job):
+    _, destination, _, run = job
+    previous = november_pairs(destination, 14)
+
+    result = run()
+    assert result["pruned"] == 0
+    for path in previous + [destination / result["snapshot"]]:
+        assert_pair(path, kept=True)
 
 
 @pytest.mark.parametrize("mismatch", [False, True], ids=["corrupt-copy", "logical-mismatch"])
 def test_failed_copy_verification_does_not_prune(job, monkeypatch, mismatch):
     _, destination, calls, run = job
-    old = [completed(destination, day) for day in range(1, 17)]
+    old = november_pairs(destination, 33)
     copy = shutil.copyfileobj
 
     def alter(reader, writer):
@@ -254,7 +330,7 @@ def test_cli_logs_one_masked_line_per_invocation(job, monkeypatch, capsys):
     logtext = backup.LOG.read_text(encoding="utf-8")
     assert URL not in stdout + logtext
     verified, register_error, restore_error = [json.loads(line) for line in stdout.splitlines()]
-    assert verified["snapshot"] == NAME and verified["state"] == "BACKUP_VERIFIED"
+    assert verified["snapshot"] == NAME and verified["state"] == "BACKUP_VERIFIED" and verified["pruned"] == 0
     assert register_error == {"state": "FAILED", "step": "register", "error_type": "RuntimeError"}
     assert restore_error == {"state": "FAILED", "step": "restore-check",
                              "error_type": "FileExistsError", "snapshot": NAME}
@@ -262,7 +338,7 @@ def test_cli_logs_one_masked_line_per_invocation(job, monkeypatch, capsys):
     assert all(datetime.fromisoformat(record.pop("timestamp_utc")).tzinfo is not None for record in records)
     assert records == [
         {"state": "BACKUP_VERIFIED", "step": "run", "error_type": None, "snapshot": NAME,
-         "production": True, "heartbeat": "SENT"},
+         "production": True, "heartbeat": "SENT", "pruned": 0},
         {**register_error, "snapshot": None, "production": False, "heartbeat": "DISABLED"},
         {**restore_error, "production": False, "heartbeat": "DISABLED"},
     ]

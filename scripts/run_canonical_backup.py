@@ -26,8 +26,10 @@ DESTINATION = Path("G:/My Drive/evidence-backups/betting_partner_system/canonica
 STAGING = ROOT / ".tmp/canonical-backup-staging"
 LOG = ROOT / "logs/canonical-backup.jsonl"
 HEARTBEAT_ENV = "CANONICAL_BACKUP_HEARTBEAT_URL"
-SNAPSHOT_NAME = re.compile(r"canonical-db-[0-9]{8}T[0-9]{12}Z\.sqlite3")
-KEEP = 14
+SNAPSHOT_TIMESTAMP = "%Y%m%dT%H%M%S%fZ"
+SNAPSHOT_NAME = re.compile(r"canonical-db-(?P<timestamp>[0-9]{8}T[0-9]{12}Z)\.sqlite3")
+DAILY_KEEP = 30
+MONTHLY_KEEP = 12
 BACKUP_TIMEOUT = 35
 
 
@@ -123,20 +125,40 @@ def verified_sidecar(path):
     return digest
 
 
+def snapshot_timestamp(path):
+    match = SNAPSHOT_NAME.fullmatch(path.name)
+    if match is None:
+        raise ValueError("Unexpected snapshot name")
+    return datetime.strptime(match["timestamp"], SNAPSHOT_TIMESTAMP)
+
+
 def prune_completed(destination, current):
+    created = snapshot_timestamp(current)
+    current_month = created.year * 12 + created.month
     completed = []
     for sidecar in destination.glob("canonical-db-*.sqlite3.json"):
         snapshot = sidecar.with_suffix("")
-        if (snapshot == current or not SNAPSHOT_NAME.fullmatch(snapshot.name) or not snapshot.is_file()
+        if (snapshot == current or not snapshot.is_file()
                 or snapshot.is_symlink() or sidecar.is_symlink() or not sidecar.is_file()):
             continue
         try:
+            timestamp = snapshot_timestamp(snapshot)
             verified_sidecar(snapshot)
         except (ValueError, AttributeError, FileNotFoundError):
             continue
-        completed.append((snapshot, sidecar))
+        completed.append((timestamp, snapshot, sidecar))
+
+    completed.sort(reverse=True)
     # Reserve one slot for the verified snapshot from this run, even after a clock rollback.
-    excess = sorted(completed, reverse=True)[KEEP - 1:]
+    keep = {snapshot for _, snapshot, _ in completed[:DAILY_KEEP - 1]}
+    monthly_keepers = {}
+    for timestamp, snapshot, _ in completed:
+        month = timestamp.year * 12 + timestamp.month
+        if current_month - MONTHLY_KEEP <= month < current_month:
+            monthly_keepers.setdefault(month, snapshot)
+    keep.update(monthly_keepers.values())
+
+    excess = [(snapshot, sidecar) for _, snapshot, sidecar in completed if snapshot not in keep]
     for snapshot, sidecar in excess:
         sidecar.unlink(missing_ok=True)
         snapshot.unlink(missing_ok=True)
@@ -173,7 +195,7 @@ def run_backup(database, destination, staging, *, require_heartbeat=False, trans
             step = "verify_local"
             logical = inspect_snapshot(source)
             created = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-            target = destination / f"canonical-db-{created:%Y%m%dT%H%M%S%fZ}.sqlite3"
+            target = destination / f"canonical-db-{created:{SNAPSHOT_TIMESTAMP}}.sqlite3"
             snapshot_name = target.name
             sidecar = target.with_suffix(".sqlite3.json")
             step = "copy"
@@ -277,6 +299,8 @@ def append_log(command, result, *, production):
         "production": production,
         "heartbeat": result.get("heartbeat", "DISABLED"),
     }
+    if "pruned" in result:
+        entry["pruned"] = result["pruned"]
     LOG.parent.mkdir(parents=True, exist_ok=True)
     with LOG.open("a", encoding="utf-8", newline="\n") as stream:
         stream.write(json.dumps(entry, sort_keys=True) + "\n")
