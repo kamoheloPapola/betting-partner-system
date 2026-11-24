@@ -1,12 +1,22 @@
+from hashlib import sha256
 import sqlite3
 import pytest
-from src.canonical.store import Store
+from src.canonical.provider import project_matches
+from src.canonical.store import SCHEMA, Store
 from src.canonical.clock import CanonicalError, utc
 
 T0="2026-01-01T00:00:00Z"
 T1="2026-01-02T15:00:00Z"
 T2="2026-01-03T00:00:00Z"
 T3="2026-01-04T00:00:00Z"
+
+
+def test_reviewed_sql_schema_matches_byte_for_byte():
+    # v2 deliberately adds forecast run/waiver provenance and text run keys.
+    # Pin the entire SQL string so every other byte keeps the strict parity check.
+    assert sha256(SCHEMA.encode("utf-8")).hexdigest() == (
+        "19fc67f425c0560c632fcd1ba6f999072503cecdb5b1a590b569636a2d356bd0"
+    )
 
 
 def fixture(mid=1, **changes):
@@ -28,14 +38,33 @@ def db(tmp_path):
 
 def freeze(db, at=T0, **kwargs):
     f=dict(db.db.execute("SELECT * FROM fixtures WHERE id=1").fetchone())
-    return db.freeze(f,at,1.4,1.1,"TEST","goals-v1","f"*64,kwargs.get("known"))
+    return db.freeze(f,at,1.4,1.1,"TEST","goals-v1","f"*64,kwargs.get("known"), run_id=db.start_run(at))
 
 
 def test_first_forecast_insert_only_and_idempotent(db):
     assert freeze(db)
+    original, = db.forecasts()
     assert not freeze(db,at="2026-01-01T01:00:00Z")
-    assert len(db.forecasts())==1
-    assert db.forecasts()[0]["frozen_utc"]==utc(T0)
+    assert db.forecasts() == [original]
+    assert original["frozen_utc"] == utc(T0)
+    assert original["run_id"] != db.last_run()["id"]
+
+
+def test_forecast_insert_without_run_id_is_rejected_by_schema(db):
+    db.start_run(T0)
+    with pytest.raises(sqlite3.IntegrityError, match=r"NOT NULL constraint failed: forecasts\.run_id"):
+        db.db.execute("""INSERT INTO forecasts(fixture_id,frozen_utc,kickoff_utc,home_xg,away_xg,
+                         model_id,market_version,feature_hash) VALUES(?,?,?,?,?,?,?,?)""",
+                      (1, utc(T0), utc(T1), 1.4, 1.1, "TEST", "goals-v1", "f" * 64))
+    assert db.forecasts() == []
+
+
+def test_store_refuses_old_schema_without_attempting_a_migration(tmp_path):
+    path = tmp_path / "v1.sqlite3"
+    with sqlite3.connect(path) as db:
+        db.execute("PRAGMA user_version=1")
+    with pytest.raises(CanonicalError, match="UNSUPPORTED_DATABASE_SCHEMA"):
+        Store(path)
 
 
 @pytest.mark.parametrize("sql",[
@@ -113,6 +142,36 @@ def test_cancelled_never_settled(db):
     with db.transaction():db.ingest([fixture(status="CANCELLED")],T2)
     assert db.forecasts()[0]["settlement"]=="VOID"
     assert not db.history(T2)
+
+
+@pytest.mark.parametrize("void_status", ["AWARDED", "CANCELLED"])
+def test_live_projection_history_and_settlement_match_pre_refactor_contract(db, void_status):
+    assert freeze(db)
+    assert db.pending_seasons() == [("PL", 2025)]
+    match = {
+        "id": 1, "utcDate": T1, "season": {"startDate": "2025-08-01"},
+        "homeTeam": {"id": 57, "name": "Home"}, "awayTeam": {"id": 61, "name": "Away"},
+    }
+    payload = {"competition": {"code": "PL"}, "resultSet": {"count": 1}, "matches": [match]}
+    match.update(status="FINISHED", score={"fullTime": {"home": 2, "away": 1}})
+    finished, = project_matches(payload, "PL", 2025, T2)
+    assert (finished["home_goals"], finished["away_goals"]) == (2, 1)
+    with db.transaction():
+        assert db.ingest([finished], T2) == {"fixtures_changed": 1, "results_added": 1, "results_corrected": 0}
+    settled, = db.forecasts()
+    assert (settled["settlement"], settled["result_revision"]) == ("SETTLED", 1)
+
+    match.update(status=void_status, score="must not be read")
+    void, = project_matches(payload, "PL", 2025, T3)
+    assert "home_goals" not in void and "away_goals" not in void
+    with db.transaction():
+        assert db.ingest([void], T3) == {"fixtures_changed": 1, "results_added": 0, "results_corrected": 0}
+    history, = db.history(T2)
+    assert (history["fixture_id"], history["home_goals"], history["away_goals"]) == (1, 2, 1)
+    assert db.history(T3) == []
+    settlement, = db.forecasts()
+    assert (settlement["settlement"], settlement["result_revision"]) == ("VOID", 1)
+    assert db.pending_seasons() == []
 
 
 def test_local_backup_is_consistent_and_exclusive(db,tmp_path):

@@ -17,9 +17,14 @@ def utc(value):
             value = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError as exc:
             raise CanonicalError("INVALID_UTC_TIMESTAMP") from exc
-    if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+    if not isinstance(value, datetime) or value.tzinfo is None:
         raise CanonicalError("NAIVE_OR_INVALID_TIMESTAMP")
-    return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    try:
+        if value.utcoffset() is None:
+            raise CanonicalError("NAIVE_OR_INVALID_TIMESTAMP")
+        return value.astimezone(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+    except (ValueError, TypeError, OverflowError) as exc:
+        raise CanonicalError("INVALID_UTC_TIMESTAMP") from exc
 
 
 def now_utc():

@@ -5,9 +5,11 @@ from datetime import datetime,timezone
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import sqlite3
 
+from . import heartbeat
 from .clock import CanonicalError,canonical
 from .store import Store
 from .provider import FootballData,LEAGUES
@@ -34,7 +36,9 @@ def parser():
     commands=p.add_subparsers(dest="command",required=True)
     run=commands.add_parser("run",help="Fetch, freeze eligible upcoming forecasts and settle finished fixtures once")
     run.add_argument("--stored-key",action="store_true",help="Use the current Windows user's DPAPI-protected key")
-    commands.add_parser("status",help="Read actual freshness, failures and halt state")
+    run.add_argument("--fixture-waiver", type=Path, help="Owner-approved waiver for one due fixture")
+    run.add_argument("--fixture-waiver-sha256", help="Independently reviewed waiver digest")
+    commands.add_parser("status",help="Read freshness, team mapping rejections, failures and halt state")
     forecasts=commands.add_parser("forecasts",help="Read frozen forecasts; never regenerate")
     forecasts.add_argument("--league",choices=LEAGUES)
     forecasts.add_argument("--limit",type=int,default=200)
@@ -59,6 +63,7 @@ def parser():
 
 def main(argv=None):
     args=parser().parse_args(argv)
+    heartbeat_attempt = heartbeat.Attempt() if args.command == "run" else None
     try:
         if args.command=="configure-key":
             from .credentials import save_key
@@ -73,9 +78,15 @@ def main(argv=None):
                 validate_adoption(reference["artifact_path"],reference["artifact_sha256"])
                 if store.halted():raise CanonicalError("LIVE_BUG_GUARD_HALT")
                 state=health(store)
-                if state["state"]!="GREEN":raise CanonicalError("SUCCESSFUL_LIVE_SMOKE_REQUIRED")
+                if state["reasons"] or set(state["warnings"]).difference(heartbeat.WARNINGS.values()):
+                    raise CanonicalError("SUCCESSFUL_LIVE_SMOKE_REQUIRED")
+                configuration = heartbeat.status()
+                if configuration["state"] == "NOT_CONFIGURED":
+                    raise CanonicalError("HEARTBEAT_NOT_CONFIGURED")
+                if state["heartbeat"]["state"] == "FAILED":
+                    raise CanonicalError("HEARTBEAT_FAILED")
             load_key(args.database)
-            print(canonical({"state":"SCHEDULER_READY","model_id":reference["id"]}))
+            print(canonical({"state":"SCHEDULER_READY","model_id":reference["id"],"heartbeat":configuration}))
             return 0
         if args.command in ("check-model","adopt"):
             from .lifecycle import validate_adoption,adopt
@@ -94,6 +105,9 @@ def main(argv=None):
             uvicorn.run(create_app(args.database),host="127.0.0.1",port=args.port,access_log=False)
             return 0
         if args.command=="run":
+            if (args.fixture_waiver is None) != (args.fixture_waiver_sha256 is None):
+                raise CanonicalError("FORECAST_WAIVER_PATH_AND_PIN_REQUIRED")
+            waiver = (args.fixture_waiver, args.fixture_waiver_sha256) if args.fixture_waiver is not None else None
             # Validate the key before creating a database or making a request.
             if args.stored_key:
                 from .credentials import load_key
@@ -101,11 +115,19 @@ def main(argv=None):
             else:key=os.environ.get("FOOTBALL_DATA_API_KEY")
             client=FootballData(key)
             with Store(args.database) as store:
-                result=run_once(store,client,notifier=notify_local)
-            print(canonical(result))
-            return result["exit_code"]
+                run_result=run_once(store,client,notifier=notify_local,fixture_waiver=waiver,
+                                    heartbeat_attempt=heartbeat_attempt)
+            print(canonical(run_result))
+            return run_result["exit_code"]
         if not args.database.exists():
-            print(canonical({"state":"NEEDS_SETUP","error_code":"DATABASE_NOT_INITIALIZED"}))
+            result={"state":"NEEDS_SETUP","error_code":"DATABASE_NOT_INITIALIZED"}
+            if args.command=="status":
+                result["team_mapping"]={"state":"NOT_EVALUATED"}
+                result["heartbeat"] = heartbeat.status()
+                warning = heartbeat.WARNINGS.get(result["heartbeat"]["state"])
+                if warning:
+                    result["warnings"] = [warning]
+            print(canonical(result))
             return 2
         if args.command=="status":
             with Store(args.database,readonly=True) as store:result=health(store)
@@ -120,14 +142,27 @@ def main(argv=None):
             result={"state":"BACKUP_CREATED","path":str(path)}
         print(canonical(result))
         return 0
-    except (CanonicalError,OSError,ValueError,KeyError,sqlite3.Error) as exc:
-        code=exc.code if isinstance(exc,CanonicalError) else "OPERATOR_"+type(exc).__name__.upper()
-        print(canonical({"state":"FAILED","error_code":code}))
-        if args.command=="run":notify_local(code)
-        return 2
     except KeyboardInterrupt:
         print(canonical({"state":"INTERRUPTED"}))
         return 130
+    except Exception as exc:
+        if args.command == "scheduler-ready":
+            failure = {"state": "NOT_READY", "error_type": type(exc).__name__}
+            if isinstance(exc, CanonicalError) and isinstance(exc.code, str) and re.fullmatch(r"[A-Z][A-Z0-9_]{0,99}", exc.code):
+                failure["error_code"] = exc.code
+            print(canonical(failure))
+            return 2
+        if isinstance(exc, (CanonicalError,OSError,ValueError,KeyError,sqlite3.Error)):
+            code=exc.code if isinstance(exc,CanonicalError) else "OPERATOR_"+type(exc).__name__.upper()
+            failure = {"state":"FAILED","error_code":code}
+            if heartbeat_attempt is not None:
+                failure["heartbeat"] = heartbeat_attempt.report("FAILED")
+            print(canonical(failure))
+            if args.command=="run":notify_local(code)
+            return 2
+        if heartbeat_attempt is not None:
+            heartbeat_attempt.report("FAILED")
+        raise
 
 
 if __name__=="__main__":

@@ -5,10 +5,13 @@ import json
 import math
 import sqlite3
 import time
+from uuid import uuid4
 
 from .clock import CanonicalError, canonical, digest, utc
+from .provider import STATE_UPDATING_STATUS
 
-SCHEMA = """
+SCHEMA_VERSION = 2
+SCHEMA = f"""
 BEGIN IMMEDIATE;
 CREATE TABLE fixtures(
  id INTEGER PRIMARY KEY CHECK(id>0), league TEXT NOT NULL, season INTEGER NOT NULL,
@@ -41,6 +44,9 @@ CREATE TABLE forecasts(
  away_xg REAL NOT NULL CHECK(away_xg>0 AND away_xg<=1.7976931348623157e308),
  model_id TEXT NOT NULL REFERENCES models(id), market_version TEXT NOT NULL,
  feature_hash TEXT NOT NULL, history_known_utc TEXT,
+ run_id TEXT NOT NULL REFERENCES runs(id),
+ waiver_sha256 TEXT CHECK(waiver_sha256 IS NULL OR
+   (length(waiver_sha256)=64 AND waiver_sha256 NOT GLOB '*[^0-9a-f]*')),
  CHECK(frozen_utc<kickoff_utc),
  CHECK(history_known_utc IS NULL OR history_known_utc<=frozen_utc));
 CREATE TRIGGER no_forecast_update BEFORE UPDATE ON forecasts
@@ -59,6 +65,10 @@ CREATE TRIGGER forecast_model_eligible BEFORE INSERT ON forecasts
    WHERE m.id=NEW.model_id AND m.registered_utc<=NEW.frozen_utc
    AND a.sequence=(SELECT MAX(sequence) FROM model_activations WHERE activated_utc<=NEW.frozen_utc))
  BEGIN SELECT RAISE(ABORT,'Forecast requires the model adopted before freeze'); END;
+CREATE TRIGGER forecast_run_eligible BEFORE INSERT ON forecasts
+ WHEN NEW.run_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM runs
+   WHERE id=NEW.run_id AND status='RUNNING')
+ BEGIN SELECT RAISE(ABORT,'Forecast requires a running forecast run'); END;
 CREATE TABLE results(
  fixture_id INTEGER NOT NULL REFERENCES fixtures(id), revision INTEGER NOT NULL,
  home_goals INTEGER NOT NULL CHECK(typeof(home_goals)='integer' AND home_goals>=0),
@@ -74,12 +84,12 @@ CREATE TRIGGER no_result_replace BEFORE INSERT ON results
  WHEN EXISTS(SELECT 1 FROM results WHERE fixture_id=NEW.fixture_id AND revision=NEW.revision)
  BEGIN SELECT RAISE(ABORT,'Result revision already exists'); END;
 CREATE TRIGGER result_finished_only BEFORE INSERT ON results
- WHEN NOT EXISTS(SELECT 1 FROM fixtures WHERE id=NEW.fixture_id AND status='FINISHED')
+ WHEN NOT EXISTS(SELECT 1 FROM fixtures WHERE id=NEW.fixture_id AND status='{STATE_UPDATING_STATUS}')
  BEGIN SELECT RAISE(ABORT,'Only FINISHED fixtures can be settled'); END;
 CREATE VIEW latest_results AS SELECT r.* FROM results r
  WHERE r.revision=(SELECT MAX(x.revision) FROM results x WHERE x.fixture_id=r.fixture_id);
 CREATE TABLE runs(
- id INTEGER PRIMARY KEY AUTOINCREMENT, started_utc TEXT NOT NULL, ended_utc TEXT,
+ id TEXT PRIMARY KEY NOT NULL, started_utc TEXT NOT NULL, ended_utc TEXT,
  status TEXT NOT NULL, error_code TEXT, counts_json TEXT);
 CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT NOT NULL);
 CREATE TABLE operator_decisions(
@@ -95,7 +105,7 @@ CREATE TRIGGER no_fixture_revision_delete BEFORE DELETE ON fixture_revisions
  BEGIN SELECT RAISE(ABORT,'Fixture history is append-only'); END;
 CREATE INDEX result_observation ON results(observed_utc);
 CREATE INDEX upcoming ON fixtures(status,kickoff_utc);
-PRAGMA user_version=1;
+PRAGMA user_version={SCHEMA_VERSION};
 COMMIT;
 """
 
@@ -115,7 +125,7 @@ class Store:
         if version == 0 and not readonly:
             self.db.execute("PRAGMA journal_mode=WAL")
             self.db.executescript(SCHEMA)
-        elif version != 1:
+        elif version != SCHEMA_VERSION:
             self.db.close()
             raise CanonicalError("UNSUPPORTED_DATABASE_SCHEMA")
 
@@ -135,17 +145,21 @@ class Store:
             yield self
             self.db.execute("COMMIT")
         except BaseException:
-            self.db.execute("ROLLBACK")
+            if self.db.in_transaction:
+                self.db.execute("ROLLBACK")
             raise
 
     def start_run(self, at):
-        return self.db.execute("INSERT INTO runs(started_utc,status) VALUES(?,'RUNNING')", (utc(at),)).lastrowid
+        run_id = uuid4().hex
+        self.db.execute("INSERT INTO runs(id,started_utc,status) VALUES(?,?,'RUNNING')", (run_id, utc(at)))
+        return run_id
 
     def finish_run(self, run_id, at, status, *, counts=None, error_code=None):
         if status not in ("SUCCESS", "FAILED"):
             raise CanonicalError("INVALID_RUN_STATE")
+        receipt = {"waiver_sha256": None, **(counts or {}), "run_id": run_id}
         self.db.execute("UPDATE runs SET ended_utc=?,status=?,error_code=?,counts_json=? WHERE id=?",
-                        (utc(at), status, error_code, canonical(counts or {}), run_id))
+                        (utc(at), status, error_code, canonical(receipt), run_id))
 
     def register_model(self, model_id, path, sha256, at):
         existing = self.db.execute("SELECT * FROM models WHERE id=?", (model_id,)).fetchone()
@@ -194,7 +208,7 @@ class Store:
                 rev = self.db.execute("SELECT COALESCE(MAX(revision),0)+1 FROM fixture_revisions WHERE fixture_id=?", (item["id"],)).fetchone()[0]
                 self.db.execute("INSERT INTO fixture_revisions VALUES(?,?,?,?)", (item["id"],rev,at,canonical(payload)))
                 counts["fixtures_changed"] += 1
-            if item["status"] != "FINISHED":
+            if item["status"] != STATE_UPDATING_STATUS:
                 continue
             h,a = item.get("home_goals"),item.get("away_goals")
             if any(isinstance(x,bool) or not isinstance(x,int) or x<0 for x in (h,a)):
@@ -211,16 +225,20 @@ class Store:
             counts["results_corrected" if previous else "results_added"] += 1
         return counts
 
-    def freeze(self, fixture, at, home_xg, away_xg, model_id, market_version, feature_hash, history_known_utc):
+    def freeze(self, fixture, at, home_xg, away_xg, model_id, market_version, feature_hash, history_known_utc,
+               *, run_id, waiver_sha256=None):
         at = utc(at)
         for x in (home_xg, away_xg):
             if isinstance(x,bool) or not isinstance(x,(int,float)) or not math.isfinite(x) or x<=0:
                 raise CanonicalError("INVALID_EXPECTED_GOALS")
         if self.db.execute("SELECT 1 FROM forecasts WHERE fixture_id=?", (fixture["id"],)).fetchone():
             return False
-        self.db.execute("INSERT INTO forecasts VALUES(?,?,?,?,?,?,?,?,?)",
+        self.db.execute("""INSERT INTO forecasts(fixture_id,frozen_utc,kickoff_utc,home_xg,away_xg,
+                          model_id,market_version,feature_hash,history_known_utc,run_id,waiver_sha256)
+                          VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                         (fixture["id"],at,utc(fixture["kickoff_utc"]),home_xg,away_xg,model_id,
-                         market_version,feature_hash,utc(history_known_utc) if history_known_utc else None))
+                         market_version,feature_hash,utc(history_known_utc) if history_known_utc else None,
+                         run_id,waiver_sha256))
         return True
 
     def history(self, before):
@@ -234,7 +252,7 @@ class Store:
           WHERE observed_utc<=? AND revision=(SELECT MAX(x.revision) FROM fixture_revisions x
           WHERE x.fixture_id=r.fixture_id AND x.observed_utc<=?)""",(before,before)).fetchall()
         known={r["fixture_id"]:json.loads(r["metadata_json"])["status"] for r in revisions}
-        return [dict(r) for r in rows if known.get(r["fixture_id"])=="FINISHED"]
+        return [dict(r) for r in rows if known.get(r["fixture_id"])==STATE_UPDATING_STATUS]
 
     def upcoming(self, at, end):
         return [dict(r) for r in self.db.execute("""SELECT * FROM fixtures f WHERE status='TIMED'
@@ -247,11 +265,11 @@ class Store:
           r.home_goals,r.away_goals,r.revision AS result_revision,
           CASE WHEN f.status IN ('CANCELLED','AWARDED') THEN 'VOID'
                WHEN f.kickoff_utc<=p.frozen_utc THEN 'INVALID_RESCHEDULED_BEFORE_FREEZE'
-               WHEN r.fixture_id IS NOT NULL AND f.status='FINISHED' THEN 'SETTLED'
+               WHEN r.fixture_id IS NOT NULL AND f.status=? THEN 'SETTLED'
                ELSE 'PENDING' END AS settlement
           FROM forecasts p JOIN fixtures f ON f.id=p.fixture_id
           LEFT JOIN latest_results r ON r.fixture_id=p.fixture_id"""
-        args=[]
+        args=[STATE_UPDATING_STATUS]
         if league:
             sql+=" WHERE f.league=?";args.append(league)
         sql+=" ORDER BY p.kickoff_utc DESC,p.fixture_id LIMIT ?";args.append(min(max(int(limit),1),10000))
@@ -259,10 +277,11 @@ class Store:
 
     def pending_seasons(self):
         return [(r[0],r[1]) for r in self.db.execute("""SELECT DISTINCT f.league,f.season FROM fixtures f
-          JOIN forecasts p ON p.fixture_id=f.id WHERE f.status NOT IN ('FINISHED','CANCELLED','AWARDED')""")]
+          JOIN forecasts p ON p.fixture_id=f.id WHERE f.status NOT IN (?,'CANCELLED','AWARDED')""",
+          (STATE_UPDATING_STATUS,))]
 
     def last_run(self):
-        row=self.db.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+        row=self.db.execute("SELECT * FROM runs ORDER BY rowid DESC LIMIT 1").fetchone()
         return dict(row) if row else None
 
     def last_success(self):

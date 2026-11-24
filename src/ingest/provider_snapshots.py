@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime,timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+import argparse
 import hashlib
 import http.client
 import json
@@ -75,8 +76,11 @@ def selected_headers(headers):
 
 class HTTPSnapshotTransport:
     """HTTPS to one hardcoded host; http.client never follows redirects."""
-    def __init__(self,allowed_pairs=None):
+    def __init__(self,allowed_pairs=None,*,resource="matches"):
         self._connection=None
+        if resource not in ("matches", "teams") or (resource == "teams" and allowed_pairs is None):
+            raise ValueError("Invalid or implicit endpoint resource")
+        self._resource = resource
         self._allowed_pairs=tuple(PLAN if allowed_pairs is None else allowed_pairs)
         if any(l not in LEAGUES or isinstance(y,bool) or not isinstance(y,int) or not 2010<=y<=2100 for l,y in self._allowed_pairs):
             raise ValueError("Invalid explicit endpoint allowlist")
@@ -89,10 +93,12 @@ class HTTPSnapshotTransport:
                 return False  # Controller records the secondary cleanup failure.
         return True
     def request(self,path,key,timeout,max_body_bytes):
-        allowed={f"/v4/competitions/{l}/matches?season={y}" for l,y in self._allowed_pairs}
+        allowed={f"/v4/competitions/{l}/{self._resource}?season={y}" for l,y in self._allowed_pairs}
         if path not in allowed:
             raise ValueError("Unapproved endpoint")
-        conn=http.client.HTTPSConnection(HOST,timeout=timeout,context=ssl.create_default_context())
+        ctx=ssl.create_default_context()
+        ctx.keylog_filename=None
+        conn=http.client.HTTPSConnection(HOST,timeout=timeout,context=ctx)
         self._connection=conn
         try:
             conn.request("GET",path,headers={"X-Auth-Token":key,"Accept":"application/json"})
@@ -209,8 +215,8 @@ def scan_files(directory,key):
                         raise SecretReflection()
                     tail=data[-overlap:] if overlap else b""
 
-def encode_json(value,key):
-    body=(json.dumps(value,ensure_ascii=False,indent=2,allow_nan=False)+"\n").encode("utf-8")
+def encode_json(value,key,*,ensure_ascii=False):
+    body=(json.dumps(value,ensure_ascii=ensure_ascii,indent=2,allow_nan=False)+"\n").encode("utf-8")
     check_secret(body,key)
     return body
 
@@ -236,7 +242,8 @@ def error_type(exc):
     return "TRANSPORT_ERROR"
 
 def fetch_snapshots(key,*,transport,clock,output_root=OUTPUT_ROOT,
-                    controller_seconds=CONTROLLER_TIMEOUT,max_body_bytes=MAX_BODY):
+                    controller_seconds=CONTROLLER_TIMEOUT,max_body_bytes=MAX_BODY,
+                    plan=PLAN,request_limit=MAX_REQUESTS,attempts=2):
     """Injected dependencies are mandatory; production main supplies real HTTPS/clock."""
     if not isinstance(key,str) or not key or any(ord(c)<33 or ord(c)>126 for c in key):
         return RunResult(2,None,0,"MISSING_OR_INVALID_ENVIRONMENT_KEY")
@@ -252,7 +259,7 @@ def fetch_snapshots(key,*,transport,clock,output_root=OUTPUT_ROOT,
         return RunResult(2,None,0,"ENVIRONMENT_OR_OUTPUT_SETUP")
     deadline=started_mono+controller_seconds;last_start=None;not_before=started_mono
     try:
-        for index,(league,season) in enumerate(PLAN):
+        for index,(league,season) in enumerate(plan):
             entry={"league":league,"season":season,"path":None,"http_status":None,
                    "size_bytes":None,"sha256":None,"requested_utc":None,"received_utc":None,
                    "rate_headers":{},"error_type":None,"attempts":[]}
@@ -260,7 +267,7 @@ def fetch_snapshots(key,*,transport,clock,output_root=OUTPUT_ROOT,
             if stop:
                 entry["error_type"]="NOT_REQUESTED_STOPPED"
                 continue
-            for retry in range(2):
+            for retry in range(attempts):
                 current=clock.monotonic()
                 target=max(not_before,current if last_start is None else last_start+PACE)
                 if target>=deadline or current>=deadline:
@@ -272,7 +279,7 @@ def fetch_snapshots(key,*,transport,clock,output_root=OUTPUT_ROOT,
                     raise ClockError("Clock did not honor pacing")
                 if current>=deadline:
                     entry["error_type"]="CONTROLLER_TIMEOUT";stop="CONTROLLER_TIMEOUT";exit_code=max(exit_code,1);break
-                if request_count>=MAX_REQUESTS:
+                if request_count>=request_limit:
                     entry["error_type"]="REQUEST_BUDGET_EXCEEDED";stop="REQUEST_BUDGET_EXCEEDED";exit_code=max(exit_code,1);break
                 path=f"/v4/competitions/{league}/matches?season={season}"
                 request_count+=1
@@ -305,8 +312,9 @@ def fetch_snapshots(key,*,transport,clock,output_root=OUTPUT_ROOT,
                 not_before=clock.monotonic()+wait
                 if code==429:
                     attempt["error_type"]="HTTP_429";entry["error_type"]="HTTP_429"
-                    if retry==1:
-                        entry["error_type"]="REPEATED_HTTP_429";stop=entry["error_type"];exit_code=max(exit_code,1);break
+                    if retry==attempts-1:
+                        entry["error_type"]="REPEATED_HTTP_429" if retry else "HTTP_429"
+                        stop=entry["error_type"];exit_code=max(exit_code,1);break
                     retry_delay=min(60.0,delay_seconds(headers.get("Retry-After"),clock,60.0))
                     not_before=max(not_before,clock.monotonic()+retry_delay)
                     continue
@@ -362,14 +370,14 @@ def fetch_snapshots(key,*,transport,clock,output_root=OUTPUT_ROOT,
             if entries[-1]["attempts"]:
                 entries[-1]["attempts"][-1]["error_type"]=stop
     try:
-        for league,season in PLAN[len(entries):]:
+        for league,season in plan[len(entries):]:
             entries.append({"league":league,"season":season,"path":None,"http_status":None,
                             "size_bytes":None,"sha256":None,"requested_utc":None,"received_utc":None,
                             "rate_headers":{},"error_type":"NOT_REQUESTED_STOPPED","attempts":[]})
-        if written!=len(PLAN):exit_code=max(exit_code,1)
+        if written!=len(plan):exit_code=max(exit_code,1)
         manifest={"schema":"football-data-org.snapshots.v1","host":HOST,"run_id":run_id,"started_utc":started_utc,
-                  "finished_utc":utc(clock),"requests_made":request_count,"request_limit":MAX_REQUESTS,
-                  "planned_files":len(PLAN),"successful_files":written,"exit_code":exit_code,"stopped_reason":stop,
+                  "finished_utc":utc(clock),"requests_made":request_count,"request_limit":request_limit,
+                  "planned_files":len(plan),"successful_files":written,"exit_code":exit_code,"stopped_reason":stop,
                   "entries":entries,"secret_self_check":"Pre-write body/header/manifest plus full-file scan; no request headers stored"}
         scan_files(directory,key)
         body=encode_json(manifest,key)
@@ -380,10 +388,20 @@ def fetch_snapshots(key,*,transport,clock,output_root=OUTPUT_ROOT,
     except Exception:
         return RunResult(2,None,written,"MANIFEST_OR_SELF_CHECK_OUTPUT_ERROR")
 
-def main():
-    # This is the only environment-key access. Tests never invoke this entrypoint.
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Capture immutable football-data.org match snapshots.")
+    parser.add_argument("--gap-2026", action="store_true",
+                        help="Capture the five 2026 league match lists, with one attempt each.")
+    args = parser.parse_args(argv)
     key=os.environ.get("FOOTBALL_DATA_API_KEY","")
-    result=fetch_snapshots(key,transport=HTTPSnapshotTransport(),clock=RealClock())
+    if args.gap_2026 and "SSLKEYLOGFILE" in os.environ:
+        result = RunResult(2, None, 0, "SSL_KEY_LOG_REFUSED")
+    elif args.gap_2026:
+        pairs = tuple((league, 2026) for league in LEAGUES)
+        result = fetch_snapshots(key, transport=HTTPSnapshotTransport(allowed_pairs=pairs), clock=RealClock(),
+                                 plan=pairs, request_limit=len(pairs), attempts=1)
+    else:
+        result=fetch_snapshots(key,transport=HTTPSnapshotTransport(),clock=RealClock())
     # No key, request header, response body or raw exception text enters console output.
     print(json.dumps({"exit_code":result.exit_code,"manifest":result.manifest_path,
                       "successful_files":result.successful_files,"error_type":result.error_type}))

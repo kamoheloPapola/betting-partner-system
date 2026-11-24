@@ -10,7 +10,8 @@ from src.ingest.provider_snapshots import (
 from .clock import CanonicalError, utc
 
 LEAGUES=("PL","BL1","FL1","SA","PD")
-STATUSES=frozenset(("SCHEDULED","TIMED","IN_PLAY","PAUSED","FINISHED","SUSPENDED","POSTPONED","CANCELLED","AWARDED"))
+STATE_UPDATING_STATUS = "FINISHED"
+STATUSES=frozenset(("SCHEDULED","TIMED","IN_PLAY","PAUSED",STATE_UPDATING_STATUS,"SUSPENDED","POSTPONED","CANCELLED","AWARDED"))
 MAX_BODY=8_000_000
 PACE=7.0
 DEADLINE=600.0
@@ -22,7 +23,7 @@ def _id(value):
     return value
 
 
-def project_matches(payload,league,season,observed):
+def project_matches(payload,league,season,observed,*,rejections=None):
     if not isinstance(payload,dict) or not isinstance(payload.get("matches"),list):
         raise CanonicalError("MALFORMED_PROVIDER_ROOT")
     competition=payload.get("competition")
@@ -42,11 +43,10 @@ def project_matches(payload,league,season,observed):
             seen.add(mid)
             status=source["status"]
             if status not in STATUSES:raise CanonicalError("UNKNOWN_PROVIDER_STATUS")
-            kickoff=utc(source["utcDate"])
             start=source["season"]["startDate"]
             if not isinstance(start,str) or int(start[:4])!=season:
                 raise CanonicalError("PROVIDER_SEASON_MISMATCH")
-            row={"id":mid,"league":league,"season":season,"kickoff_utc":kickoff,"status":status}
+            row={"id":mid,"league":league,"season":season,"status":status}
             for side in ("home","away"):
                 team=source[side+"Team"]
                 row[side+"_id"]=_id(team["id"])
@@ -55,14 +55,23 @@ def project_matches(payload,league,season,observed):
                     raise CanonicalError("INVALID_PROVIDER_TEAM_NAME")
                 row[side+"_name"]=name
             if row["home_id"]==row["away_id"]:raise CanonicalError("SELF_PROVIDER_FIXTURE")
-            if status=="FINISHED":
-                if kickoff>=observed:raise CanonicalError("FINISHED_FIXTURE_IN_FUTURE")
+            if status==STATE_UPDATING_STATUS:
                 score=source["score"]["fullTime"]
                 for side in ("home","away"):
                     goal=score[side]
                     if isinstance(goal,bool) or not isinstance(goal,int) or goal<0:
                         raise CanonicalError("FINISHED_SCORE_MISSING_OR_INVALID")
                     row[side+"_goals"]=goal
+            try:
+                kickoff = utc(source.get("utcDate"))
+            except CanonicalError:
+                if rejections is None:
+                    raise CanonicalError("INVALID_PROVIDER_FIXTURE") from None
+                rejections.append({"id": mid, "reason": "INVALID_PROVIDER_FIXTURE"})
+                continue
+            if status==STATE_UPDATING_STATUS and kickoff>=observed:
+                raise CanonicalError("FINISHED_FIXTURE_IN_FUTURE")
+            row["kickoff_utc"] = kickoff
             result.append(row)
         except CanonicalError:
             raise
@@ -138,10 +147,13 @@ class FootballData:
                     check_json_secret(payload,self._key)
                 except SecretReflection as exc:raise CanonicalError("PROVIDER_SECRET_REFLECTION") from exc
                 except (ValueError,UnicodeError) as exc:raise CanonicalError("PROVIDER_JSON_INVALID") from exc
-                batch=project_matches(payload,league,season,self.clock.utcnow())
-                for row in batch:
+                rejected = []
+                batch=project_matches(payload,league,season,self.clock.utcnow(),rejections=rejected)
+                for row in (*batch, *rejected):
                     if row["id"] in fixture_ids:raise CanonicalError("DUPLICATE_FIXTURE_ACROSS_RESPONSES")
                     fixture_ids.add(row["id"])
+                if rejected:
+                    self.receipts[-1]["fixture_rejections"] = rejected
                 rows.extend(batch)
                 cooldown,_=rate_wait(headers,self.clock)
                 not_before=self.clock.monotonic()+cooldown
