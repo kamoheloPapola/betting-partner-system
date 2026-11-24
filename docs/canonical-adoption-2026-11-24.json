@@ -1,0 +1,7 @@
+{
+  "sequence": 1,
+  "model_id": "6d3bc9546429230e83e4f83fc41b6c5f1dbdaa55b11e18c3a6581b6e0cb0e26c",
+  "activated_utc": "2026-11-24T06:15:15.023187Z",
+  "reason": "Operator requested the 2026-11-24 canonical launch after rehearsal, bundle and mapping verification, and the same-path restore drill. Verified source commit fd9f451.",
+  "artifact_sha256": "29b1fcf21f78ea86efbf653a54a98d5f877c327fe32190f4eb64dc58ce8f6b78"
+}

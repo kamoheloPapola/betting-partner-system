@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-24",
+  "scope": "Post-launch runbook corrections and backup operations",
+  "original_freeze_manifest": {
+    "name": "heartbeat-freeze-3296129e301145739860b19a07f2c146.json",
+    "sha256": "fa39e23241804c8809b8eed6f4801a2ed7add1d279a8bb535c63453979074cb2"
+  },
+  "adoption_source_commit": "fd9f45189fced136691ab97734dd35f351e26f47",
+  "git_blob_verification": {
+    "method": "SHA-256 of raw git show <commit>:<path> output",
+    "files": {
+      "src/canonical/cli.py": {
+        "freeze_sha256": "58e47b118c7fc8f83e1e1ff951098d515b79e6ce995bf03cfcbcba17206fd528",
+        "blob_sha256": "58e47b118c7fc8f83e1e1ff951098d515b79e6ce995bf03cfcbcba17206fd528",
+        "matches_freeze": true
+      },
+      "src/canonical/heartbeat.py": {
+        "freeze_sha256": "832c7ce9ff6c79eed231b874d2cf799570d620c705e217e2f3d8ecb913f07f82",
+        "blob_sha256": "832c7ce9ff6c79eed231b874d2cf799570d620c705e217e2f3d8ecb913f07f82",
+        "matches_freeze": true
+      },
+      "src/canonical/service.py": {
+        "freeze_sha256": "4f740dbedb5bdfed0dbe75dc2e34ed26f7fae7ede76f4697daa5d7e7030e2c51",
+        "blob_sha256": "4f740dbedb5bdfed0dbe75dc2e34ed26f7fae7ede76f4697daa5d7e7030e2c51",
+        "matches_freeze": true
+      },
+      "tests/canonical/test_heartbeat.py": {
+        "freeze_sha256": "79c8a6d6dc14a1aa74291a22dfede7875657af003e5e175e012af45c1b78219c",
+        "blob_sha256": "79c8a6d6dc14a1aa74291a22dfede7875657af003e5e175e012af45c1b78219c",
+        "matches_freeze": true
+      },
+      "tests/canonical/test_service.py": {
+        "freeze_sha256": "1059b08d713c517b2f4dbbf6a37148affbd72aa1e5bf8fc0cbbe346328e55fbf",
+        "blob_sha256": "1059b08d713c517b2f4dbbf6a37148affbd72aa1e5bf8fc0cbbe346328e55fbf",
+        "matches_freeze": true
+      },
+      "tests/canonical/conftest.py": {
+        "freeze_sha256": "9a45a484b00d16fe459a68f9bb8ca3cd3c3a9d3360d37ab22cbc7251247f6e37",
+        "blob_sha256": "9a45a484b00d16fe459a68f9bb8ca3cd3c3a9d3360d37ab22cbc7251247f6e37",
+        "matches_freeze": true
+      },
+      "docs/canonical-loop.md": {
+        "freeze_sha256": "6f06ae8736bda88e5cb83db21854da4ae5f3ab9042bce1f5cc0217b408a93a89",
+        "blob_sha256": "f7e9d3824626bde287fbc9e0a68aa567ef7a49df99e78e4db5db50ee62400429",
+        "matches_freeze": false
+      }
+    }
+  },
+  "runbook": {
+    "path": "docs/canonical-loop.md",
+    "frozen_sha256": "6f06ae8736bda88e5cb83db21854da4ae5f3ab9042bce1f5cc0217b408a93a89",
+    "adoption_commit_sha256": "f7e9d3824626bde287fbc9e0a68aa567ef7a49df99e78e4db5db50ee62400429",
+    "updated_sha256": "3808e34c799ce7dfba5d1e6beea848673f3ed3ba4d388da9e8463c110cfc9edd",
+    "checksum_file": "docs/canonical-loop.md.sha256"
+  }
+}

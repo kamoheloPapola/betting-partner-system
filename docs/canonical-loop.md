@@ -1,9 +1,10 @@
-# Canonical local football loop — staged, not activated
+# Canonical local football loop — active since 2026-11-24
 
-The canonical loop is implemented separately from the legacy CSV, corner/card,
-automatic-retraining and promotion routes. It is not yet the active production
-system. The v6 serving bundle awaits owner review and an allowlist entry.
-No scheduler was enabled and no original processed CSV was replaced.
+Production adopted the verified v6 serving model on 2026-11-24.
+`BettingPartnerCanonical` runs daily at 18:00 SAST. The first automated run
+exited 0 and recorded a successful heartbeat. The legacy Nightly task is
+disabled. The canonical loop operates separately from the legacy CSV,
+corner/card, automatic-retraining and promotion routes. [Adoption receipt](canonical-adoption-2026-11-24.json)
 
 ## Current evidence and limits
 
@@ -122,10 +123,9 @@ match the draft.
 - `identity_review` references the separately approved review record. It uses
   `schema_version: 4` and requires `blockers: []`. There was no persisted
   version 3 bridge record to carry forward.
-  The v6 draft records the owner's wording in `owner_decisions` under
-  `STATED_PENDING_FORMAL_APPROVAL`. A separate approved review is required
-  for an actual opening.
-  It records `APPROVED_FOR_BRIDGE`, the reviewer, leagues, cutoff and matching
+  The initial v6 draft recorded the owner's wording in `owner_decisions` under
+  `STATED_PENDING_FORMAL_APPROVAL`. The separate approved review used for the
+  opening records `APPROVED_FOR_BRIDGE`, the reviewer, leagues, cutoff and matching
   model and source-manifest pins. It also pins `seed_appearance_sources` (the
   frozen input inventory with `canonical_inputs`) and `stale_rule.register`
   and `stale_rule.proposals` (the owner decision and cutoff evidence).
@@ -184,8 +184,9 @@ The report must pin the current bridge reader, features and provider rule. The p
 uses the reader's v1 plan envelope and pins the v4 identity draft and a
 draft copy of the source manifest with provider season endings. Keep the
 packet out of preflight until its evidence and identity record are reviewed.
-Barcelona can carry the existing frozen state into the bridge. A separate
-live release decision is pending the bridge receipt and must cite its SHA-256.
+The v6 bridge carried Barcelona's existing frozen state forward. The owner
+approved the Barcelona live release on 2026-11-22, citing the bridge receipt's
+SHA-256. [Pinned owner release](../data/canonical/serving/bridge-v6-2026-11-22/proofs/barcelona_release/barcelona-release.json)
 The Espanyol fixture comparison documents both chains and the one-sided debt.
 The generator and reader apply the same exception checks. The recipe and owner
 evidence currently resolve to pinned files in untracked `tmp`. A fresh checkout
@@ -272,12 +273,15 @@ ordinary path and remove the waiver flags when the fixture resolves.
 List waiver-affected forecasts with `SELECT fixture_id, run_id, waiver_sha256 FROM forecasts WHERE waiver_sha256 IS NOT NULL;`.
 
 The legacy Nightly and daily workflows no longer invoke the old settlement or
-drift writers. The tracked outcomes CSV and rolling drift JSON remain available
-as historical records. Canonical settlement and health come from SQLite once
-the canonical loop is active. The old Phase 19 operator remains historical
-evidence.
+drift writers. The tracked outcomes CSV and rolling drift JSON are historical
+records. Production settlement and health come from canonical SQLite. The old
+Phase 19 operator is historical evidence.
 
 ## Activation sequence after the foundation is complete
+
+The owner-approved Barcelona mapping was published on 2026-11-22 with a
+separately pinned approval diff. Production adopted v6 on 2026-11-24.
+[Publication receipt](../data/canonical/mapping-publication-receipts/ca90b5da9cb846a895591be9b8742c27.json)
 
 The Barcelona publication takes a separately pinned approval diff. Record
 the signed sheet, pending decision and bridge receipt as `path` and
@@ -331,8 +335,9 @@ the recovery path for incorrect insert-only forecast rows.
    NEXT-38d base `73dd6951…` supplies the same file authority and dispositions.
    The derivative adds the base reference and five provider season-end dates.
    The [authority review](../data/canonical/serving/bridge-v6-2026-11-22/source-authority-review.json)
-   records the exact diff, the existing bridge approval chain and the pending
-   serving review.
+   records the candidate's exact diff and bridge approval chain. The
+   [adoption receipt](canonical-adoption-2026-11-24.json) records the production
+   launch decision for that artifact.
 3. Inspect a model by its full artifact path and observed SHA-256:
 
        .\venv\Scripts\python.exe -B scripts\run_canonical.py check-model "<artifact>" --sha256 "<sha256>"
@@ -361,16 +366,20 @@ the recovery path for incorrect insert-only forecast rows.
 Registration uses an interactive, limited user token, catches up after sleep,
 ignores overlapping invocations, and limits execution to 15 minutes. It refuses
 to replace an existing task or register while the legacy task is enabled.
-Registration was not run in this implementation pass.
+Registration completed on 2026-11-24. The first automated run at 08:27 SAST
+returned exit code 0, recorded `SENT` with kind `SUCCESS`, and appeared in the
+production check's event log. The permanent daily trigger is 18:00 SAST.
 
 ### External heartbeat
 
 The temporary Healthchecks rehearsal passed on 2026-11-23. The five-minute
 check with two minutes of grace logged the scratch success, a missing-key
 failure with a null `run_id`, and recovery. It went down at 12:52 SAST after
-seven minutes without a ping. The failure, recovery, and absence emails all
-reached Inbox. Both successful receipts recorded `SENT` with kind `SUCCESS`
-while health showed `MISSED_FORECASTS`.
+seven minutes without a ping. The operator confirmed the failure email in
+Inbox. The Healthchecks event log records recovery and the absence
+transition. Use operator confirmation as evidence of inbox delivery. Both
+successful receipts recorded `SENT` with kind `SUCCESS` while health showed
+`MISSED_FORECASTS`.
 
 Use a 24-hour period and three hours of grace for production. Route alerts to
 the tested email integration. The service must accept an
@@ -380,10 +389,10 @@ For Healthchecks, allow GET requests and use URL-based outcome detection.
 The URL path carries the alert signal even if the service discards the body.
 The rehearsal ping log displayed the JSON body for GET on all three pings.
 
-Set `CANONICAL_HEARTBEAT_URL` to the base ping URL in the scheduled Windows
-user's environment. Keep the URL private. The canonical CLI reads its process
-environment directly. Keep the value out of dotenv, task arguments, logs, and
-chat. Check inheritance in the scheduled task's context using the heartbeat
+The production base ping URL is set in the scheduled Windows user's
+environment as `CANONICAL_HEARTBEAT_URL`. Keep the URL private. The canonical
+CLI reads its process environment directly. Keep the value out of dotenv,
+task arguments, logs, and chat. Check inheritance using the heartbeat
 state in its actual run receipt. `scheduler-ready` also prints the masked
 configuration state for the process that invokes it. On an error it returns
 `NOT_READY`, the exception class, and a nonzero exit code. Canonical errors
@@ -393,16 +402,28 @@ failed delivery returns `HEARTBEAT_FAILED`. The runner validates HTTPS before
 delivery. Unset, empty, whitespace-only, non-HTTPS and malformed values disable
 manual-run delivery. A valid HTTPS URL enables it.
 
+Before a scratch or restore-drill run, unset both heartbeat variables in
+that PowerShell session.
+
+    Remove-Item Env:CANONICAL_HEARTBEAT_URL,Env:CANONICAL_BACKUP_HEARTBEAT_URL -ErrorAction SilentlyContinue
+
+The heartbeat uses the session URL regardless of the database passed to
+`run`. A scratch run that inherits the production URL can reset the production
+timer and mask a genuinely missed run, or send a false failure alert. A
+dedicated heartbeat rehearsal may set a temporary check URL after clearing
+the inherited value.
+
+**2026-11-24 — Database-bound heartbeat guard.** The owner declined a code
+guard that restricts the production heartbeat by database path. Scratch and
+restore-drill sessions rely on the operator clearing the inherited URL.
+
 The runner sends a success ping once the database commit and run receipt are
 complete and the run is `SUCCESS` with no withheld leagues or whole-run block.
 Withholding, a whole-run block, or a caught run exception sends a failure ping.
 A process that stops before sending leaves the external check waiting for a
-ping. This includes a task killed at its 15-minute limit. The absence alert
-can take the full period and grace, 26 to 27 hours after the last received
-ping under the daily check's two- to three-hour grace window. The chosen
-three-hour grace gives a 27-hour deadline measured from the last received
-ping. The JSON body contains only `run_id`, `state`, and
-`withheld_leagues`.
+ping. This includes a task killed at its 15-minute limit. The production
+absence deadline is 27 hours from the last received ping. The JSON body
+contains only `run_id`, `state`, and `withheld_leagues`.
 Startup errors before a run ID can be allocated send `null` as the run ID.
 Unexpected exceptions that escape the CLI still attempt the heartbeat and
 propagate with their original traceback. That path does not show a local toast.
@@ -433,15 +454,17 @@ timer or send a false alert. The first rehearsal attempt accidentally pinged
 the default check. The operator retired that check and the rehearsal passed
 against the temporary check. Run the canonical command against a scratch
 database. A bad provider key can exercise the startup failure ping. Observe a
-success ping, a failure ping and its alert, then another success to reset the check. Withhold the next
-ping and observe the absence alert after the period and grace. The scheduled
-task environment check follows adoption, a smoke run, and registration.
+success ping, a failure ping and its alert, then another success to reset the
+check. Withhold the next ping and observe the absence alert after the period
+and grace. The scheduled task environment check follows adoption, a smoke run,
+and registration.
 
 For a code freeze, run the complete canonical pytest suite on the laptop
 outside the sandbox. Windows sandbox loopback can stall API fixtures at
 `socket.accept` while creating an asyncio socket pair. Report API tests
 omitted from sandbox runs and use the laptop result as their verification.
 Record SHA-256 source and test hashes alongside the exact command and result.
+[Runbook checksum](canonical-loop.md.sha256) · [Freeze manifest addendum](canonical-freeze-addendum-2026-11-24.json)
 
 ## Data authority and failure behavior
 
@@ -453,10 +476,9 @@ referee/player names, odds, corners and cards are discarded.
 The mapping gate applies before inference and when admitting post-seed results
 to the E17 feature history. A rejected fixture remains available for result
 ingestion and can still settle a forecast already frozen against its official
-fixture ID. The current published mapping still limits Barcelona through
-2024-06-02 inclusive. The completed bridge supplies Barcelona's verified
-state. An explicit owner release and the reviewed replacement publication
-are still required before that binding can go live.
+fixture ID. The current published mapping uses the owner-approved Barcelona
+binding, and the completed bridge supplies Barcelona's verified state. The
+2024-06-02 cutoff belonged to the prior seed-only binding.
 
 A confirmed TIMED fixture qualifies for its first forecast when kickoff is
 strictly after the UTC run start and at or before 48 hours from that instant.
@@ -488,15 +510,15 @@ or guardrail halt. Missing results older than 72 hours add a warning.
 strictly after the latest model activation and at or before the status check.
 A nonzero count adds `MISSED_FORECASTS` and turns otherwise green health yellow.
 
-**2026-11-24 — Local Windows alert availability.** Windows pop-ups require an
-active interactive session. Healthchecks delivered the missed-check-in email
-in the temporary rehearsal and provides external coverage when the laptop is
-asleep, powered off, or offline. The daily check's absence window is 26–27
-hours from the last received ping, with a 27-hour deadline at the production
-three-hour grace setting. A test ping sent to the wrong check can reset that
-window or raise a false failure alert. Confirm the destination privately
-before live tests. The missed-forecast count still uses fixtures already in
-SQLite and can grow as a later run discovers missed fixtures.
+**2026-11-22, reviewed 2026-11-24 — Local Windows alert availability.** The
+owner accepted desktop notifications for the solo setup. Windows pop-ups
+require an active interactive session. Healthchecks detected the missed
+check-in in the temporary rehearsal and provides external coverage when
+the laptop is asleep, powered off, or offline. The production absence deadline
+is 27 hours from the last received ping. Revisit the desktop notification
+decision if the laptop regularly goes without an active interactive session.
+The missed-forecast count uses fixtures already in SQLite and can grow as a
+later run discovers missed fixtures.
 
 The live bug guard uses the latest 300 eligible settled forecasts and a frozen same-league
 training-frequency 1X2 baseline. If mean natural-log loss is worse by more than
@@ -527,4 +549,47 @@ rechecks the guardrail. It does not change the threshold.
 
 Keep backups outside the laptop. An evidence copy in a OneDrive folder proves
 only a local copy until the owner verifies remote sync independently.
+
+### Daily Drive snapshot and monthly restore drill
+
+`BettingPartnerCanonicalBackup` is a separate Windows task scheduled for
+18:30 SAST, after the 18:00 forecast. Its registration uses the current
+interactive user, limited privileges, catch-up, a 15-minute limit, battery
+operation, and overlap protection. Registration refuses to replace an
+existing backup task.
+
+The backup task stages a snapshot with the canonical `backup` command,
+checks SQLite integrity, and hashes the logical SQL dump. A busy or timed-out
+snapshot gets one retry with a fresh staging name. The task exclusively
+creates a UTC-timestamped `canonical-db-*.sqlite3` under the project's Drive
+`canonical-snapshots` folder, reopens it, and compares integrity and logical
+hash before writing its `.sqlite3.json` sidecar. It retains the latest 14
+verified pairs. A missing destination, copy collision, or failed verification
+exits nonzero before pruning. Unpaired files and unrelated names are outside
+retention.
+
+Use a separate Healthchecks check with a 24-hour period, three hours of
+grace, GET allowed, URL-based outcomes, and email alerts. Enter its URL
+privately and set `CANONICAL_BACKUP_HEARTBEAT_URL` in the scheduled user's
+environment. The backup sends one HTTPS ping with a 10-second deadline. A
+failure ping uses `/fail` and carries only the failed step name. The script
+reports a delivery failure with a nonzero exit. Keep both heartbeat URLs out
+of scratch and restore-drill sessions.
+
+Use these commands from a terminal with the appropriate environment. The
+scheduled task uses `run --require-heartbeat`. For a manual copy with the
+backup heartbeat unset, use `run`.
+
+    .\venv\Scripts\python.exe -B scripts\run_canonical_backup.py run
+    .\venv\Scripts\python.exe -B scripts\run_canonical_backup.py register
+
+Once a month, download a snapshot and its sidecar from the Google Drive web
+interface into the same local folder. Clear the two heartbeat variables,
+then restore to a new scratch file. Record the result and logical hash with
+the recovery evidence.
+
+    .\venv\Scripts\python.exe -B scripts\run_canonical_backup.py restore-check "<downloaded snapshot>" "<new scratch database>"
+
+The daily task verifies the copy on the Drive mount. The web download and
+scratch restore exercise the remote copy independently.
 
