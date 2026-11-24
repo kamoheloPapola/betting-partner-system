@@ -1,24 +1,26 @@
 {
   "date": "2026-11-24",
-  "scope": "Canonical SQLite backup retention",
+  "scope": "Canonical SQLite backup retention and heartbeat operations evidence",
   "previous_release_commit": "2ae22884b6c0cf4f45595f4f8bdd0da4dda42659",
   "sha256": {
     "scripts/run_canonical_backup.py": "3bab3fd54655511eb76afec7df3cdb572d987cf8d432a748c4d006c1cf9613cb",
-    "tests/canonical/test_backup_job.py": "1cd473ed9fa1c53991a82c8eec65dbc3737de3ce24f7227dcc3f9e4d05716e08",
-    "docs/canonical-loop.md": "36b247f1699995ccd29fbaafc4868b287cb4c467c3be33485d541b0c0a297fda"
+    "tests/canonical/test_backup_job.py": "a93b47d5d39936a0175a84facf9446ca1f9a54dce741360851cd702ca96e2406",
+    "docs/canonical-loop.md": "25e9cec270ecf4a2e50be104c0db37b437e52467bd7827af18558f7425402aa6",
+    "docs/canonical-loop.md.sha256": "3401ba45d7786963fce6a6141e15072ddc0ea0b4f8b905070768c5099f2dc70b"
   },
   "laptop_test": {
     "environment": "Windows laptop outside the sandbox",
-    "pytest_command": ".\\venv\\Scripts\\python.exe -B -m pytest -ra --confcutdir=tests/canonical --basetemp=.tmp/canonical-retention-pytest-9dfa3d305def48b3aa177700a187d2d8 --junitxml=.tmp/canonical-retention-pytest-9dfa3d305def48b3aa177700a187d2d8.xml tests/canonical",
+    "pytest_command": ".\\venv\\Scripts\\python.exe -B -m pytest -ra --confcutdir=tests/canonical --basetemp=.tmp/canonical-ops-evidence-pytest-90c4655779f141128b9abd58347dd6f5 --junitxml=.tmp/canonical-ops-evidence-pytest-90c4655779f141128b9abd58347dd6f5.xml tests/canonical",
     "pytest_exit_code": 0,
-    "pytest_summary": "439 passed in 48.36s",
-    "passed": 439,
+    "pytest_summary": "440 passed in 52.28s",
+    "passed": 440,
     "skipped": 0,
     "api_tests_passed": 4,
-    "production_log_before_sha256": "462892c92fa1fc1753bbe43242265f7102193fe4fa09c2145803a1fc9c699822",
-    "production_log_after_sha256": "462892c92fa1fc1753bbe43242265f7102193fe4fa09c2145803a1fc9c699822",
-    "production_log_before_bytes": 583,
-    "production_log_after_bytes": 583
+    "retention_simulation_days": 93,
+    "production_log_before_sha256": "059f4f543c27346828628b1eb0ac357e49044cdc33164f90772fd3d14a1f3174",
+    "production_log_after_sha256": "059f4f543c27346828628b1eb0ac357e49044cdc33164f90772fd3d14a1f3174",
+    "production_log_before_bytes": 813,
+    "production_log_after_bytes": 813
   },
   "scheduled_task_on_demand": {
     "task": "BettingPartnerCanonicalBackup",
@@ -44,5 +46,6 @@
     "sidecar_name": "canonical-db-20261124T111548592301Z.sqlite3.json",
     "snapshot_logical_sha256": "9beba7ac9282b33c244c11b02865506e721b9f01907c00c7ce27b5a6fe8880d9",
     "copy_integrity": "ok"
-  }
+  },
+  "retention_release_commit": "06bce2e01c81496da5a497c913e045def2c55e5e"
 }

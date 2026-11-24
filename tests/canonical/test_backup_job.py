@@ -184,6 +184,29 @@ def test_latest_pair_in_month_survives_after_aging_out_of_daily_window(job):
     assert_pair(october_latest, kept=True)
 
 
+def test_daily_pruning_for_93_days_keeps_each_completed_months_latest_pair(tmp_path):
+    start = datetime(2025, 12, 31, 16, 30, tzinfo=timezone.utc)
+    daily = []
+    latest_by_month = {}
+    kept = set()
+    for day in range(93):
+        timestamp = start + timedelta(days=day)
+        current = completed(tmp_path, timestamp)
+        daily.append(current)
+        month = (timestamp.year, timestamp.month)
+        latest_by_month[month] = current
+        monthly = {path for key, path in latest_by_month.items() if key < month}
+        newest = set(daily[-30:])
+        expected = newest | monthly
+        assert backup.prune_completed(tmp_path, current) == len((kept | {current}) - expected)
+        assert set(tmp_path.iterdir()) == expected | {path.with_suffix(".sqlite3.json") for path in expected}
+        kept = expected
+
+    assert len(monthly) == 4
+    assert len(monthly - newest) == 3
+    assert len(monthly & newest) == 1
+
+
 def test_first_run_after_upgrade_keeps_all_fourteen_existing_pairs(job):
     _, destination, _, run = job
     previous = november_pairs(destination, 14)

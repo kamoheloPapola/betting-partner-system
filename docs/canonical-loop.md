@@ -389,6 +389,22 @@ For Healthchecks, allow GET requests and use URL-based outcome detection.
 The URL path carries the alert signal even if the service discards the body.
 The rehearsal ping log displayed the JSON body for GET on all three pings.
 
+Only the owner opens Healthchecks check pages and event logs. Keep check
+links, tokens, screenshots, and browser captures out of agent tools and
+evidence packets. The owner may share a redacted record of settings and
+received events with the timestamp, outcome, and method.
+
+**2026-11-24 — Production heartbeat credential exposure.** Browser tool
+output and navigation metadata captured admin links containing the ping
+credentials for both the forecast and backup checks. Those credentials can
+submit pings. Rotation was unverified as of 2026-11-24. Both Windows
+user-level values still matched the exposed credentials at verification.
+Record the rotation date when the owner confirms both old checks were
+deleted, the replacements have a 24-hour period, three hours of grace,
+GET, URL-based outcomes, and email alerts, and both Windows user-level
+values have been replaced. Confirm uptake from each job's first subsequent
+scheduled run and record the delivery states without credentials.
+
 The production base ping URL is set in the scheduled Windows user's
 environment as `CANONICAL_HEARTBEAT_URL`. Keep the URL private. The canonical
 CLI reads its process environment directly. Keep the value out of dotenv,
@@ -464,7 +480,7 @@ outside the sandbox. Windows sandbox loopback can stall API fixtures at
 `socket.accept` while creating an asyncio socket pair. Report API tests
 omitted from sandbox runs and use the laptop result as their verification.
 Record SHA-256 source and test hashes alongside the exact command and result.
-[Current runbook hash](canonical-backup-retention-manifest-2026-11-24.json) · [Launch runbook checksum](canonical-loop.md.sha256) · [Freeze manifest addendum](canonical-freeze-addendum-2026-11-24.json)
+[Runbook checksum](canonical-loop.md.sha256) · [Current verification manifest](canonical-backup-retention-manifest-2026-11-24.json) · [Freeze manifest addendum](canonical-freeze-addendum-2026-11-24.json)
 
 ## Data authority and failure behavior
 
@@ -565,6 +581,8 @@ creates a UTC-timestamped `canonical-db-*.sqlite3` under the project's Drive
 `canonical-snapshots` folder, reopens it, and compares integrity and logical
 hash before writing its `.sqlite3.json` sidecar. Retention keeps the current
 pair and the 29 newest other verified pairs, even after a clock rollback.
+This is a count of snapshots. Extra on-demand runs take slots and can
+shorten the span of days available for restore.
 It also keeps the newest verified pair in each of the last 12 completed
 UTC calendar months. The filename timestamp determines the month and sort
 order. An empty month contributes no keeper, and a pair covered by both
