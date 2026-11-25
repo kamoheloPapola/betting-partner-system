@@ -835,9 +835,9 @@ def init_db() -> None:
 
 @app.command("run-daily-pipeline")
 def run_daily_pipeline(
-    league: str = typer.Option("PL", "--league", "-l", help="League code for fetch, drift, and predictions."),
+    league: str = typer.Option("PL", "--league", "-l", help="League code for fetch and predictions."),
     season: Optional[str] = typer.Option(None, "--season", help="Season token YYZZ (default: inferred)."),
-    lookback: int = typer.Option(120, "--lookback", min=7, max=120, help="Days for drift check."),
+    lookback: int = typer.Option(120, "--lookback", min=7, max=120, help="Deprecated. Accepted for existing commands."),
     prediction_date: str = typer.Option("today", "--prediction-date", help="Date filter for predictions."),
     show_all_predictions: bool = typer.Option(False, "--all", help="Show all upcoming predictions."),
     tz: str = typer.Option("LOCAL", "--tz", help="Timezone for prediction filtering."),
@@ -849,7 +849,7 @@ def run_daily_pipeline(
     reconcile_date: Optional[str] = typer.Option(
         None,
         "--reconcile-date",
-        help="Date to reconcile (YYYY-MM-DD). Default: yesterday.",
+        help="Deprecated. Accepted for existing commands.",
     ),
     alert_on_failure: bool = typer.Option(
         True,
@@ -863,12 +863,10 @@ def run_daily_pipeline(
     ),
 ) -> None:
     """
-    Run the daily ops sequence:
-    Data fetch -> Drift check -> Predictions -> Reconciliation.
+    Run the legacy daily data fetch and prediction sequence.
     """
     from rich.console import Console
     from src.cli.commands.data import fetch_latest_season, fetch_upcoming
-    from src.cli.commands.evaluation import reconcile as reconcile_predictions
     from src.cli.commands.prediction import show_predictions
     from src.cli.utils import resolve_league_code
 
@@ -880,9 +878,10 @@ def run_daily_pipeline(
 
     season_token = season or _default_season_token()
     normalized_league = resolved_league.value
+    if lookback != 120 or reconcile_date is not None:
+        console.print("[yellow]Legacy drift refresh and reconciliation are retired from the daily pipeline.[/yellow]")
     steps = [
         ("Data fetch", lambda: (fetch_latest_season(season=season_token), fetch_upcoming(league=resolved_league))),
-        ("Drift check", lambda: check_drift(league=normalized_league, lookback=lookback)),
         (
             "Predictions",
             lambda: show_predictions(
@@ -893,13 +892,10 @@ def run_daily_pipeline(
                 simulate=simulate,
             ),
         ),
-        ("Reconciliation", lambda: reconcile_predictions(date_str=reconcile_date)),
     ]
 
     console.print("[bold cyan]Daily Ops Pipeline[/bold cyan]")
-    console.print(
-        "Data fetch -> Drift check -> Predictions -> Reconciliation"
-    )
+    console.print("Data fetch -> Predictions")
 
     current_step = "not_started"
     try:

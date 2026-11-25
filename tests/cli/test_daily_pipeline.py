@@ -6,7 +6,7 @@ from src.cli.app import app
 runner = CliRunner()
 
 
-def test_run_daily_pipeline_executes_sequence(monkeypatch):
+def test_run_daily_pipeline_fetches_and_predicts_without_legacy_tracking(monkeypatch):
     calls: list[tuple] = []
     alerts: list[dict] = []
 
@@ -60,11 +60,10 @@ def test_run_daily_pipeline_executes_sequence(monkeypatch):
     assert [call[0] for call in calls] == [
         "fetch_latest_season",
         "fetch_upcoming",
-        "check_drift",
         "show_predictions",
-        "reconcile",
     ]
     assert alerts == []
+    assert "Legacy drift refresh and reconciliation are retired" in result.stdout
 
 
 def test_run_daily_pipeline_alerts_on_failure(monkeypatch):

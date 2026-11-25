@@ -88,10 +88,6 @@ class DriftOrchestrator:
         )
         self.alerts_file = self.DEFAULT_ALERTS_FILE
 
-        self.status_file.parent.mkdir(parents=True, exist_ok=True)
-        self.confidence_state_file.parent.mkdir(parents=True, exist_ok=True)
-        self.alerts_file.parent.mkdir(parents=True, exist_ok=True)
-
         # Per-league drift state (keyed by league string)
         self._league_status: Dict[str, str] = {}
         self._league_metrics: Dict[str, Dict[str, Any]] = {}
@@ -103,6 +99,8 @@ class DriftOrchestrator:
         self.global_metrics_included: Set[str] = set()
         self.global_evaluated_at: Optional[str] = None
         self.global_legacy_date: Optional[str] = None
+        self.global_state_source: Optional[str] = None
+        self.global_database_read_failed = False
 
         # Baseline metadata
         self.baseline_metadata: Dict[str, Any] = {}
@@ -220,25 +218,31 @@ class DriftOrchestrator:
             "alerts": self.global_alerts,
             "metrics": self.global_metrics,
         }
+        self.status_file.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.status_file.with_suffix(".tmp")
         with open(tmp_path, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
         os.replace(tmp_path, self.status_file)
+        self.global_state_source = "file"
         self._persist_global_state_to_db(payload)
 
     def load_global_state(self) -> None:
-        db_payload = self._load_global_state_from_db()
-        if db_payload is not None:
-            self._apply_global_state_payload(db_payload)
+        self.global_state_source = None
+        self.global_database_read_failed = False
+        try:
+            db_payload = self._load_global_state_from_db()
+            if db_payload is not None:
+                self._apply_global_state_payload(db_payload)
+                self.global_state_source = "database"
+                return
+        except Exception as exc:
+            logger.error("Global drift database read failed (%s) - failing closed.", type(exc).__name__)
+            self.global_database_read_failed = True
+            self._set_global_state_unavailable(["DATABASE_READ_FAILURE"])
             return
 
         if not self.status_file.exists():
-            self.global_status = self.STOP
-            self.global_alerts = []
-            self.global_metrics = {}
-            self.global_metrics_included = set()
-            self.global_evaluated_at = None
-            self.global_legacy_date = None
+            self._set_global_state_unavailable([])
             return
 
         try:
@@ -246,15 +250,18 @@ class DriftOrchestrator:
                 data = json.load(handle)
 
             self._apply_global_state_payload(data)
+            self.global_state_source = "file"
         except Exception as exc:
             logger.error("Failed to load global drift state: %s", exc)
-            # Fail closed for global guardrail
-            self.global_status = self.STOP
-            self.global_alerts = ["STATUS_LOAD_FAILURE"]
-            self.global_metrics = {}
-            self.global_metrics_included = set()
-            self.global_evaluated_at = None
-            self.global_legacy_date = None
+            self._set_global_state_unavailable(["STATUS_LOAD_FAILURE"])
+
+    def _set_global_state_unavailable(self, alerts: List[str]) -> None:
+        self.global_status = self.STOP
+        self.global_alerts = alerts
+        self.global_metrics = {}
+        self.global_metrics_included = set()
+        self.global_evaluated_at = None
+        self.global_legacy_date = None
 
     # ------------------------------------------------------------------
     # Per-league drift state
@@ -341,6 +348,12 @@ class DriftOrchestrator:
         Missing file -> STOP (unknown state must fail closed).
         Corrupt/unreadable file -> STOP (fail closed - bad state file is a fault).
         """
+        if database_is_configured():
+            self.load_global_state()
+            if self.global_database_read_failed:
+                self._league_status[league] = self.STOP
+                self._league_metrics.pop(league, None)
+                return
         state_file = self._league_state_file(league)
         if not state_file.exists():
             self._league_status[league] = self.STOP
@@ -563,6 +576,8 @@ class DriftOrchestrator:
                 status if available, otherwise falls back to global status.
         """
         self.load_global_state()
+        if self.global_database_read_failed:
+            return self.STOP
         if market:
             self.load_confidence_state()
             market_status = self.market_status.get(str(market))
@@ -578,6 +593,7 @@ class DriftOrchestrator:
             "rolling_data": self.rolling_data,
             "updated": datetime.now().isoformat(),
         }
+        self.confidence_state_file.parent.mkdir(parents=True, exist_ok=True)
         with open(self.confidence_state_file, "w", encoding="utf-8") as handle:
             json.dump(state, handle, indent=2)
 
@@ -588,8 +604,6 @@ class DriftOrchestrator:
             self.cooldowns = {}
             self.bet_counts = {}
             self.rolling_data = {}
-            with open(self.confidence_state_file, "w", encoding="utf-8") as handle:
-                json.dump(self.confidence_state, handle, indent=2)
             return
         try:
             with open(self.confidence_state_file, "r", encoding="utf-8") as handle:
@@ -778,33 +792,24 @@ class DriftOrchestrator:
         if not database_is_configured():
             return None
 
-        try:
-            from sqlalchemy import select
-            from sqlalchemy.orm import Session
+        from sqlalchemy import select
+        from sqlalchemy.orm import Session
 
-            from src.db.models import DriftEvent
+        from src.db.models import DriftEvent
 
-            with Session(get_engine()) as session:
-                row = session.execute(
-                    select(DriftEvent)
-                    .where(DriftEvent.event_type == self.GLOBAL_STATE_EVENT_TYPE)
-                    .order_by(DriftEvent.detected_at.desc())
-                ).scalars().first()
-        except Exception as exc:
-            logger.warning("Failed to load global drift state from database: %s", exc)
-            return None
+        with Session(get_engine()) as session:
+            row = session.execute(
+                select(DriftEvent)
+                .where(DriftEvent.event_type == self.GLOBAL_STATE_EVENT_TYPE)
+                .order_by(DriftEvent.detected_at.desc())
+            ).scalars().first()
 
         if row is None:
             return None
 
-        payload: Dict[str, Any] = {}
-        if row.payload_json:
-            try:
-                loaded = json.loads(row.payload_json)
-                if isinstance(loaded, dict):
-                    payload = loaded
-            except Exception as exc:
-                logger.warning("Failed to decode global drift payload from database: %s", exc)
+        payload = json.loads(row.payload_json) if row.payload_json is not None else {}
+        if not isinstance(payload, dict):
+            raise ValueError("Invalid global drift database payload")
 
         if "status" not in payload:
             payload["status"] = row.severity or self.GO
@@ -863,6 +868,7 @@ class DriftOrchestrator:
             return
 
         fieldnames = ["type", "league", "market", "severity", "metric", "value", "threshold", "detected_at"]
+        self.alerts_file.parent.mkdir(parents=True, exist_ok=True)
         header = not self.alerts_file.exists() or self.alerts_file.stat().st_size == 0
         with open(self.alerts_file, "a", encoding="utf-8", newline="") as handle:
             writer = csv.DictWriter(handle, fieldnames=fieldnames)

@@ -8,7 +8,7 @@ from src.db.models import Base, DriftEvent
 from src.monitoring.drift_orchestrator import DriftOrchestrator
 
 
-def test_load_confidence_state_initializes_missing_file_to_go(tmp_path):
+def test_missing_confidence_state_defaults_to_go_until_explicitly_persisted(tmp_path):
     status_file = tmp_path / "drift" / "rolling_90d_status.json"
     confidence_state_file = tmp_path / "drift" / "confidence_drift_state.json"
     status_file.parent.mkdir(parents=True, exist_ok=True)
@@ -38,9 +38,14 @@ def test_load_confidence_state_initializes_missing_file_to_go(tmp_path):
     }
 
     assert orchestrator.confidence_state == expected
-    assert confidence_state_file.exists()
-    assert json.loads(confidence_state_file.read_text(encoding="utf-8")) == expected
     assert orchestrator.get_status("HOME_WIN") == DriftOrchestrator.GO
+    assert not confidence_state_file.exists()
+
+    orchestrator.persist_confidence_state()
+    saved = json.loads(confidence_state_file.read_text(encoding="utf-8"))
+    assert saved["market_status"] == {} and saved["updated"]
+    orchestrator.load_confidence_state()
+    assert orchestrator.confidence_state == expected
 
 
 def test_league_state_file_uses_configured_status_directory(tmp_path):

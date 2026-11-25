@@ -194,12 +194,6 @@ def main() -> int:
         "3",
         "--confirm",
     )
-    resolve_command = (
-        sys.executable,
-        "-m",
-        "src.cli",
-        "resolve-predictions",
-    )
     performance_report_command = (
         sys.executable,
         str(SCRIPTS_DIR / "generate_performance_report.py"),
@@ -267,27 +261,7 @@ def main() -> int:
                 "show-predictions failed for %s - continuing to next league",
                 league,
             )
-    step_results.append(
-        _run_step("resolve_predictions", resolve_command, success_codes={0})
-    )
     step_results.append(_run_step("update_bandit", update_command, success_codes={0}))
-    for league in pipeline_leagues:
-        drift_check_command = (
-            sys.executable,
-            "-m",
-            "src.cli",
-            "check-drift",
-            "--league",
-            league,
-            "--lookback",
-            "120",
-        )
-        drift_result = _run_step(
-            f"check_drift_{league}",
-            drift_check_command,
-            success_codes={0},
-        )
-        step_results.append(drift_result)
     step_results.append(
         _run_step(
             "generate_performance_report",
@@ -295,19 +269,11 @@ def main() -> int:
             success_codes={0},
         )
     )
-    # Data refresh and drift checks are non-fatal; keep them in the summary.
-    NON_FATAL_STEPS = {
-        "fetch_fresh_data",
-        "fetch_stats_enrichment",
-        "check_drift_PL",
-        "check_drift_BL1",
-        "check_drift_FL1",
-        "check_drift_SA",
-        "check_drift_PD",
-    }
+    # Data refresh is non-fatal and remains visible in the summary.
+    non_fatal_steps = {"fetch_fresh_data", "fetch_stats_enrichment"}
     any_failed = any(
         not step.successful for step in step_results
-        if step.name not in NON_FATAL_STEPS
+        if step.name not in non_fatal_steps
     )
     _print_summary(
         started_at=started_at,

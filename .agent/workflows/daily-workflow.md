@@ -23,11 +23,12 @@ python -m src.cli.main ingest-results
 ```
 Processes new results and updates the database.
 
-### 3. Resolve Previous Predictions (Optional)
+### 3. Read Canonical Settlement and Health
 ```bash
-python -m src.cli.main resolve-predictions
+python scripts/run_canonical.py status
+python scripts/run_canonical.py forecasts
 ```
-Marks previous predictions as WIN/LOSS/PUSH based on actual outcomes.
+Reports canonical settlement and health. An inactive canonical system reports setup status.
 
 ### 4. Generate Predictions
 ```bash
@@ -45,19 +46,13 @@ Generates high-confidence selections using the Forbidden Fruit strategy.
 
 ## Weekly Maintenance (Once Per Week)
 
-### 1. Check for Model Drift
+### 1. Inspect Canonical Health
 ```bash
-python -m src.cli.main check-drift
+python scripts/run_canonical.py status
 ```
-Monitors calibration drift, sharpness decay, and market degradation.
+Shows freshness and the canonical guardrail.
 
-### 2. Refresh Drift Metrics
-```bash
-python -m src.cli.main refresh-drift --window 30
-```
-Updates rolling drift statistics.
-
-### 3. Audit Model Coverage
+### 2. Audit Model Coverage
 ```bash
 python -m src.cli.main audit-coverage
 ```
@@ -106,9 +101,9 @@ Locks pipeline to prevent accidental changes during season.
 | Get predictions | `show-predictions` |
 | Fetch new data | `fetch-latest-season` |
 | Process results | `ingest-results` |
-| Resolve outcomes | `resolve-predictions` |
+| Read settlement | `python scripts/run_canonical.py forecasts` |
 | Check model health | `audit-coverage` |
-| Check drift | `check-drift` |
+| Inspect canonical guardrail | `python scripts/run_canonical.py status` |
 | Lock system | `freeze-models --confirm` |
 
 ---
@@ -116,7 +111,7 @@ Locks pipeline to prevent accidental changes during season.
 ## Emergency: Model Issues
 
 If predictions seem off:
-1. Run `check-drift` to identify issues
+1. Run `python scripts/run_canonical.py status` to identify issues
 2. Run `audit-coverage` to verify model health
 3. If locked, unlock first: `from src.config.model_state import unlock; unlock()`
 4. Retrain affected models: `train poisson --league PL --mode production`
