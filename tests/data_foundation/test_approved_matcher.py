@@ -137,6 +137,18 @@ def test_target_missing_is_failure(documents):
 
 def test_four_physical_exclusions_not_two_keys(pd_inputs):
     decisions, fixtures, rows = pd_inputs
+    assert (dict(decisions.quarantine), dict(decisions.quarantine_lines)) == (
+        {
+            ("PD", 2025, "2026-01-04", "REAL MADRID", "REAL MADRID"): 2,
+            ("PD", 2025, "2026-04-04", "REAL MADRID", "BARCELONA"): 2,
+        },
+        {
+            ("a" * 64, 179): ("PD", 2025, "2026-01-04", "REAL MADRID", "REAL MADRID"),
+            ("a" * 64, 182): ("PD", 2025, "2026-01-04", "REAL MADRID", "REAL MADRID"),
+            ("a" * 64, 295): ("PD", 2025, "2026-04-04", "REAL MADRID", "BARCELONA"),
+            ("a" * 64, 296): ("PD", 2025, "2026-04-04", "REAL MADRID", "BARCELONA"),
+        },
+    )
     results = m.match_rows(rows, {"PD": fixtures}, decisions)
     assert len(results) == 4 and all(x["status"] == "EXCLUDED" for x in results)
     assert Counter(tuple(x["key"]) for x in results) == Counter(decisions.quarantine)
