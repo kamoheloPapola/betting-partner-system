@@ -1,9 +1,9 @@
 # Betting Partner System: User Guide
 
-Current status: the canonical goals-only loop is staged and adoption is blocked
-on historical identity/history evidence. Use [the canonical loop guide](docs/canonical-loop.md)
-for current operation. The older workflows below are retained for historical
-context; they are not an instruction to re-enable the disabled nightly job.
+The goals-only canonical loop has been active since 2026-11-24. Use [the
+canonical loop guide](docs/canonical-loop.md) for current operation. The older
+workflows below are retained for historical context. Keep the legacy nightly
+job disabled.
 
 Welcome to the **Betting Partner System**, a production-grade, AI-driven football prediction engine. This system is designed to generate data-driven betting advice ("Forbidden Fruit") without relying on bookmaker odds, ensuring true independent statistical value.
 
@@ -19,7 +19,7 @@ Welcome to the **Betting Partner System**, a production-grade, AI-driven footbal
 ### Installation
 
 1.  **Clone/Open the Repository**:
-    Ensure you are in the project root: `c:\Users\papol\my_systems\betting_partner_system`
+    Run the following commands from the checkout root.
 
 2.  **Set up Virtual Environment**:
     ```powershell
