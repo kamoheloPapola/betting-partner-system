@@ -1,5 +1,10 @@
 # Betting Partner System: User Guide
 
+Current status: the canonical goals-only loop is staged and adoption is blocked
+on historical identity/history evidence. Use [the canonical loop guide](docs/canonical-loop.md)
+for current operation. The older workflows below are retained for historical
+context; they are not an instruction to re-enable the disabled nightly job.
+
 Welcome to the **Betting Partner System**, a production-grade, AI-driven football prediction engine. This system is designed to generate data-driven betting advice ("Forbidden Fruit") without relying on bookmaker odds, ensuring true independent statistical value.
 
 ---

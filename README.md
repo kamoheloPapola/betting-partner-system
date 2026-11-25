@@ -1,5 +1,12 @@
 # AI-Powered Football Betting Assistant
 
+The new goals-only canonical loop is implemented but **not activated**. Its fixed
+Model E replay passed; incomplete historical provider identities and the prior
+history bridge still block adoption. The legacy nightly task stays disabled.
+See [the canonical loop guide](docs/canonical-loop.md) for read-only inspection,
+activation gates, backups and current limitations. The workflows below describe
+the existing legacy and historical routes.
+
 A personal-PC betting-prediction system with recorded, replayable prospective evidence.
 
 ## Local prospective operator workflow
