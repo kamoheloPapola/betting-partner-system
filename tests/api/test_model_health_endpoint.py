@@ -1,12 +1,16 @@
+import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from fastapi.testclient import TestClient
 
 from src.api.cache import MODEL_HEALTH_CACHE_KEY, PredictionCache, prediction_cache, prediction_cache_key
+import src.api.auth as api_auth
 import src.api.main as api_main
+import src.api.routes.cli as cli_router
 import src.config as config
 import src.monitoring.drift_orchestrator as drift_orchestrator
 
@@ -191,6 +195,88 @@ def test_prediction_guard_precedes_cache_and_predictor(
             "stop": "drift_guardrail_stop",
         }.get(state, api_main.LEGACY_DRIFT_STALE)
         assert block_messages == [f"Prediction blocked league={league} reason={reason}"]
+
+
+@pytest.fixture
+def stale_league_state(tmp_path, monkeypatch):
+    now = datetime.now(timezone.utc)
+    archive = tmp_path / "rolling_90d_status.json"
+    archive.write_text(json.dumps({"status": "GO", "evaluated_at": now.isoformat()}), encoding="utf-8")
+    stale = json.dumps({"status": "GO", "evaluated_at": (now - timedelta(days=3)).isoformat()})
+    for league in ("PL", "BL1", "FL1", "SA", "PD"):
+        (tmp_path / f"{league}_drift_status.json").write_text(stale, encoding="utf-8")
+    monkeypatch.setattr(api_main.DriftGuardrail, "STATUS_FILE", archive)
+    monkeypatch.setattr(api_main, "DRIFT_STATE_DIR", tmp_path)
+    monkeypatch.setattr(api_main, "_LAST_DRIFT_DECISIONS", {})
+    monkeypatch.setattr(api_main, "capture_alert", Mock())
+    monkeypatch.setattr(api_main, "prediction_cache", PredictionCache())
+
+
+def test_predictions_preserve_unsupported_league_http_status():
+    response = client.get("/api/v1/predictions/UNSUPPORTED-LEAGUE")
+
+    # The same request returned 400 on 1592957.
+    assert response.status_code == 400
+
+
+def test_cli_predict_blocks_stale_state_before_constructing_predictor(stale_league_state, monkeypatch):
+    predictor = Mock()
+    monkeypatch.setattr(cli_router, "Predictor", predictor)
+    monkeypatch.setenv("PITCHSENSE_API_KEY", "fixture-only")
+    monkeypatch.setattr(api_auth, "_api_key", api_auth._UNSET)
+
+    response = client.post("/cli/predict", json={"league": "PL"}, headers={"X-Api-Key": "fixture-only"})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "count": 0,
+        "predictions": [],
+        "reason": "LEGACY_DRIFT_STALE",
+        "message": "Predictions are currently blocked by the drift guardrail.",
+    }
+    predictor.assert_not_called()
+
+
+def test_startup_warmup_blocks_stale_state_before_constructing_predictor(stale_league_state, monkeypatch, caplog):
+    predictor = Mock()
+    monkeypatch.setattr(api_main, "Predictor", predictor)
+    monkeypatch.setenv("WARMUP_CACHE", "1")
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+    scheduled = []
+    create_task = asyncio.create_task
+
+    def track_task(coroutine):
+        task = create_task(coroutine)
+        scheduled.append(task)
+        return task
+
+    monkeypatch.setattr(asyncio, "create_task", track_task)
+
+    async def run_startup():
+        async with api_main.app.router.lifespan_context(api_main.app):
+            assert len(scheduled) == 1
+            await scheduled[0]
+
+    asyncio.run(run_startup())
+
+    assert [message for message in caplog.messages if message.startswith("Prediction blocked ")] == [
+        f"Prediction blocked league={league} reason=LEGACY_DRIFT_STALE"
+        for league in ("PL", "BL1", "FL1", "SA", "PD")
+    ]
+    predictor.assert_not_called()
+
+
+def test_cold_slip_blocks_stale_state_before_constructing_predictor(stale_league_state, monkeypatch):
+    predictor = Mock()
+    monkeypatch.setattr(api_main, "Predictor", predictor)
+
+    response = client.get("/api/v1/slips/PL")
+
+    assert response.status_code == 200
+    assert response.json()["blocked"] is True
+    assert response.json()["slip"] == []
+    assert "LEGACY_DRIFT_STALE" in response.json()["message"]
+    predictor.assert_not_called()
 
 
 def test_stale_stop_reason_is_logged_reported_and_returned(tmp_path, monkeypatch, caplog):

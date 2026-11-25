@@ -165,13 +165,18 @@ def cli_cache_stats() -> Dict[str, Any]:
 
 @router.post("/predict", dependencies=[Depends(require_api_key)])
 def cli_predict(body: Dict[str, Any] = Body(default_factory=dict)) -> Dict[str, Any]:
-    # The application imports this router before defining the shared guard.
+    # Debt: remove this circular import when both routes can import the guard from a module independent of main.
     from src.api.main import _guard_prediction_drift
 
     league = body.get("league")
     _, blocked = _guard_prediction_drift(league)
     if blocked:
-        return {"count": 0, "predictions": []}
+        return {
+            "count": 0,
+            "predictions": [],
+            "reason": blocked.reason or "drift_guardrail_stop",
+            "message": "Predictions are currently blocked by the drift guardrail.",
+        }
 
     predictor = Predictor()
     raw_predictions = predictor.predict_for_show_predictions(
