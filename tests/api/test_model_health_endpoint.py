@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.cache import MODEL_HEALTH_CACHE_KEY, prediction_cache
+from src.api.cache import MODEL_HEALTH_CACHE_KEY, PredictionCache, prediction_cache, prediction_cache_key
 import src.api.main as api_main
 import src.config as config
 
@@ -83,6 +83,75 @@ def test_legacy_drift_freshness_matches_guard_and_dashboard(tmp_path, monkeypatc
     dashboard = client.get("/model-health").json()
     assert dashboard["global_drift_status"] == ("UNKNOWN" if reason else expected)
     assert dashboard["global_drift_reason"] == reason
+
+
+
+@pytest.mark.parametrize("cache_state", ("cold", "warm"))
+@pytest.mark.parametrize("state,allowed,league", [
+    pytest.param("fresh", True, "PL", id="fresh"),
+    pytest.param("just-under-two-days", True, "PL", id="just-under-two-days"),
+    pytest.param("stale", False, "PL", id="stale"),
+    pytest.param("missing", False, "PL", id="missing"),
+    pytest.param("missing-league", False, "PL", id="missing-league"),
+    pytest.param("malformed", False, "PL", id="malformed"),
+    pytest.param("malformed-time", False, "PL", id="malformed-time"),
+    pytest.param("tz-naive", False, "PL", id="tz-naive"),
+    pytest.param("future", False, "PL", id="future"),
+    pytest.param("exactly-two-days", False, "PL", id="exactly-two-days"),
+    pytest.param("stale-league", False, "PL", id="stale-league-PL"),
+    pytest.param("stale-league", False, "BL1", id="stale-league-BL1"),
+    pytest.param("stale-league", False, "SA", id="stale-league-SA"),
+    pytest.param("stale-league", False, "PD", id="stale-league-PD"),
+])
+def test_prediction_guard_precedes_cache_and_predictor(tmp_path, monkeypatch, cache_state, state, allowed, league):
+    class FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
+
+    fresh = (NOW - timedelta(hours=1)).isoformat()
+    timestamp = {
+        "just-under-two-days": (NOW - timedelta(days=2) + timedelta(microseconds=1)).isoformat(),
+        "stale": (NOW - timedelta(days=3)).isoformat(),
+        "malformed-time": "yesterday",
+        "tz-naive": NOW.replace(tzinfo=None).isoformat(),
+        "future": (NOW + timedelta(seconds=1)).isoformat(),
+        "exactly-two-days": (NOW - timedelta(days=2)).isoformat(),
+    }.get(state, fresh)
+    archive = tmp_path / "rolling_90d_status.json"
+    if state != "missing":
+        contents = "{" if state == "malformed" else json.dumps({"status": "GO", "evaluated_at": timestamp})
+        archive.write_text(contents, encoding="utf-8")
+    if state != "missing-league":
+        league_time = (NOW - timedelta(days=3)).isoformat() if state == "stale-league" else fresh
+        (tmp_path / f"{league}_drift_status.json").write_text(
+            json.dumps({"status": "GO", "evaluated_at": league_time}), encoding="utf-8"
+        )
+
+    cache = PredictionCache()
+    key = prediction_cache_key(league)
+    cached = [{"match_id": "cached"}]
+    predicted = [{"match_id": "computed"}]
+    if cache_state == "warm":
+        cache.set(key, cached)
+    calls = []
+
+    def predict(self, *, league):
+        calls.append(league)
+        return predicted
+
+    monkeypatch.setattr(api_main, "datetime", FixedDateTime)
+    monkeypatch.setattr(api_main.DriftGuardrail, "STATUS_FILE", archive)
+    monkeypatch.setattr(api_main, "DRIFT_STATE_DIR", tmp_path)
+    monkeypatch.setattr(api_main, "prediction_cache", cache)
+    monkeypatch.setattr(api_main.Predictor, "predict_upcoming", predict)
+    monkeypatch.setattr(api_main.Predictor, "__init__", lambda self: None)
+
+    result = api_main._load_or_compute_predictions(league)
+    expected = (cached if cache_state == "warm" else predicted) if allowed else []
+    assert result == expected
+    assert calls == ([league] if allowed and cache_state == "cold" else [])
+    assert cache.get(key) == (expected if allowed else None)
 
 
 def test_stale_stop_reason_is_logged_reported_and_returned(tmp_path, monkeypatch, caplog):

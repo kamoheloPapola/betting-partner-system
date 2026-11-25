@@ -1,12 +1,25 @@
+import json
+from datetime import datetime, timezone
+
 from fastapi.testclient import TestClient
 
+from src.api import main as api_main
+from src.api.cache import PredictionCache
 from src.api.main import app
 
 
 client = TestClient(app)
 
 
-def test_predictions_endpoint_exposes_ensemble_fields(monkeypatch):
+def test_predictions_endpoint_exposes_ensemble_fields(tmp_path, monkeypatch):
+    global_state = tmp_path / "rolling_90d_status.json"
+    state = json.dumps({"status": "GO", "evaluated_at": datetime.now(timezone.utc).isoformat()})
+    global_state.write_text(state, encoding="utf-8")
+    (tmp_path / "PL_drift_status.json").write_text(state, encoding="utf-8")
+    monkeypatch.setattr(api_main.DriftGuardrail, "STATUS_FILE", global_state)
+    monkeypatch.setattr(api_main, "DRIFT_STATE_DIR", tmp_path)
+    monkeypatch.setattr(api_main, "prediction_cache", PredictionCache())
+
     def fake_predict_upcoming(self, league="PL", limit=20):
         return [
             {

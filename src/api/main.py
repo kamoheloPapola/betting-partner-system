@@ -31,6 +31,7 @@ from src.api.schemas import (
     TriggerPrediction,
 )
 from src.api.routes.cli import router as cli_router
+from src.cli.utils import resolve_league_code
 from src.config import DATA_DIR, MODELS_DIR
 from src.config.model_state import get_model_state, is_locked
 from src.core.exceptions import ConfigurationError, DataValidationError
@@ -258,9 +259,6 @@ def _read_league_drift_status_from_state_dir(league: Optional[str]) -> Optional[
         return None
 
     league_state_file = DRIFT_STATE_DIR / f"{league_key}_drift_status.json"
-    if not league_state_file.parent.exists():
-        return None
-
     decision = _read_legacy_drift_file(league_state_file)
     if decision.reason == LEGACY_DRIFT_UNAVAILABLE:
         logger.error("League drift state unavailable for %s - failing closed.", league_key)
@@ -291,6 +289,18 @@ def _blocking_legacy_drift(global_drift, league_drift):
              if decision is not None and decision.status == DriftOrchestrator.STOP]
     priority = {None: 0, LEGACY_DRIFT_STALE: 1, LEGACY_DRIFT_UNAVAILABLE: 2}
     return min(stops, key=lambda decision: priority[decision.reason], default=None)
+
+
+def _guard_prediction_drift(league: Optional[str]) -> tuple[LegacyDriftDecision, Optional[LegacyDriftDecision]]:
+    scope = resolve_league_code(league) if league else None
+    if league and scope is None:
+        raise DataValidationError(f"Unsupported league: {league}", context={"league": league})
+    global_drift = _read_prediction_guard_status()
+    league_drift = _read_league_drift_status_from_state_dir(scope.value if scope else None)
+    blocked = _blocking_legacy_drift(global_drift, league_drift)
+    if blocked:
+        prediction_cache.delete(prediction_cache_key(league))
+    return global_drift, blocked
 
 
 def _empty_predictions_message(*, league: str, drift_status: str, total_predictions: int) -> Optional[str]:
@@ -389,33 +399,14 @@ def _raise_environment_mismatch(exc: ConfigurationError) -> None:
 
 
 def _load_or_compute_predictions(league: Optional[str]) -> List[Dict[str, Any]]:
+    _, blocked = _guard_prediction_drift(league)
+    if blocked:
+        return []
+
     cache_key = prediction_cache_key(league)
     cached_predictions = prediction_cache.get(cache_key)
     if isinstance(cached_predictions, list):
-        drift_status = _read_prediction_guard_status().status
-        league_drift = _read_league_drift_status_from_state_dir(league)
-        league_stop = league_drift is not None and league_drift.status == DriftOrchestrator.STOP
-        if league and drift_status != DriftOrchestrator.STOP:
-            try:
-                orchestrator = DriftOrchestrator()
-                orchestrator.load_league_state(league)
-                if orchestrator._league_status.get(league) == DriftOrchestrator.STOP:
-                    league_stop = True
-                    logger.warning(
-                        "Cache invalidated for league=%s: league-scoped drift is STOP.",
-                        league,
-                    )
-            except Exception as exc:
-                logger.warning("Could not check league drift state for cache: %s", exc)
-        if drift_status == DriftOrchestrator.STOP or league_stop:
-            logger.warning(
-                "Cache invalidated for league=%s: drift status is STOP.",
-                league or "ALL",
-            )
-            prediction_cache.delete(cache_key)
-            return []
-        else:
-            return cached_predictions
+        return cached_predictions
 
     predictor = Predictor()
     raw_predictions = predictor.predict_upcoming(league=league)
@@ -430,24 +421,11 @@ def _generate_forbidden_fruit_slip(
     min_prob: float,
     max_selections: int,
 ) -> ForbiddenFruitSlipResponse:
-    global_drift = _read_prediction_guard_status()
+    global_drift, blocked = _guard_prediction_drift(league)
     drift_status = global_drift.status
-    league_drift = _read_league_drift_status_from_state_dir(league)
-    blocked = _blocking_legacy_drift(global_drift, league_drift)
     cache_key = slip_cache_key(league, min_prob, max_selections)
-    cached_slip = prediction_cache.get(cache_key)
-    if cached_slip is not None and blocked:
-        logger.warning(
-            "Slip cache invalidated for league=%s: drift status is STOP.",
-            league or "ALL",
-        )
-        prediction_cache.delete(cache_key)
-    elif isinstance(cached_slip, ForbiddenFruitSlipResponse):
-        return cached_slip
-
     league_label = str(league or "ALL").upper()
     if blocked:
-        prediction_cache.delete(prediction_cache_key(league))
         prediction_cache.delete(cache_key)
         response = ForbiddenFruitSlipResponse(
             generated_at=datetime.now(),
@@ -464,6 +442,10 @@ def _generate_forbidden_fruit_slip(
         if blocked.reason == LEGACY_DRIFT_STALE:
             response.message = f"{LEGACY_DRIFT_STALE}: Legacy drift data is outside the two-day freshness window."
         return response
+
+    cached_slip = prediction_cache.get(cache_key)
+    if isinstance(cached_slip, ForbiddenFruitSlipResponse):
+        return cached_slip
 
     raw_predictions = _load_or_compute_predictions(league)
     builder = ForbiddenFruitSlipBuilder()
@@ -567,12 +549,9 @@ async def _lifespan(app: FastAPI):
             leagues = ["PL", "BL1", "FL1", "SA", "PD"]
             for league in leagues:
                 try:
-                    key = prediction_cache_key(league)
-                    if prediction_cache.get(key) is None:
-                        predictor = Predictor()
-                        data = predictor.predict_upcoming(league=league)
-                        prediction_cache.set(key, data)
-                        logger.info("[startup] Cache warmed: %s (%d predictions)", league, len(data))
+                    data = _load_or_compute_predictions(league)
+                    if data:
+                        logger.info("[startup] Predictions available: %s (%d predictions)", league, len(data))
                 except Exception as exc:
                     logger.warning("[startup] Cache warm failed for %s: %s", league, exc)
             logger.info("[startup] Cache warm-up complete.")
@@ -830,12 +809,9 @@ def trigger_predictions(request: Request, payload: PredictionTriggerRequest) -> 
         raise HTTPException(status_code=400, detail="limit must be >= 1")
 
     try:
-        global_drift = _read_prediction_guard_status()
-        league_drift = _read_league_drift_status_from_state_dir(payload.league)
-        blocked = _blocking_legacy_drift(global_drift, league_drift)
+        global_drift, blocked = _guard_prediction_drift(payload.league)
         drift_status = global_drift.status
         if blocked:
-            prediction_cache.delete(prediction_cache_key(payload.league))
             return PredictionTriggerResponse(
                 generated_at=datetime.now(),
                 league=str(payload.league).upper(),
