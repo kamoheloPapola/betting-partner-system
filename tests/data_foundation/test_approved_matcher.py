@@ -12,10 +12,11 @@ from src.data_foundation import approved_matcher as m
 
 
 @pytest.fixture
-def documents(tmp_path):
+def documents(tmp_path, request):
+    split_name, split_id = getattr(request, "param", ("BARCELONA", "81"))
     sheet = [{"league": "PL", "canonical_name": f"TEAM {i}", "candidate_id": str(100+i),
               "operation": "ALIAS_1_TO_1"} for i in range(21)]
-    sheet.append({"league": "PD", "canonical_name": "BARCELONA", "candidate_id": "81",
+    sheet.append({"league": "PD", "canonical_name": split_name, "candidate_id": split_id,
                   "operation": "LABEL_SPLIT"})
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=list(sheet[0]))
@@ -31,17 +32,27 @@ def documents(tmp_path):
             record["decision"] = "APPROVED"
         else:
             record.update(decision="CONFIRMED_LABEL_SPLIT", assignment_decision="UNRESOLVED_NO_ASSIGNMENT_APPROVED",
-                          unresolved_rows=2, unresolved_disposition="EXCLUDE_AND_COUNT_FAIL_CLOSED")
+                          unresolved_rows=2, unresolved_csv_lines=[295, 296],
+                          unresolved_disposition="EXCLUDE_AND_COUNT_FAIL_CLOSED")
         records.append(record)
     doc = {"source_v3": {"sha256": v3hash}, "rows": records}
     decision = tmp_path/"decisions.json"
     v3 = tmp_path/"v3.csv"
     v3.write_bytes(raw)
+    quarantine = tmp_path / "quarantine-dry-run.json"
+    quarantine.write_text(json.dumps({"rule": "QUARANTINE_RULE_V1", "status": "PASS", "applied": False,
+        "rows": [
+            {"league": "PD", "date": day, "line": line, "original_home": "REAL MADRID",
+             "original_away": away, "source_sha256": "a" * 64, "candidate_fixture_ids": [1, 2]}
+            for day, away, lines in [("2026-01-04", "REAL MADRID", (179, 182)),
+                                     ("2026-04-04", split_name, (295, 296))] for line in lines
+        ]}), encoding="utf-8")
+    quarantine_hash = hashlib.sha256(quarantine.read_bytes()).hexdigest()
     def load(changed=None):
         decision.write_text(json.dumps(changed or doc), encoding="utf-8")
         return m.load_decisions(decision, v3,
                                expected_decision=hashlib.sha256(decision.read_bytes()).hexdigest(),
-                               expected_v3=v3hash)
+                               expected_v3=v3hash, expected_quarantine=quarantine_hash)
     return doc, decision, v3, v3hash, load
 
 
@@ -59,7 +70,7 @@ def pd_inputs(documents):
     fixtures = [fixture(544385, "2026-01-04", 86, 90), fixture(544387, "2026-01-04", 92, 78),
                 fixture(544502, "2026-04-04", 86, 81), fixture(544503, "2026-04-04", 90, 80)]
     rows = [{"league": k[0], "season": k[1], "day": k[2], "home": k[3], "away": k[4], "line": i}
-            for i, k in enumerate([*list(m.QUARANTINE)[:1]*2, *list(m.QUARANTINE)[1:]*2], 1)]
+            for i, k in enumerate((key for key, count in decisions.quarantine.items() for _ in range(count)), 1)]
     return decisions, fixtures, rows
 
 
@@ -78,6 +89,13 @@ def test_approved_count_and_split_not_alias(documents):
     assert decisions.splits[("PD", "barcelona")] == 81
     with pytest.raises(TypeError):
         decisions.aliases[("PL", "new")] = 100
+
+
+@pytest.mark.parametrize("documents", [("SYNTHETIC SPLIT", "990")], indirect=True)
+def test_split_identity_comes_from_pinned_owner_decision(documents):
+    decisions = documents[-1]()
+    assert dict(decisions.splits) == {("PD", "synthetic split"): 990}
+    assert sum(decisions.quarantine.values()) == 4
 
 
 @pytest.mark.parametrize("change", ["duplicate", "missing", "reviewer", "hash", "rejected", "split_assignment"])
@@ -121,14 +139,14 @@ def test_four_physical_exclusions_not_two_keys(pd_inputs):
     decisions, fixtures, rows = pd_inputs
     results = m.match_rows(rows, {"PD": fixtures}, decisions)
     assert len(results) == 4 and all(x["status"] == "EXCLUDED" for x in results)
-    assert Counter(tuple(x["key"]) for x in results) == Counter(m.QUARANTINE)
+    assert Counter(tuple(x["key"]) for x in results) == Counter(decisions.quarantine)
 
 
 @pytest.mark.parametrize("count", [2, 3, 5])
 def test_wrong_physical_count_is_hard_failure(pd_inputs, count):
     decisions, fixtures, rows = pd_inputs
     sample = rows[:count] if count < 4 else rows+[rows[-1]]
-    with pytest.raises(m.MatchError, match="four physical"):
+    with pytest.raises(m.MatchError, match="Physical exclusions differ"):
         m.match_rows(sample, {"PD": fixtures}, decisions)
 
 
