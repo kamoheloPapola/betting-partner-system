@@ -39,6 +39,33 @@ def perform(tmp_path,answers=(),**kwargs):
     manifest=json.loads(Path(result.manifest_path).read_text()) if result.manifest_path else None
     return result,manifest,fake,clock
 
+
+def test_gap_entrypoint_has_exactly_five_2026_requests(tmp_path, monkeypatch, capsys):
+    clock = Clock()
+    fake = Fake(clock)
+    pairs = tuple((league, 2026) for league in p.LEAGUES)
+    fetch = p.fetch_snapshots
+    monkeypatch.delenv("SSLKEYLOGFILE", raising=False)
+    monkeypatch.setenv("FOOTBALL_DATA_API_KEY", KEY)
+    monkeypatch.setattr(p, "RealClock", lambda: clock)
+    monkeypatch.setattr(p, "HTTPSnapshotTransport", lambda allowed_pairs: fake if allowed_pairs == pairs else pytest.fail())
+    monkeypatch.setattr(p, "fetch_snapshots", lambda *a, **kw: fetch(*a, output_root=tmp_path, **kw))
+
+    assert p.main(["--gap-2026"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    manifest = json.loads(Path(report["manifest"]).read_bytes())
+    assert manifest["requests_made"] == manifest["request_limit"] == manifest["successful_files"] == 5
+    assert [path for path, _ in fake.calls] == [f"/v4/competitions/{league}/matches?season=2026" for league in p.LEAGUES]
+
+
+def test_gap_request_limit_does_not_retry_rate_limits(tmp_path):
+    plan = tuple((league, 2026) for league in p.LEAGUES)
+    result, manifest, fake, _ = perform(tmp_path, [p.Response(429, {"Retry-After": "10"}, b"")],
+                                        plan=plan, request_limit=5, attempts=1)
+    assert result.exit_code == 1 and manifest["requests_made"] == len(fake.calls) == 1
+    assert manifest["stopped_reason"] == "HTTP_429"
+
+
 def test_complete_raw_bytes_manifest_hashes_utc_and_pacing(tmp_path):
     result,manifest,fake,clock=perform(tmp_path)
     assert result.exit_code==0 and len(fake.calls)==16 and result.successful_files==16
