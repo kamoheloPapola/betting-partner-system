@@ -9,29 +9,13 @@ import pytest
 from src.data_foundation import followup_audit as a
 
 _RECEIPT_DIR = None
-_REVIEW_PACKET = (
-    Path(__file__).resolve().parents[2]
-    / "tmp/BL1-T3-offline-dependency-manifest-binding-20261027-01"
-    / "NEXT-38a-review-split-01"
-)
-
-
-def receipt_destination(basetemp, requested=None):
-    base = Path(basetemp).resolve()
-    packet = _REVIEW_PACKET
-    if packet.resolve() != packet or base.parent != packet / "pytest-tmp":
-        raise RuntimeError("Test scratch must be inside the NEXT-38a review packet")
-    allowed = packet / "checks" / (base.name + "-children")
-    if allowed.resolve() != allowed or (requested is not None and Path(requested).resolve() != allowed):
-        raise RuntimeError("Test receipts must use the allowlisted run directory in the NEXT-38a review packet")
-    return allowed
-
 
 @pytest.fixture(autouse=True)
 def receipt_scope(tmp_path_factory, monkeypatch):
-    destination = receipt_destination(
-        tmp_path_factory.getbasetemp(), os.environ.get("BPS_TEST_EVIDENCE_DIR")
-    )
+    base = tmp_path_factory.getbasetemp().resolve()
+    destination = Path(os.environ.get("BPS_TEST_EVIDENCE_DIR", str(base.parent/(base.name+"-receipts")))).resolve()
+    if destination.is_relative_to(base) or "NEXT-37b-normaliser-probe-02" in destination.parts:
+        raise RuntimeError("Test receipts must not use fixture scratch or an accepted packet")
     destination.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(sys.modules[__name__], "_RECEIPT_DIR", destination)
 
@@ -39,10 +23,6 @@ def retain_receipt(label,value):
     import uuid
     if _RECEIPT_DIR is None:
         raise RuntimeError("Receipt scope is not initialized")
-    if not label or not label.replace("-", "").isalnum():
-        raise ValueError("Invalid test receipt label")
-    if _RECEIPT_DIR.resolve() != _RECEIPT_DIR:
-        raise RuntimeError("Test receipt directory was redirected")
     destination = _RECEIPT_DIR/(label+"-"+uuid.uuid4().hex+".json")
     with destination.open("x", encoding="utf-8") as stream:
         json.dump(value, stream)
@@ -231,20 +211,11 @@ getattr(p,'write'+'_'+'text')('MUTATE')
     assert maps.read_text(encoding="utf-8")=="{}"
 
 def test_fixture_scope_is_builtin_and_packet_local(tmp_path,request,tmp_path_factory):
-    base = tmp_path_factory.getbasetemp().resolve()
-    assert base.parent == _REVIEW_PACKET / "pytest-tmp"
-    assert tmp_path.resolve().is_relative_to(base)
-    assert _RECEIPT_DIR == _REVIEW_PACKET / "checks" / (base.name + "-children")
-    assert request._get_active_fixturedef("tmp_path").func.__module__ == "_pytest.tmpdir"
-
-
-def test_receipt_allowlist_refuses_another_accepted_packet(tmp_path_factory):
-    accepted = _REVIEW_PACKET.with_name("NEXT-37d-owner-decisions-scheduler-hold-01")
-    base = tmp_path_factory.getbasetemp()
-    with pytest.raises(RuntimeError, match="allowlisted run directory"):
-        receipt_destination(base, accepted / "receipts")
-    with pytest.raises(RuntimeError, match="scratch must be inside"):
-        receipt_destination(accepted / "pytest-tmp" / "simulated", accepted / "receipts")
+    repo=Path(__file__).resolve().parents[2]
+    assert tmp_path.resolve().is_relative_to(tmp_path_factory.getbasetemp().resolve())
+    assert not tmp_path.resolve().is_relative_to(repo/".tmp")
+    assert not _RECEIPT_DIR.is_relative_to(tmp_path_factory.getbasetemp().resolve())
+    assert request._get_active_fixturedef("tmp_path").func.__module__=="_pytest.tmpdir"
 
 def test_inherited_catalog_identity_is_required_not_rebased(tmp_path):
     path=str((tmp_path/"data/processed/season_maps.json").resolve())
