@@ -7,13 +7,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from src.api.auth import require_api_key
 from src.api.cache import MODEL_HEALTH_CACHE_KEY, prediction_cache, prediction_cache_key
 from src.config.model_state import get_model_state
 from src.ml.registry import ModelRegistry
-from src.monitoring.drift_orchestrator import DriftOrchestrator
 from src.predictions.predictor import Predictor
 
 router = APIRouter(prefix="/cli", tags=["cli"])
@@ -78,8 +77,6 @@ def cli_help() -> Dict[str, Any]:
             {"name": "predict", "description": "Generate predictions. Args: --league PL"},
             {"name": "train", "description": "Retrain models. Args: --leagues PL BL1 ..."},
             {"name": "model-health", "description": "Check model registry and loaded models"},
-            {"name": "inspect-drift", "description": "Show current drift state"},
-            {"name": "reset-drift", "description": "Clear persisted STOP drift state"},
             {"name": "invalidate-cache", "description": "Clear cached predictions. Args: --league PL"},
             {"name": "cache-stats", "description": "Show active in-memory cache entries"},
             {"name": "list-models", "description": "List all models in registry"},
@@ -118,25 +115,13 @@ def cli_model_health() -> Dict[str, Any]:
 
 
 @router.get("/inspect-drift")
-def cli_inspect_drift() -> Dict[str, Any]:
-    drift = DriftOrchestrator()
-    return drift.inspect_global_state()
+def cli_inspect_drift() -> None:
+    raise HTTPException(status_code=410, detail="Use canonical status for current health.")
 
 
-@router.post("/reset-drift", dependencies=[Depends(require_api_key)])
-def cli_reset_drift() -> Dict[str, Any]:
-    drift = DriftOrchestrator()
-    cleared = []
-    for file_path in [drift.status_file, drift.confidence_state_file]:
-        if file_path.exists():
-            file_path.unlink()
-            cleared.append(str(file_path))
-
-    return {
-        "status": "ok",
-        "message": "Drift state cleared." if cleared else "No drift state to clear.",
-        "cleared": cleared,
-    }
+@router.post("/reset-drift")
+def cli_reset_drift() -> None:
+    raise HTTPException(status_code=410, detail="Legacy drift files are historical records.")
 
 
 @router.post("/invalidate-cache", dependencies=[Depends(require_api_key)])

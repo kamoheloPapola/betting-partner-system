@@ -8,7 +8,8 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -42,7 +43,9 @@ from src.strategies.drift_guard import DriftGuardrail
 from src.strategies.slip_builder import ForbiddenFruitSlipBuilder
 
 logger = logging.getLogger(__name__)
-_LAST_GLOBAL_DRIFT_STATUS: Optional[str] = None
+_LAST_DRIFT_DECISIONS: Dict[str, tuple[str, Optional[str]]] = {}
+LEGACY_DRIFT_STALE = "LEGACY_DRIFT_STALE"
+LEGACY_DRIFT_UNAVAILABLE = "LEGACY_DRIFT_UNAVAILABLE"
 DRIFT_STATE_DIR = DATA_DIR / "drift"
 DEFAULT_TRAINING_LEAGUES = ["PL", "BL1", "FL1", "SA", "PD"]
 MODEL_CONFIGS = [
@@ -214,7 +217,39 @@ def _normalize_guard_status(status: Any) -> str:
     return DriftOrchestrator.STOP
 
 
-def _read_league_drift_status_from_state_dir(league: Optional[str]) -> Optional[str]:
+def _fresh_legacy_drift(evaluated_at: Any) -> bool:
+    if not isinstance(evaluated_at, str):
+        return False
+    try:
+        timestamp = datetime.fromisoformat(evaluated_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return timestamp.tzinfo is not None and timedelta(0) <= datetime.now(timezone.utc) - timestamp < timedelta(days=2)
+
+
+@dataclass(frozen=True)
+class LegacyDriftDecision:
+    status: str
+    reason: Optional[str] = None
+    evaluated_at: Optional[str] = None
+
+
+def _legacy_drift_decision(status: Any, evaluated_at: Any) -> LegacyDriftDecision:
+    if not _fresh_legacy_drift(evaluated_at):
+        timestamp = evaluated_at if isinstance(evaluated_at, str) else None
+        return LegacyDriftDecision(DriftOrchestrator.STOP, LEGACY_DRIFT_STALE, timestamp)
+    return LegacyDriftDecision(_normalize_guard_status(status), evaluated_at=evaluated_at)
+
+
+def _read_legacy_drift_file(path: Path) -> LegacyDriftDecision:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return _legacy_drift_decision(data.get("status"), data.get("evaluated_at"))
+    except (OSError, ValueError, AttributeError, OverflowError, RecursionError):
+        return LegacyDriftDecision(DriftOrchestrator.STOP, LEGACY_DRIFT_UNAVAILABLE)
+
+
+def _read_league_drift_status_from_state_dir(league: Optional[str]) -> Optional[LegacyDriftDecision]:
     if not league:
         return None
 
@@ -222,41 +257,40 @@ def _read_league_drift_status_from_state_dir(league: Optional[str]) -> Optional[
     if not league_key:
         return None
 
-    global_state_file = DRIFT_STATE_DIR / "rolling_90d_status.json"
     league_state_file = DRIFT_STATE_DIR / f"{league_key}_drift_status.json"
-    if (
-        not global_state_file.exists()
-        and not league_state_file.exists()
-        and not league_state_file.parent.exists()
-    ):
+    if not league_state_file.parent.exists():
         return None
 
-    if not league_state_file.exists():
-        logger.error("League drift state file missing for %s - failing closed.", league_key)
-        return DriftOrchestrator.STOP
+    decision = _read_legacy_drift_file(league_state_file)
+    if decision.reason == LEGACY_DRIFT_UNAVAILABLE:
+        logger.error("League drift state unavailable for %s - failing closed.", league_key)
+    else:
+        _report_drift_stop_transition(decision, scope=league_key)
+    return decision
 
+
+def _load_legacy_global_drift() -> tuple[DriftOrchestrator, LegacyDriftDecision]:
+    drift = DriftOrchestrator(status_file=DriftGuardrail.STATUS_FILE, baseline_file=DriftGuardrail.BASELINE_FILE)
+    if drift.global_state_source is None:
+        return drift, LegacyDriftDecision(DriftOrchestrator.STOP, LEGACY_DRIFT_UNAVAILABLE)
+    return drift, _legacy_drift_decision(drift.global_status, drift.global_evaluated_at)
+
+
+def _read_prediction_guard_status() -> LegacyDriftDecision:
     try:
-        with open(league_state_file, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-        return _normalize_guard_status(data.get("status", DriftOrchestrator.STOP))
-    except Exception as exc:
-        logger.error("League drift state unavailable for %s - failing closed: %s", league_key, exc)
-        return DriftOrchestrator.STOP
-
-
-def _read_prediction_guard_status() -> str:
-    try:
-        guard = DriftGuardrail()
-        status = _normalize_guard_status(guard.check_drift())
-        _report_drift_stop_transition({
-            "status": status,
-            "evaluated_at": guard.evaluated_at,
-            "alerts": guard.alerts,
-        })
-        return status
+        drift, decision = _load_legacy_global_drift()
+        _report_drift_stop_transition(decision, alerts=drift.global_alerts)
+        return decision
     except Exception as exc:
         logger.error("Prediction drift guard status unavailable — failing closed: %s", exc)
-        return DriftOrchestrator.STOP
+        return LegacyDriftDecision(DriftOrchestrator.STOP, LEGACY_DRIFT_UNAVAILABLE)
+
+
+def _blocking_legacy_drift(global_drift, league_drift):
+    stops = [decision for decision in (global_drift, league_drift)
+             if decision is not None and decision.status == DriftOrchestrator.STOP]
+    priority = {None: 0, LEGACY_DRIFT_STALE: 1, LEGACY_DRIFT_UNAVAILABLE: 2}
+    return min(stops, key=lambda decision: priority[decision.reason], default=None)
 
 
 def _empty_predictions_message(*, league: str, drift_status: str, total_predictions: int) -> Optional[str]:
@@ -358,8 +392,9 @@ def _load_or_compute_predictions(league: Optional[str]) -> List[Dict[str, Any]]:
     cache_key = prediction_cache_key(league)
     cached_predictions = prediction_cache.get(cache_key)
     if isinstance(cached_predictions, list):
-        drift_status = _read_prediction_guard_status()
-        league_stop = _read_league_drift_status_from_state_dir(league) == DriftOrchestrator.STOP
+        drift_status = _read_prediction_guard_status().status
+        league_drift = _read_league_drift_status_from_state_dir(league)
+        league_stop = league_drift is not None and league_drift.status == DriftOrchestrator.STOP
         if league and drift_status != DriftOrchestrator.STOP:
             try:
                 orchestrator = DriftOrchestrator()
@@ -395,12 +430,13 @@ def _generate_forbidden_fruit_slip(
     min_prob: float,
     max_selections: int,
 ) -> ForbiddenFruitSlipResponse:
-    drift_status = _read_prediction_guard_status()
-    league_stop = _read_league_drift_status_from_state_dir(league) == DriftOrchestrator.STOP
-    cache_league_stop = league_stop
+    global_drift = _read_prediction_guard_status()
+    drift_status = global_drift.status
+    league_drift = _read_league_drift_status_from_state_dir(league)
+    blocked = _blocking_legacy_drift(global_drift, league_drift)
     cache_key = slip_cache_key(league, min_prob, max_selections)
     cached_slip = prediction_cache.get(cache_key)
-    if cached_slip is not None and (drift_status == DriftOrchestrator.STOP or cache_league_stop):
+    if cached_slip is not None and blocked:
         logger.warning(
             "Slip cache invalidated for league=%s: drift status is STOP.",
             league or "ALL",
@@ -410,7 +446,7 @@ def _generate_forbidden_fruit_slip(
         return cached_slip
 
     league_label = str(league or "ALL").upper()
-    if drift_status == DriftOrchestrator.STOP or league_stop:
+    if blocked:
         prediction_cache.delete(prediction_cache_key(league))
         prediction_cache.delete(cache_key)
         response = ForbiddenFruitSlipResponse(
@@ -425,6 +461,8 @@ def _generate_forbidden_fruit_slip(
                 total_legs=0,
             ),
         )
+        if blocked.reason == LEGACY_DRIFT_STALE:
+            response.message = f"{LEGACY_DRIFT_STALE}: Legacy drift data is outside the two-day freshness window."
         return response
 
     raw_predictions = _load_or_compute_predictions(league)
@@ -488,27 +526,26 @@ def _load_latest_reliability_for_league(league: str) -> List[Dict[str, Any]]:
     return [latest_by_market[mkt] for mkt in sorted(latest_by_market)]
 
 
-def _report_drift_stop_transition(global_drift: Dict[str, Any]) -> None:
-    global _LAST_GLOBAL_DRIFT_STATUS
-
-    current_status = str(global_drift.get("status", DriftOrchestrator.STOP))
-    previous_status = _LAST_GLOBAL_DRIFT_STATUS
-    _LAST_GLOBAL_DRIFT_STATUS = current_status
-
-    if previous_status is None or previous_status == current_status:
-        return
-    if current_status != DriftOrchestrator.STOP:
+def _report_drift_stop_transition(decision: LegacyDriftDecision, *, scope="GLOBAL", alerts=None) -> None:
+    current = decision.status, decision.reason
+    previous = _LAST_DRIFT_DECISIONS.get(scope)
+    _LAST_DRIFT_DECISIONS[scope] = current
+    if decision.reason and current != previous:
+        logger.warning("Legacy drift scope=%s status=%s reason=%s", scope, *current)
+    if previous is None or previous == current or decision.status != DriftOrchestrator.STOP:
         return
 
     capture_alert(
         event_name="drift_status_stop_transition",
-        message="Drift status transitioned to STOP",
+        message=f"Drift status transitioned to STOP ({decision.reason})" if decision.reason else "Drift status transitioned to STOP",
         level="error",
         context={
-            "previous_status": previous_status,
-            "current_status": current_status,
-            "evaluated_at": global_drift.get("evaluated_at"),
-            "alerts": global_drift.get("alerts"),
+            "scope": scope,
+            "previous_status": previous[0],
+            "current_status": decision.status,
+            "reason": decision.reason,
+            "evaluated_at": decision.evaluated_at,
+            "alerts": alerts,
         },
     )
 
@@ -580,6 +617,7 @@ def health_check() -> HealthCheck:
         status="healthy",
         model_version=get_model_state(),
         last_update=datetime.now(),
+        scope="process_liveness",
     )
 
 
@@ -591,7 +629,7 @@ def api_health_check() -> Dict[str, str]:
 
 @app.get("/drift-status")
 def get_drift_status() -> Dict[str, Any]:
-    """Get current drift monitoring status."""
+    """Read the legacy drift alert archive."""
     from src.config import DATA_DIR
     import pandas as pd
 
@@ -599,7 +637,7 @@ def get_drift_status() -> Dict[str, Any]:
 
     if not log_file.exists():
         return {
-            "status": "no_alerts",
+            "status": "historical",
             "last_check": None,
             "alerts": [],
         }
@@ -608,7 +646,7 @@ def get_drift_status() -> Dict[str, Any]:
         df = pd.read_csv(log_file)
         recent = df.tail(10).to_dict(orient="records")
         return {
-            "status": "monitored",
+            "status": "historical",
             "total_alerts": len(df),
             "recent_alerts": recent,
         }
@@ -691,7 +729,7 @@ def _fast_model_health_snapshot() -> Dict[str, Any]:
                 "market": str(meta.get("name") or serving_key),
                 "version": str(meta.get("version", "unknown")),
                 "brier_score": _extract_manifest_brier(meta),
-                "drift_status": global_status,
+                "drift_status": meta.get("drift_status") or "UNKNOWN",
                 "last_trained": meta.get("training_date") or meta.get("trained_at") or meta.get("registered_at"),
                 "trained_at": meta.get("trained_at") or meta.get("training_date"),
                 "registered_at": meta.get("registered_at"),
@@ -732,7 +770,23 @@ def _fast_model_health_snapshot() -> Dict[str, Any]:
 def get_model_health() -> Dict[str, Any]:
     """Fast productive model snapshot backed by the manifest file."""
     try:
-        return _fast_model_health_snapshot()
+        snapshot = _fast_model_health_snapshot()
+        drift, decision = _load_legacy_global_drift()
+        status = "UNKNOWN" if decision.reason else decision.status
+
+        def model_drift(row, market):
+            if decision.reason:
+                return {**row, "drift_status": "UNKNOWN"}
+            if row["drift_status"] == "UNKNOWN" and market in drift.market_status:
+                return {**row, "drift_status": drift.market_status[market]}
+            return row
+
+        return {**snapshot, "global_drift_status": status, "global_drift_reason": decision.reason,
+                "global_drift_source": drift.global_state_source,
+                "global_drift_evaluated_at": decision.evaluated_at if not decision.reason else None,
+                "models": [model_drift(row, row["market"]) for row in snapshot["models"]],
+                "markets": {name: [model_drift(row, name) for row in rows]
+                            for name, rows in snapshot["markets"].items()}}
     except Exception as exc:
         capture_exception(exc, context={"endpoint": "/model-health"})
         return {
@@ -776,10 +830,11 @@ def trigger_predictions(request: Request, payload: PredictionTriggerRequest) -> 
         raise HTTPException(status_code=400, detail="limit must be >= 1")
 
     try:
-        drift_status = _read_prediction_guard_status()
-        if _read_league_drift_status_from_state_dir(payload.league) == DriftOrchestrator.STOP:
-            drift_status = DriftOrchestrator.STOP
-        if drift_status == DriftOrchestrator.STOP:
+        global_drift = _read_prediction_guard_status()
+        league_drift = _read_league_drift_status_from_state_dir(payload.league)
+        blocked = _blocking_legacy_drift(global_drift, league_drift)
+        drift_status = global_drift.status
+        if blocked:
             prediction_cache.delete(prediction_cache_key(payload.league))
             return PredictionTriggerResponse(
                 generated_at=datetime.now(),
@@ -787,14 +842,14 @@ def trigger_predictions(request: Request, payload: PredictionTriggerRequest) -> 
                 total_predictions=0,
                 total=0,
                 predictions=[],
-                drift_status=drift_status,
+                drift_status=blocked.status,
                 blocked=True,
                 message=_empty_predictions_message(
                     league=str(payload.league).upper(),
-                    drift_status=drift_status,
+                    drift_status=blocked.status,
                     total_predictions=0,
                 ),
-                reason="drift_guardrail_stop",
+                reason=LEGACY_DRIFT_STALE if blocked.reason == LEGACY_DRIFT_STALE else "drift_guardrail_stop",
             )
 
         predictor = Predictor()

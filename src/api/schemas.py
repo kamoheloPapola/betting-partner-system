@@ -96,3 +96,4 @@ class HealthCheck(BaseModel):
     status: str
     model_version: str
     last_update: datetime
+    scope: str = "process_liveness"

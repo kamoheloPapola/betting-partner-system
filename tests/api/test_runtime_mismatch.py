@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
@@ -17,6 +18,7 @@ def _write_global_drift_status(path, status: str = "GO") -> None:
     path.write_text(
         json.dumps({
             "status": status,
+            "evaluated_at": datetime.now(timezone.utc).isoformat(),
             "metrics": {"hit_rate": 0.75, "ece": 0.02, "mean_conf": 0.50},
         }),
         encoding="utf-8",

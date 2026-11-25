@@ -670,6 +670,13 @@
     border: 1px solid rgba(245,69,74,0.25);
   }
 
+  .drift-status-banner.unavailable {
+    background: rgba(128,128,128,0.08);
+    border: 1px solid rgba(128,128,128,0.3);
+  }
+
+  .drift-badge-neutral { color: var(--muted); }
+
   .drift-icon {
     width: 28px;
     height: 28px;
@@ -974,7 +981,7 @@
           </div>
           <div class="stat-pill fade-up-delay-3">
             <div class="stat-label">Model status</div>
-            <div class="stat-value accent" id="driftSummary">GO</div>
+            <div class="stat-value" id="driftSummary">Unknown</div>
             <div class="stat-sub">Drift guardrail</div>
           </div>
         </div>
@@ -1108,7 +1115,7 @@
           <span style="font-size:12px; color:var(--muted);" id="driftAutoRefresh"></span>
         </div>
 
-        <div id="driftStatusBanner" class="drift-status-banner go" style="display:none;">
+        <div id="driftStatusBanner" class="drift-status-banner unavailable" style="display:none;">
           <div class="drift-icon" id="driftIcon"><img src="/assets/icons/drift-monitor.png" alt="" aria-hidden="true"/></div>
           <div class="drift-banner-text go" id="driftBannerText">
             <h3 id="driftStatusTitle">All Systems Go</h3>
@@ -1451,7 +1458,8 @@ async function fetchHealth() {
     const r = await fetch(API + '/model-health');
     const data = await r.json();
 
-    document.getElementById('driftSummary').textContent = data.global_drift_status || '—';
+    document.getElementById('driftSummary').textContent = data.global_drift_reason === 'LEGACY_DRIFT_STALE'
+      ? 'Stale' : data.global_drift_status || '—';
     document.getElementById('healthEmpty').style.display = 'none';
     document.getElementById('healthContent').style.display = 'block';
 
@@ -1461,7 +1469,7 @@ async function fetchHealth() {
     const markets = data.markets || {};
     Object.entries(markets).forEach(([marketKey, leagueList]) => {
       leagueList.forEach(m => {
-        const isGo = m.drift_status === 'GO';
+        const drift = driftBadge(m.drift_status);
         const card = document.createElement('div');
         card.className = 'model-card fade-up';
         card.innerHTML = `
@@ -1470,7 +1478,7 @@ async function fetchHealth() {
               <div class="model-name">${formatMarketName(marketKey)}</div>
               <div class="model-scope">${m.league} · served by ${m.model_league}</div>
             </div>
-            <span class="${isGo ? 'go-badge' : 'stop-badge'}">${isGo ? 'GO' : 'STOP'}</span>
+            <span class="${drift.style}">${drift.label}</span>
           </div>
           <div class="model-metrics">
             <div class="mini-metric">
@@ -1561,19 +1569,30 @@ async function fetchDrift() {
   }
 }
 
+function driftBadge(status) {
+  if (status === 'GO') return { style: 'go-badge', label: 'GO' };
+  if (status === 'STOP') return { style: 'stop-badge', label: 'STOP' };
+  return { style: 'drift-badge-neutral', label: status === 'WATCH' ? 'WATCH' : 'Unknown' };
+}
+
 function renderDrift(data, league) {
   const isGo = data.global_drift_status === 'GO';
+  const isStop = data.global_drift_status === 'STOP';
+  const stale = data.global_drift_reason === 'LEGACY_DRIFT_STALE';
+  const stateClass = isGo ? 'go' : isStop ? 'stop' : 'unavailable';
   const banner = document.getElementById('driftStatusBanner');
   banner.style.display = 'flex';
-  banner.className = 'drift-status-banner ' + (isGo ? 'go' : 'stop');
+  banner.className = 'drift-status-banner ' + stateClass;
 
   document.getElementById('driftIcon').innerHTML = '<img src="/assets/icons/drift-monitor.png" alt="" aria-hidden="true"/>';
   const bannerText = document.getElementById('driftBannerText');
-  bannerText.className = 'drift-banner-text ' + (isGo ? 'go' : 'stop');
-  document.getElementById('driftStatusTitle').textContent = isGo ? 'All Systems Go' : 'Guardrail Active';
+  bannerText.className = 'drift-banner-text ' + stateClass;
+  document.getElementById('driftStatusTitle').textContent = isGo ? 'Drift Status: GO' : isStop ? 'Guardrail Active' : stale ? 'Legacy Drift Data Is Stale' : 'Current Drift Status Unavailable';
   document.getElementById('driftStatusBody').textContent = isGo
-    ? 'Models are well-calibrated. Predictions and slips are running normally.'
-    : 'A drift condition has been detected. Predictions are paused until the model re-calibrates. This is a safety feature, not a failure.';
+    ? 'The latest legacy drift file is within the two-day freshness window and reports GO.'
+    : isStop ? 'The latest legacy drift file reports STOP.'
+    : stale ? 'LEGACY_DRIFT_STALE: The legacy snapshot is outside the two-day freshness window.'
+    : 'Use the canonical dashboard for current health.';
 
   document.getElementById('driftEmpty').style.display = 'none';
   document.getElementById('driftContent').style.display = 'block';
@@ -1585,14 +1604,14 @@ function renderDrift(data, league) {
   Object.entries(markets).forEach(([marketKey, leagueList]) => {
     const row = leagueList.find(m => m.league === league) || leagueList[0];
     if (!row) return;
-    const isRowGo = row.drift_status === 'GO';
+    const drift = driftBadge(row.drift_status);
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>
         <div class="market-name">${formatMarketName(marketKey)}</div>
         <div class="market-scope">${row.league} · ${row.model_league} model</div>
       </td>
-      <td><span class="${isRowGo ? 'go-badge' : 'stop-badge'}">${isRowGo ? 'GO' : 'STOP'}</span></td>
+      <td><span class="${drift.style}">${drift.label}</span></td>
       <td style="color:var(--muted)">${row.drift_score !== null ? row.drift_score?.toFixed(4) : '—'}</td>
       <td style="color:var(--muted); font-size:12px;">${data.global_drift_evaluated_at ? new Date(data.global_drift_evaluated_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '—'}</td>`;
     tbody.appendChild(tr);

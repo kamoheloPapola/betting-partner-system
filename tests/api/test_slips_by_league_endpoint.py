@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
@@ -91,7 +92,7 @@ def test_league_slips_endpoint_returns_blocked_response_when_drift_stops_predict
 
     monkeypatch.setattr(
         "src.api.main._read_prediction_guard_status",
-        lambda: "STOP",
+        lambda: api_main.LegacyDriftDecision("STOP"),
     )
     monkeypatch.setattr(
         "src.predictions.predictor.Predictor.predict_upcoming",
@@ -115,6 +116,7 @@ def _write_drift_state_slips(path, status: str, hit_rate=0.55, ece=0.04, mean_co
     path.write_text(
         json.dumps({
             "status": status,
+            "evaluated_at": datetime.now(timezone.utc).isoformat(),
             "hit_rate": hit_rate,
             "ece": ece,
             "mean_conf": mean_conf,
