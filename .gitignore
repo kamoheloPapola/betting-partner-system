@@ -94,3 +94,6 @@ src/ml/models/training_report_GLOBAL.json
 # OS
 .DS_Store
 Thumbs.db
+*.dpapi
+.env.*
+!.env.example
