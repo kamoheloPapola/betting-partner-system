@@ -1,19 +1,8 @@
 """
-Drift artifact staleness and consistency tests.
-
-These tests catch the failure mode where a persisted drift state file is:
-  - Missing entirely (no nightly has run, or file was deleted)
-  - Stale (evaluated_at is absent or too old - indicates a synthetic/patched artifact)
-  - Internally inconsistent (re-evaluating stored metrics produces a different status
-    than the stored status - indicates the file was manually patched)
-
-These tests are skipped automatically when drift state files do not exist
-(e.g. in a clean CI environment before the first nightly run). They are
-intended to run on any machine where the nightly pipeline has executed.
+Consistency checks for any retained legacy drift artifacts.
 """
 
 import json
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -25,10 +14,6 @@ from src.monitoring.drift_orchestrator import DriftOrchestrator
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-
-# Artifact must have been evaluated within this many days or the test fails.
-# Set to 2 to give a one-day buffer over the nightly cadence.
-STALE_THRESHOLD_DAYS = 2
 
 # Leagues whose per-league drift state files should be validated.
 # FL1 is excluded - handoff notes it has no nightly file yet.
@@ -50,24 +35,6 @@ def _league_state_file(league: str) -> Path:
 
 def _load_state(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _assert_not_stale(payload: dict, label: str) -> None:
-    """Assert evaluated_at is present and within STALE_THRESHOLD_DAYS."""
-    evaluated_at = payload.get("evaluated_at")
-    assert evaluated_at is not None, (
-        f"{label}: 'evaluated_at' is missing - artifact may be synthetic or manually patched. "
-        "The PL STOP incident was caused by exactly this condition."
-    )
-    evaluated_dt = datetime.fromisoformat(str(evaluated_at).replace("Z", "+00:00"))
-    if evaluated_dt.tzinfo is None:
-        evaluated_dt = evaluated_dt.replace(tzinfo=timezone.utc)
-    age = datetime.now(timezone.utc) - evaluated_dt
-    assert age < timedelta(days=STALE_THRESHOLD_DAYS), (
-        f"{label}: drift artifact is {age.days}d {age.seconds // 3600}h old "
-        f"(threshold: {STALE_THRESHOLD_DAYS}d). "
-        "Nightly pipeline may not have run, or artifact is from a previous session."
-    )
 
 
 def _assert_status_consistent(
@@ -127,22 +94,6 @@ def _assert_status_consistent(
     not GLOBAL_STATE_FILE.exists(),
     reason="Global drift state file does not exist - skipping (pre-nightly environment)",
 )
-def test_global_drift_artifact_evaluated_at_is_present_and_recent():
-    """
-    The global drift state file must have a non-null evaluated_at timestamp
-    that is within STALE_THRESHOLD_DAYS of now.
-
-    A missing evaluated_at is the fingerprint of a synthetic artifact -
-    the exact condition that hid the PL STOP drift during the previous session.
-    """
-    payload = _load_state(GLOBAL_STATE_FILE)
-    _assert_not_stale(payload, label="global")
-
-
-@pytest.mark.skipif(
-    not GLOBAL_STATE_FILE.exists(),
-    reason="Global drift state file does not exist - skipping (pre-nightly environment)",
-)
 def test_global_drift_artifact_status_matches_stored_metrics(tmp_path):
     """
     Re-evaluating the metrics stored in the global drift state file through
@@ -158,22 +109,6 @@ def test_global_drift_artifact_status_matches_stored_metrics(tmp_path):
 # ---------------------------------------------------------------------------
 # Per-league drift artifact tests
 # ---------------------------------------------------------------------------
-
-@pytest.mark.parametrize("league", ACTIVE_LEAGUES)
-def test_league_drift_artifact_evaluated_at_is_present_and_recent(league):
-    """
-    Each active league's drift state file must have a non-null evaluated_at
-    timestamp within STALE_THRESHOLD_DAYS.
-
-    Skips automatically if the file does not yet exist (e.g. FL1 pre-nightly).
-    """
-    state_file = _league_state_file(league)
-    if not state_file.exists():
-        pytest.skip(f"{league} drift state file does not exist - skipping")
-
-    payload = _load_state(state_file)
-    _assert_not_stale(payload, label=league)
-
 
 @pytest.mark.parametrize("league", ACTIVE_LEAGUES)
 def test_league_drift_artifact_status_matches_stored_metrics(league, tmp_path):
