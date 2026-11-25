@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -7,6 +8,7 @@ from fastapi.testclient import TestClient
 from src.api.cache import MODEL_HEALTH_CACHE_KEY, PredictionCache, prediction_cache, prediction_cache_key
 import src.api.main as api_main
 import src.config as config
+import src.monitoring.drift_orchestrator as drift_orchestrator
 
 
 client = TestClient(api_main.app)
@@ -93,6 +95,9 @@ def test_legacy_drift_freshness_matches_guard_and_dashboard(tmp_path, monkeypatc
     pytest.param("stale", False, "PL", id="stale"),
     pytest.param("missing", False, "PL", id="missing"),
     pytest.param("missing-league", False, "PL", id="missing-league"),
+    pytest.param("unreadable-global", False, "PL", id="unreadable-global"),
+    pytest.param("unreadable-league", False, "PL", id="unreadable-league"),
+    pytest.param("stop", False, "PL", id="stop"),
     pytest.param("malformed", False, "PL", id="malformed"),
     pytest.param("malformed-time", False, "PL", id="malformed-time"),
     pytest.param("tz-naive", False, "PL", id="tz-naive"),
@@ -103,7 +108,9 @@ def test_legacy_drift_freshness_matches_guard_and_dashboard(tmp_path, monkeypatc
     pytest.param("stale-league", False, "SA", id="stale-league-SA"),
     pytest.param("stale-league", False, "PD", id="stale-league-PD"),
 ])
-def test_prediction_guard_precedes_cache_and_predictor(tmp_path, monkeypatch, cache_state, state, allowed, league):
+def test_prediction_guard_precedes_cache_and_predictor(
+    tmp_path, monkeypatch, caplog, cache_state, state, allowed, league,
+):
     class FixedDateTime(datetime):
         @classmethod
         def now(cls, tz=None):
@@ -120,13 +127,30 @@ def test_prediction_guard_precedes_cache_and_predictor(tmp_path, monkeypatch, ca
     }.get(state, fresh)
     archive = tmp_path / "rolling_90d_status.json"
     if state != "missing":
-        contents = "{" if state == "malformed" else json.dumps({"status": "GO", "evaluated_at": timestamp})
+        status = "STOP" if state == "stop" else "GO"
+        contents = "{" if state == "malformed" else json.dumps({"status": status, "evaluated_at": timestamp})
         archive.write_text(contents, encoding="utf-8")
+    league_state = tmp_path / f"{league}_drift_status.json"
     if state != "missing-league":
         league_time = (NOW - timedelta(days=3)).isoformat() if state == "stale-league" else fresh
-        (tmp_path / f"{league}_drift_status.json").write_text(
-            json.dumps({"status": "GO", "evaluated_at": league_time}), encoding="utf-8"
-        )
+        league_state.write_text(json.dumps({"status": "GO", "evaluated_at": league_time}), encoding="utf-8")
+
+    if state == "unreadable-global":
+        def read_global(path, *args, **kwargs):
+            if Path(path) == archive:
+                raise PermissionError("fixture access refused")
+            return open(path, *args, **kwargs)
+
+        monkeypatch.setattr(drift_orchestrator, "open", read_global, raising=False)
+    elif state == "unreadable-league":
+        read_text = Path.read_text
+
+        def read_league(path, *args, **kwargs):
+            if path == league_state:
+                raise PermissionError("fixture access refused")
+            return read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", read_league)
 
     cache = PredictionCache()
     key = prediction_cache_key(league)
@@ -152,6 +176,21 @@ def test_prediction_guard_precedes_cache_and_predictor(tmp_path, monkeypatch, ca
     assert result == expected
     assert calls == ([league] if allowed and cache_state == "cold" else [])
     assert cache.get(key) == (expected if allowed else None)
+
+    block_messages = [record.getMessage() for record in caplog.records
+                      if record.name == api_main.__name__ and record.getMessage().startswith("Prediction blocked ")]
+    if allowed:
+        assert block_messages == []
+    else:
+        reason = {
+            "missing": api_main.LEGACY_DRIFT_UNAVAILABLE,
+            "missing-league": api_main.LEGACY_DRIFT_UNAVAILABLE,
+            "unreadable-global": api_main.LEGACY_DRIFT_UNAVAILABLE,
+            "unreadable-league": api_main.LEGACY_DRIFT_UNAVAILABLE,
+            "malformed": api_main.LEGACY_DRIFT_UNAVAILABLE,
+            "stop": "drift_guardrail_stop",
+        }.get(state, api_main.LEGACY_DRIFT_STALE)
+        assert block_messages == [f"Prediction blocked league={league} reason={reason}"]
 
 
 def test_stale_stop_reason_is_logged_reported_and_returned(tmp_path, monkeypatch, caplog):

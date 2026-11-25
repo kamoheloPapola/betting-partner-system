@@ -292,6 +292,7 @@ def _blocking_legacy_drift(global_drift, league_drift):
 
 
 def _guard_prediction_drift(league: Optional[str]) -> tuple[LegacyDriftDecision, Optional[LegacyDriftDecision]]:
+    # Debt: aggregate requests use global drift only to preserve the all-leagues response contract.
     scope = resolve_league_code(league) if league else None
     if league and scope is None:
         raise DataValidationError(f"Unsupported league: {league}", context={"league": league})
@@ -300,6 +301,8 @@ def _guard_prediction_drift(league: Optional[str]) -> tuple[LegacyDriftDecision,
     blocked = _blocking_legacy_drift(global_drift, league_drift)
     if blocked:
         prediction_cache.delete(prediction_cache_key(league))
+        logger.warning("Prediction blocked league=%s reason=%s",
+                       scope.value if scope else "ALL", blocked.reason or "drift_guardrail_stop")
     return global_drift, blocked
 
 
