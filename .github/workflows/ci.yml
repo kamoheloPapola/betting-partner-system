@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - codex/canonical-cleanup
   pull_request:
     branches:
       - main
